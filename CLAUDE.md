@@ -66,6 +66,9 @@ Record this as ADR-0001 with the alternatives considered.
 - Fixture repos live in `fixtures/`, are tiny and hand-written, and assert exact
   fact output.
 - Small commits, conventional commit messages.
+- **No `Co-Authored-By` or agent-session trailers in commit messages.** They turn
+  the assistant into a listed GitHub contributor, which misrepresents authorship
+  of the project.
 - No speculative abstraction. Two concrete implementations before extracting an
   interface.
 - Every non-obvious decision gets an ADR in `docs/adr/`. This project dogfoods the

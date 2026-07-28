@@ -15,10 +15,15 @@ import {
   type JavaSearchRoot,
 } from '../src/toolchain/java.js';
 
-/** Build a fake JDK: a `bin/java` and the `release` file every JDK ships. */
+/**
+ * Build a fake JDK: a launcher and the `release` file every JDK ships. Both
+ * `java` and `java.exe` are written so the fixture is valid whichever platform
+ * the test happens to run on.
+ */
 function fakeJdk(home: string, version: string): string {
   mkdirSync(join(home, 'bin'), { recursive: true });
   writeFileSync(join(home, 'bin', 'java'), '#!/bin/sh\n');
+  writeFileSync(join(home, 'bin', 'java.exe'), '');
   writeFileSync(join(home, 'release'), `JAVA_VERSION="${version}"\nOS_ARCH="aarch64"\n`);
   return home;
 }
@@ -96,6 +101,11 @@ describe('inspectJavaHome', () => {
       source: 'config',
       meetsMinimum: true,
     });
+  });
+
+  it('looks for java.exe on Windows', () => {
+    const home = fakeJdk(mkdtempSync(join(tmpdir(), 'strat-jdk-')), '21.0.2');
+    expect(inspectJavaHome(home, 'config', 'win32')?.javaBin).toMatch(/java\.exe$/);
   });
 
   it('returns null when there is no java binary', () => {
