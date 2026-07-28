@@ -67,8 +67,17 @@ docker run --rm -v "$PWD:/repo" ghcr.io/<owner>/stratigraph analyze /repo
 ```
 
 **Release automation**: one GitHub Actions workflow on tag — build the jar,
-build the TypeScript, publish to npm with `--provenance` (OIDC, no long-lived
-token), attach the jar to the GitHub release, build and push the image.
+build the TypeScript, publish to npm with `--provenance`, attach the jar to the
+GitHub release, build and push the image.
+
+Authentication to npm has a chicken-and-egg step. The end state is npm **trusted
+publishing**: OIDC, no stored token at all, provenance automatic. But a trusted
+publisher is configured from a package's settings page, so the package must
+already exist — and it needs npm CLI ≥ 11.5.1 with Node ≥ 22.14 on the runner.
+So the first release authenticates with a granular access token (created with
+*Bypass two-factor authentication*, since the account uses a passkey and there is
+no OTP to type) held as the `NPM_TOKEN` repository secret. **Once 1.0.0 exists,
+switch the workflow to trusted publishing and delete the secret.**
 
 ## Alternatives considered
 
