@@ -127,7 +127,9 @@ final class JavaFactExtractor {
         // Declarations before references, so a node is described before
         // anything points at it and the store never has to upgrade a stub for a
         // type this same file went on to declare.
-        new DeclarationVisitor(path, packageName).visit(cu, null);
+        DeclarationVisitor declarations = new DeclarationVisitor(path, packageName);
+        declarations.visit(cu, null);
+        declarations.reportUnresolvedCalls();
 
         // Imports belong to the compilation unit, and the store has no node for
         // one. They are attributed to the first top-level type declared in the
@@ -173,6 +175,7 @@ final class JavaFactExtractor {
     private final class DeclarationVisitor extends JavaIsoVisitor<Void> {
         private final String path;
         private final String packageName;
+        private int unresolvedCalls;
 
         DeclarationVisitor(String path, String packageName) {
             this.path = path;
@@ -277,6 +280,78 @@ final class JavaFactExtractor {
                         path, line(declaration), null, attrs);
             }
             return super.visitVariableDeclarations(declaration, unused);
+        }
+
+        @Override
+        public J.MethodInvocation visitMethodInvocation(J.MethodInvocation invocation, Void unused) {
+            emitCall(invocation.getMethodType(), line(invocation));
+            return super.visitMethodInvocation(invocation, unused);
+        }
+
+        @Override
+        public J.NewClass visitNewClass(J.NewClass newClass, Void unused) {
+            emitCall(newClass.getMethodType(), line(newClass));
+            return super.visitNewClass(newClass, unused);
+        }
+
+        @Override
+        public J.MemberReference visitMemberReference(J.MemberReference reference, Void unused) {
+            // `String::valueOf` is a call site too, and one that a naive
+            // extractor misses entirely.
+            emitCall(reference.getMethodType(), line(reference));
+            return super.visitMemberReference(reference, unused);
+        }
+
+        /**
+         * Record a call, but only when the parser attributed the target.
+         *
+         * An unattributed invocation is one whose declaring type came from a
+         * jar we never read (ADR-0006). We know the method's *name* and could
+         * write an edge to a plausible fqn; that is exactly the confident guess
+         * CLAUDE.md forbids, so we count it instead and say how many there were.
+         */
+        private void emitCall(JavaType.Method target, Integer line) {
+            if (target == null || Fqn.unresolved(target.getDeclaringType())) {
+                unresolvedCalls++;
+                return;
+            }
+            NodeRef caller = enclosingCallerRef();
+            if (caller == null) {
+                return;
+            }
+            emitter.edge("calls", caller,
+                    new NodeRef("method", Fqn.method(target)),
+                    path, line, null);
+        }
+
+        /**
+         * What a call site belongs to: the enclosing method, or the enclosing
+         * type when the call sits in a field initialiser or a static block.
+         */
+        private NodeRef enclosingCallerRef() {
+            J.MethodDeclaration method = getCursor().firstEnclosing(J.MethodDeclaration.class);
+            if (method != null && method.getMethodType() != null) {
+                return new NodeRef("method", Fqn.method(method.getMethodType()));
+            }
+            J.ClassDeclaration type = getCursor().firstEnclosing(J.ClassDeclaration.class);
+            if (type != null && type.getType() != null) {
+                return new NodeRef(nodeKind(type.getKind()), Fqn.type(type.getType()));
+            }
+            return null;
+        }
+
+        /**
+         * One diagnostic per file rather than per call site. A large repository
+         * has millions of calls into jars it never read; a row each would
+         * drown the store and tell the reader nothing a count does not.
+         */
+        void reportUnresolvedCalls() {
+            if (unresolvedCalls > 0) {
+                emitter.diagnostic("info",
+                        unresolvedCalls + " call site(s) could not be resolved to a declaring type "
+                                + "and were not recorded as edges",
+                        path, null);
+            }
         }
 
         private void emitSupertype(String edgeKind, String ownerKind, String ownerFqn, TypeTree supertype) {
