@@ -51,6 +51,43 @@ jobs:
           node dist/cli.js doctor --repo fixtures/tiny-java
           node dist/cli.js init --repo fixtures/tiny-java
 
+  java-extractor:
+    name: java extractor
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # OpenRewrite's LST parsers need a JDK 17 toolchain to run in. This is
+      # the JDK the extractor runs *on*, not the source level it can read: on
+      # 17 it happily parses a Java 8 codebase.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+
+      # Runs the golden tests, which assert the exact fact output for every
+      # fixture. The TypeScript matrix above deliberately never needs a JDK,
+      # so this is the only job that proves the parser itself.
+      - name: Test the extractor against the fixture goldens
+        run: ./mvnw -B --no-transfer-progress verify
+        working-directory: extractors/java
+
+      # Nothing above proves the two halves of the NDJSON protocol still agree
+      # with each other -- the goldens are checked inside the JVM, and the core
+      # is tested against a fake extractor. This is the one place a real jar
+      # meets the real fact store.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci
+      - name: Extract and analyse a fixture end to end
+        run: |
+          npx tsx src/cli.ts init    --repo fixtures/legacy-java
+          npx tsx src/cli.ts extract --repo fixtures/legacy-java
+          npx tsx src/cli.ts analyze --repo fixtures/legacy-java
+
   no-jdk:
     name: no JDK installed
     runs-on: ubuntu-latest
