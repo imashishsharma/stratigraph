@@ -12,6 +12,7 @@ the code when it is incidental. Either way, before the commit.
 | [0002](0002-sqlite-fact-store.md) | SQLite fact store; facts and interpretation in separate tables | accepted |
 | [0003](0003-ndjson-fact-protocol.md) | NDJSON over stdout as the extractor protocol | accepted |
 | [0004](0004-distribution-and-runtime-independence.md) | One npm package, fetched extractor jar, Docker image | accepted |
+| [0005](0005-framework-annotations-without-a-classpath.md) | Resolve framework annotations from source, not from a classpath | accepted |
 
 Format: context, decision, alternatives considered (with why each was rejected),
 consequences — including the costs, not only the benefits.
