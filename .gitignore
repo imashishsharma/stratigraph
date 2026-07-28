@@ -1,0 +1,10 @@
+node_modules/
+dist/
+coverage/
+.stratigraph/
+*.tsbuildinfo
+.DS_Store
+PLAN.md
+
+# Java extractor build output (M1)
+extractors/java/target/

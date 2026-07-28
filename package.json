@@ -1,0 +1,59 @@
+{
+  "name": "stratigraph",
+  "version": "0.0.0",
+  "description": "Read the layers of a codebase: static facts from source and git history, assembled into a dependency graph, hotspots, and grounded structural findings.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "engines": {
+    "node": ">=18.18"
+  },
+  "bin": {
+    "stratigraph": "./dist/cli.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc -p tsconfig.json",
+    "prepack": "npm run build",
+    "stratigraph": "tsx src/cli.ts"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.10.0",
+    "commander": "^12.1.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^20.19.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3",
+    "vitest": "^3.2.7"
+  },
+  "keywords": [
+    "static-analysis",
+    "architecture",
+    "dependency-graph",
+    "code-archaeology",
+    "java",
+    "spring",
+    "angular",
+    "mcp",
+    "c4",
+    "legacy-code"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/imashishsharma/stratigraph.git"
+  },
+  "bugs": {
+    "url": "https://github.com/imashishsharma/stratigraph/issues"
+  },
+  "homepage": "https://github.com/imashishsharma/stratigraph#readme",
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  }
+}
