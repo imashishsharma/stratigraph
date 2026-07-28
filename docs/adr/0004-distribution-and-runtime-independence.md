@@ -39,9 +39,23 @@ Linux). Version-pinning the jar to the package version means the two can never
 drift.
 
 **The JVM is discovered, not assumed** (`src/toolchain/java.ts`): explicit
-`java.home` config, then `JAVA_HOME`, then `java` on `PATH`. A missing or too-old
-JDK is reported by `stratigraph doctor` with the required version named, and it
-disables the Java extractor only — every other extractor and every analysis over
+`java.home` config, then `JAVA_HOME`, then `java` on `PATH` — and **if none of
+those meets the minimum, we go looking**. Discovery scans the conventional
+install roots (SDKMAN candidates, jenv versions, Gradle's downloaded toolchains,
+`/Library/Java/JavaVirtualMachines`, `/usr/lib/jvm`, the Windows Java
+directories) and picks the newest JDK that qualifies.
+
+This is not gold-plating; it is the common case. A developer who manages JDKs
+with SDKMAN routinely has 8, 11 and 17 installed with `current` pointed at 8
+because some other project needs 8 — which is exactly the machine this was built
+on. Requiring `sdk use java 17` before the tool will run at all is a small
+friction that reliably converts into "never ran it". Versions are read from each
+JDK's `release` file rather than by executing it, so discovery costs file I/O
+rather than a subprocess per candidate.
+
+A missing or too-old JDK is reported by `stratigraph doctor` with the required
+version named and the versions actually installed listed, and it disables the
+Java extractor only — every other extractor and every analysis over
 already-extracted facts still runs. It is never a stack trace.
 
 **Docker is the second channel**, published to `ghcr.io`. It sidesteps the

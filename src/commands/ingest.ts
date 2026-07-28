@@ -22,7 +22,7 @@ export interface IngestResult extends FactWriterStats {
  *
  * This is the core's half of the extractor protocol. Extractors are separate
  * processes in whatever language suits their parser; all the core ever sees is
- * this stream. `arch ingest --from facts.ndjson` is also how you replay a
+ * this stream. `stratigraph ingest --from facts.ndjson` is also how you replay a
  * captured extractor run without re-parsing anything.
  */
 export async function runIngest(options: IngestOptions): Promise<IngestResult> {

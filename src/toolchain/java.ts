@@ -2,28 +2,39 @@
  * Finding a JVM to run the Java extractor in.
  *
  * The core is a Node package and never links against a parser, so the JVM is a
- * runtime detail of one extractor rather than a dependency of the tool. Nothing
- * here assumes the user's `java` on PATH is the one we want, and nothing here
- * fails the whole pipeline when there is no JVM at all — a repo with no Java in
- * it does not need one.
+ * runtime detail of one extractor rather than a dependency of the tool. Two
+ * consequences shape this file:
+ *
+ * - The machine's *default* java is frequently the wrong one. Developers who
+ *   manage JDKs with SDKMAN, jenv or Gradle toolchains routinely have a modern
+ *   JDK installed while `java` on PATH points at 8, because some other project
+ *   needs 8. Telling that user to go and switch their global JDK before they
+ *   can run us is a good way to never be run — so if the obvious JVM is too
+ *   old, we look for a better one rather than giving up.
+ * - No JVM at all is not an error. A repo with no Java in it does not need one.
  */
 
 import { execFileSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, realpathSync } from 'node:fs';
+import { homedir } from 'node:os';
 import { join } from 'node:path';
 
 /**
- * OpenRewrite's LST parsers for modern Java need a JDK 17 toolchain. Older JDKs
- * can still be the *target* of analysis — this is the version we run *in*, not
- * the version of the code we read.
+ * OpenRewrite's LST parsers for modern Java need a JDK 17 toolchain. This is
+ * the version we run *in*, not the version of the code we can read: the
+ * extractor on a JDK 17 happily parses a Java 8 codebase.
  */
 export const MIN_JAVA_MAJOR = 17;
+
+export type JavaSource = 'config' | 'JAVA_HOME' | 'PATH' | 'sdkman' | 'jenv' | 'installed';
 
 export interface JavaRuntime {
   /** Path to the `java` executable. */
   javaBin: string;
-  /** Where we found it, for `arch doctor` to explain itself. */
-  source: 'config' | 'JAVA_HOME' | 'PATH';
+  /** JDK home, when we know it. Absent for a bare `java` found on PATH. */
+  home?: string;
+  /** Where we found it, so `stratigraph doctor` can explain itself. */
+  source: JavaSource;
   version: string;
   major: number;
   meetsMinimum: boolean;
@@ -33,35 +44,161 @@ export interface FindJavaOptions {
   /** Explicit JDK home from config, highest precedence. */
   home?: string | undefined;
   env?: NodeJS.ProcessEnv | undefined;
+  /** Override the platform, for tests. */
+  platform?: NodeJS.Platform | undefined;
+  /** Override the home directory, for tests. */
+  userHome?: string | undefined;
 }
 
-/** Resolution order: config `java.home` → `JAVA_HOME` → `java` on PATH. */
+/**
+ * Resolution order: config `java.home`, `JAVA_HOME`, `java` on PATH, then any
+ * JDK we can find installed. The first three win outright *if they meet the
+ * minimum*; if they do not, a discovered JDK that does is preferred, and we
+ * fall back to reporting the best of a bad set so `doctor` can name the
+ * version actually required.
+ */
 export function findJava(options: FindJavaOptions = {}): JavaRuntime | null {
+  const explicit = explicitCandidates(options);
+  for (const candidate of explicit) {
+    if (candidate.meetsMinimum) return candidate;
+  }
+
+  const discovered = discoverJavaRuntimes(options);
+  const best = discovered.filter((c) => c.meetsMinimum).sort((a, b) => b.major - a.major)[0];
+  if (best) return best;
+
+  // Nothing is good enough. Return the most visible too-old JVM so the user is
+  // told what they have and what is needed, rather than "java not found".
+  return explicit[0] ?? discovered.sort((a, b) => b.major - a.major)[0] ?? null;
+}
+
+/** Every JDK we can find, best-known-first. Exposed for `doctor` and tests. */
+export function discoverJavaRuntimes(options: FindJavaOptions = {}): JavaRuntime[] {
   const env = options.env ?? process.env;
+  const platform = options.platform ?? process.platform;
+  const userHome = options.userHome ?? homedir();
 
-  const candidates: Array<{ bin: string; source: JavaRuntime['source'] }> = [];
-  if (options.home) candidates.push({ bin: javaBinIn(options.home), source: 'config' });
-  if (env['JAVA_HOME']) candidates.push({ bin: javaBinIn(env['JAVA_HOME']), source: 'JAVA_HOME' });
-  candidates.push({ bin: 'java', source: 'PATH' });
+  const found: JavaRuntime[] = [];
+  const seen = new Set<string>();
 
-  for (const candidate of candidates) {
-    if (candidate.source !== 'PATH' && !existsSync(candidate.bin)) continue;
-    const version = probeVersion(candidate.bin);
-    if (!version) continue;
-    const major = parseMajor(version);
-    return {
-      javaBin: candidate.bin,
-      source: candidate.source,
-      version,
+  for (const { dir, source } of installRoots(env, platform, userHome)) {
+    for (const home of childDirectories(dir)) {
+      const runtime = inspectJavaHome(home, source, platform);
+      if (!runtime) continue;
+      const identity = canonical(runtime.javaBin);
+      if (seen.has(identity)) continue; // e.g. SDKMAN's `current` symlink
+      seen.add(identity);
+      found.push(runtime);
+    }
+  }
+
+  return found.sort((a, b) => b.major - a.major);
+}
+
+/**
+ * Read a JDK's version from the `release` file its installer writes, falling
+ * back to running it. Every JDK since 8 ships `release`; reading it keeps
+ * discovery to file I/O instead of one subprocess per candidate JDK.
+ */
+export function inspectJavaHome(
+  home: string,
+  source: JavaSource,
+  platform: NodeJS.Platform = process.platform,
+): JavaRuntime | null {
+  const javaBin = javaBinIn(home, platform);
+  if (!existsSync(javaBin)) return null;
+
+  const version = readReleaseVersion(home) ?? probeVersion(javaBin);
+  if (!version) return null;
+
+  const major = parseMajor(version);
+  return { javaBin, home, source, version, major, meetsMinimum: major >= MIN_JAVA_MAJOR };
+}
+
+function explicitCandidates(options: FindJavaOptions): JavaRuntime[] {
+  const env = options.env ?? process.env;
+  const platform = options.platform ?? process.platform;
+  const out: JavaRuntime[] = [];
+
+  if (options.home) {
+    const runtime = inspectJavaHome(options.home, 'config', platform);
+    if (runtime) out.push(runtime);
+  }
+  if (env['JAVA_HOME']) {
+    const runtime = inspectJavaHome(env['JAVA_HOME'], 'JAVA_HOME', platform);
+    if (runtime) out.push(runtime);
+  }
+
+  const onPath = probeVersion('java');
+  if (onPath) {
+    const major = parseMajor(onPath);
+    out.push({
+      javaBin: 'java',
+      source: 'PATH',
+      version: onPath,
       major,
       meetsMinimum: major >= MIN_JAVA_MAJOR,
-    };
+    });
   }
-  return null;
+  return out;
 }
 
-function javaBinIn(home: string): string {
-  return join(home, 'bin', process.platform === 'win32' ? 'java.exe' : 'java');
+/** Where JDKs live, by convention, on each platform and version manager. */
+function installRoots(
+  env: NodeJS.ProcessEnv,
+  platform: NodeJS.Platform,
+  userHome: string,
+): Array<{ dir: string; source: JavaSource }> {
+  const roots: Array<{ dir: string; source: JavaSource }> = [
+    { dir: join(env['SDKMAN_DIR'] ?? join(userHome, '.sdkman'), 'candidates', 'java'), source: 'sdkman' },
+    { dir: join(userHome, '.jenv', 'versions'), source: 'jenv' },
+    { dir: join(userHome, '.gradle', 'jdks'), source: 'installed' },
+  ];
+
+  if (platform === 'darwin') {
+    roots.push({ dir: '/Library/Java/JavaVirtualMachines', source: 'installed' });
+    roots.push({ dir: join(userHome, 'Library/Java/JavaVirtualMachines'), source: 'installed' });
+  } else if (platform === 'win32') {
+    roots.push({ dir: 'C:\\Program Files\\Java', source: 'installed' });
+    roots.push({ dir: 'C:\\Program Files\\Eclipse Adoptium', source: 'installed' });
+  } else {
+    roots.push({ dir: '/usr/lib/jvm', source: 'installed' });
+    roots.push({ dir: '/opt/java', source: 'installed' });
+  }
+
+  return roots;
+}
+
+function childDirectories(dir: string): string[] {
+  let entries: string[];
+  try {
+    entries = readdirSync(dir);
+  } catch {
+    return [];
+  }
+  const homes: string[] = [];
+  for (const entry of entries) {
+    const path = join(dir, entry);
+    homes.push(path);
+    // macOS bundles put the JDK under Contents/Home.
+    homes.push(join(path, 'Contents', 'Home'));
+  }
+  return homes;
+}
+
+function javaBinIn(home: string, platform: NodeJS.Platform): string {
+  return join(home, 'bin', platform === 'win32' ? 'java.exe' : 'java');
+}
+
+/** `JAVA_VERSION="17.0.13"` out of `$JAVA_HOME/release`. */
+export function readReleaseVersion(home: string): string | null {
+  try {
+    const release = readFileSync(join(home, 'release'), 'utf8');
+    const match = /^JAVA_VERSION="?([^"\n]+)"?/m.exec(release);
+    return match?.[1] ?? null;
+  } catch {
+    return null;
+  }
 }
 
 function probeVersion(javaBin: string): string | null {
@@ -84,12 +221,18 @@ export function extractVersion(output: string): string | null {
   return match?.[1] ?? null;
 }
 
-/**
- * `1.8.0_432` → 8, `17.0.9` → 17, `21` → 21. The 1.x prefix was dropped in 9.
- */
+/** `1.8.0_432` → 8, `17.0.9` → 17, `21` → 21. The 1.x prefix was dropped in 9. */
 export function parseMajor(version: string): number {
   const legacy = /^1\.(\d+)/.exec(version);
   if (legacy?.[1]) return Number(legacy[1]);
   const modern = /^(\d+)/.exec(version);
   return modern?.[1] ? Number(modern[1]) : 0;
+}
+
+function canonical(path: string): string {
+  try {
+    return realpathSync(path);
+  } catch {
+    return path;
+  }
 }

@@ -4,7 +4,7 @@ import { existsSync } from 'node:fs';
 import { loadConfig, type ConfigOverrides } from '../config.js';
 import { currentVersion, openDatabase } from '../db/database.js';
 import { SCHEMA_VERSION } from '../db/migrations/index.js';
-import { findJava, MIN_JAVA_MAJOR } from '../toolchain/java.js';
+import { discoverJavaRuntimes, findJava, MIN_JAVA_MAJOR } from '../toolchain/java.js';
 import { TOOL_VERSION } from '../version.js';
 
 export interface Check {
@@ -48,16 +48,21 @@ export function runDoctor(overrides: ConfigOverrides): Check[] {
       detail: `not found — the Java extractor needs a JDK ${MIN_JAVA_MAJOR}+ (set java.home or JAVA_HOME); every other extractor still runs`,
     });
   } else if (!java.meetsMinimum) {
+    const alternatives = discoverJavaRuntimes({ home: overrides.javaHome });
+    const hint =
+      alternatives.length > 0
+        ? ` (found ${alternatives.map((r) => r.version).join(', ')} installed, none new enough)`
+        : '';
     checks.push({
       name: 'java',
       status: 'warn',
-      detail: `${java.version} from ${java.source} is below JDK ${MIN_JAVA_MAJOR}; the Java extractor will not run (this limits the analyser, not the code it can analyse)`,
+      detail: `${java.version} from ${java.source} is below JDK ${MIN_JAVA_MAJOR}${hint}; the Java extractor will not run — this limits the analyser, not the code it can analyse`,
     });
   } else {
     checks.push({
       name: 'java',
       status: 'ok',
-      detail: `${java.version} from ${java.source}`,
+      detail: `${java.version} from ${java.source}${java.home ? ` (${java.home})` : ''}`,
     });
   }
 
@@ -78,13 +83,13 @@ export function runDoctor(overrides: ConfigOverrides): Check[] {
         detail:
           version === SCHEMA_VERSION
             ? `${config.dbPath} (schema v${version})`
-            : `${config.dbPath} is at schema v${version}, tool expects v${SCHEMA_VERSION} — run \`arch init\``,
+            : `${config.dbPath} is at schema v${version}, tool expects v${SCHEMA_VERSION} — run \`stratigraph init\``,
       });
     } else {
       checks.push({
         name: 'database',
         status: 'missing',
-        detail: `${config.dbPath} does not exist yet — run \`arch init\``,
+        detail: `${config.dbPath} does not exist yet — run \`stratigraph init\``,
       });
     }
   } catch (err) {

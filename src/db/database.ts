@@ -82,7 +82,7 @@ export function assertSchemaCurrent(db: Db): void {
   }
   if (version < SCHEMA_VERSION) {
     throw new Error(
-      `database schema version ${version} is older than ${SCHEMA_VERSION}; run \`arch init\` to migrate`,
+      `database schema version ${version} is older than ${SCHEMA_VERSION}; run \`stratigraph init\` to migrate`,
     );
   }
 }

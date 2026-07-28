@@ -1,6 +1,6 @@
 /**
  * Logs go to stderr, always. stdout belongs to machine-readable output so that
- * `arch ... | jq` keeps working.
+ * `stratigraph ... | jq` keeps working.
  */
 let quiet = false;
 
