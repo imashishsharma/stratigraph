@@ -123,19 +123,21 @@ describe('inspectJavaHome', () => {
 });
 
 describe('installRoots', () => {
+  // Roots are built with path.join, so expectations must be too — a literal
+  // '/home/dev/.sdkman/...' does not match '\home\dev\.sdkman\...' on Windows.
+  const HOME = '/home/dev';
+
   it('scans SDKMAN, jenv and Gradle toolchains on every platform', () => {
-    const dirs = installRoots({}, 'linux', '/home/dev').map((r) => r.dir);
-    expect(dirs).toContain('/home/dev/.sdkman/candidates/java');
-    expect(dirs).toContain('/home/dev/.jenv/versions');
-    expect(dirs).toContain('/home/dev/.gradle/jdks');
+    const dirs = installRoots({}, 'linux', HOME).map((r) => r.dir);
+    expect(dirs).toContain(join(HOME, '.sdkman', 'candidates', 'java'));
+    expect(dirs).toContain(join(HOME, '.jenv', 'versions'));
+    expect(dirs).toContain(join(HOME, '.gradle', 'jdks'));
   });
 
   it('honours SDKMAN_DIR over the default location', () => {
-    const dirs = installRoots({ SDKMAN_DIR: '/opt/sdkman' }, 'linux', '/home/dev').map(
-      (r) => r.dir,
-    );
-    expect(dirs).toContain('/opt/sdkman/candidates/java');
-    expect(dirs).not.toContain('/home/dev/.sdkman/candidates/java');
+    const dirs = installRoots({ SDKMAN_DIR: '/opt/sdkman' }, 'linux', HOME).map((r) => r.dir);
+    expect(dirs).toContain(join('/opt/sdkman', 'candidates', 'java'));
+    expect(dirs).not.toContain(join(HOME, '.sdkman', 'candidates', 'java'));
   });
 
   it.each([

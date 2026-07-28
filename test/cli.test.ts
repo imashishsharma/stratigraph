@@ -2,7 +2,8 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { createRequire } from 'node:module';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { describe, expect, it } from 'vitest';
 
@@ -17,7 +18,33 @@ setQuiet(true);
 
 const REPO_ROOT = fileURLToPath(new URL('..', import.meta.url));
 const FIXTURE = join(REPO_ROOT, 'fixtures', 'tiny-java');
-const TSX = join(REPO_ROOT, 'node_modules', '.bin', 'tsx');
+const CLI = join(REPO_ROOT, 'src', 'cli.ts');
+
+// tsx's loader, resolved to an absolute path from the repo rather than by bare
+// specifier — the subprocess runs in a temp directory where `tsx` is not
+// resolvable.
+const TSX_LOADER = pathToFileURL(
+  createRequire(join(REPO_ROOT, 'package.json')).resolve('tsx'),
+).href;
+
+/**
+ * Run the CLI as a real subprocess. Invoking node with tsx's loader rather than
+ * `node_modules/.bin/tsx` because on Windows that shim is a `.cmd`, which
+ * spawnSync cannot execute without a shell.
+ */
+function runCli(args: string[], cwd: string): { status: number; stdout: string; stderr: string } {
+  try {
+    const stdout = execFileSync(process.execPath, ['--import', TSX_LOADER, CLI, ...args], {
+      cwd,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    return { status: 0, stdout, stderr: '' };
+  } catch (err) {
+    const e = err as { status: number | null; stdout?: string; stderr?: string };
+    return { status: e.status ?? 1, stdout: e.stdout ?? '', stderr: e.stderr ?? '' };
+  }
+}
 
 function scratch(): string {
   return mkdtempSync(join(tmpdir(), 'stratigraph-cli-'));
@@ -27,12 +54,8 @@ describe('stratigraph init', () => {
   it('creates a database with the full schema and exits zero', () => {
     // The M0 acceptance criterion, run the way a user would run it.
     const dir = scratch();
-    const output = execFileSync(TSX, [join(REPO_ROOT, 'src', 'cli.ts'), 'init', '--repo', FIXTURE], {
-      cwd: dir,
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
-    void output;
+    const { status } = runCli(['init', '--repo', FIXTURE], dir);
+    expect(status).toBe(0);
 
     const dbPath = join(dir, '.stratigraph', 'tiny-java.db');
     expect(existsSync(dbPath)).toBe(true);
@@ -60,19 +83,7 @@ describe('stratigraph init', () => {
 
   it('exits non-zero with a readable message on a bad repo path', () => {
     const dir = scratch();
-    let status = 0;
-    let stderr = '';
-    try {
-      execFileSync(TSX, [join(REPO_ROOT, 'src', 'cli.ts'), 'init', '--repo', join(dir, 'nope')], {
-        cwd: dir,
-        encoding: 'utf8',
-        stdio: ['ignore', 'pipe', 'pipe'],
-      });
-    } catch (err) {
-      const e = err as { status: number; stderr: string };
-      status = e.status;
-      stderr = e.stderr;
-    }
+    const { status, stderr } = runCli(['init', '--repo', join(dir, 'nope')], dir);
     expect(status).toBe(2);
     expect(stderr).toMatch(/repository path does not exist/);
   });
