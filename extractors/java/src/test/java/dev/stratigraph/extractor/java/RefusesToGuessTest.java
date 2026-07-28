@@ -29,9 +29,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class RefusesToGuessTest {
 
     @Test
-    void doesNotInventAnEdgeForAnUnresolvableSupertypeOrCall(@TempDir Path repo) throws Exception {
-        // `Missing` is imported from a jar that does not exist. A classpath
-        // would resolve it; we have none, and must not pretend otherwise.
+    void namesWhatTheImportStatesAndNothingMore(@TempDir Path repo) throws Exception {
+        // `Missing` comes from a jar that does not exist, so the parser cannot
+        // attribute it. The import statement still names it outright.
         write(repo, "src/Repo.java", """
                 package app;
                 import com.nowhere.Missing;
@@ -44,31 +44,61 @@ class RefusesToGuessTest {
 
         List<JsonNode> facts = extract(repo);
 
-        assertFalse(has(facts, "edge", node -> "extends".equals(node.path("kind").asText())),
-                "emitted an extends edge to a type it could not resolve");
-        assertFalse(has(facts, "edge", node -> "calls".equals(node.path("kind").asText())),
-                "emitted a calls edge to a method on a type it could not resolve");
-
-        // The `imports` edge to com.nowhere.Missing *is* emitted, and should be:
-        // the file literally says `import com.nowhere.Missing`, so the fully
-        // qualified name is a fact the parser read, not one we inferred. The
-        // distinction this test is drawing is between reading a name and
-        // resolving a type.
+        // Reading a name and resolving a type are different things, and only
+        // the second one needs a classpath. `import com.nowhere.Missing` plus
+        // `extends Missing` states the supertype's fully qualified name, so
+        // both the import and the extends edge are facts (ADR-0005), each
+        // recording how it was reached.
         assertTrue(has(facts, "edge", node ->
                         "imports".equals(node.path("kind").asText())
                                 && "com.nowhere.Missing".equals(node.path("dst").path("fqn").asText())),
                 "dropped an import whose fully qualified name the source states outright");
+        assertTrue(has(facts, "edge", node ->
+                        "extends".equals(node.path("kind").asText())
+                                && "com.nowhere.Missing".equals(node.path("dst").path("fqn").asText())
+                                && "import".equals(node.path("attrs").path("resolution").asText())),
+                "dropped a supertype the import names, or failed to record how it was resolved");
 
-        assertTrue(has(facts, "diagnostic", node ->
-                        node.path("message").asText().contains("supertype")
-                                && node.path("level").asText().equals("info")),
-                "did not report the unresolved supertype");
+        // But `m.doThing()` is a different matter: nothing in the file says what
+        // doThing's signature is, so there is no edge to draw.
+        assertFalse(has(facts, "edge", node -> "calls".equals(node.path("kind").asText())),
+                "emitted a calls edge to a method on a type it could not resolve");
         assertTrue(has(facts, "diagnostic", node ->
                         node.path("message").asText().contains("call site")),
                 "did not report the unresolved call site");
 
-        // The class itself is still a fact -- we read that file.
         assertTrue(has(facts, "node", node -> "app.Repo".equals(node.path("fqn").asText())));
+    }
+
+    @Test
+    void refusesToResolveThroughAWildcardImport(@TempDir Path repo) throws Exception {
+        // ADR-0005 rule 4. With a wildcard in scope, `Missing` could come from
+        // com.nowhere or from app, and the file does not say which.
+        write(repo, "src/Repo.java", """
+                package app;
+                import com.nowhere.*;
+                @Marker
+                public class Repo extends Missing {
+                }
+                """);
+
+        List<JsonNode> facts = extract(repo);
+
+        assertFalse(has(facts, "edge", node -> "extends".equals(node.path("kind").asText())),
+                "guessed a supertype through a wildcard import");
+        assertFalse(has(facts, "edge", node -> "annotated_with".equals(node.path("kind").asText())),
+                "guessed an annotation through a wildcard import");
+
+        // And said so both times, rather than quietly reporting a class with
+        // no supertype and no annotations.
+        assertTrue(has(facts, "diagnostic", node ->
+                        node.path("message").asText().contains("supertype")
+                                && node.path("message").asText().contains("ambiguous")),
+                "stayed silent about the unresolvable supertype");
+        assertTrue(has(facts, "diagnostic", node ->
+                        node.path("message").asText().contains("@Marker")
+                                && node.path("message").asText().contains("wildcard import")),
+                "stayed silent about the unresolvable annotation");
     }
 
     @Test
@@ -94,6 +124,35 @@ class RefusesToGuessTest {
         assertEquals(1, callDiagnostics.size(), "should be one diagnostic for the file, not one per site");
         assertTrue(callDiagnostics.get(0).path("message").asText().startsWith("3 call site"),
                 "should say how many: " + callDiagnostics.get(0).path("message").asText());
+    }
+
+    @Test
+    void willNotNameATableTheSourceDoesNotName(@TempDir Path repo) throws Exception {
+        // An @Entity with no @Table gets its table name from the persistence
+        // provider's naming strategy at runtime -- `Order` could become
+        // `order`, `orders` or `ORDER` depending on configuration we cannot
+        // see. Any of those would look right in a report and be a guess.
+        write(repo, "src/Order.java", """
+                package app;
+                import javax.persistence.Entity;
+                @Entity
+                public class Order {}
+                """);
+
+        List<JsonNode> facts = extract(repo);
+
+        assertFalse(has(facts, "edge", node -> "maps_to".equals(node.path("kind").asText())),
+                "invented a table name from a naming strategy it cannot see");
+        assertFalse(has(facts, "node", node -> "table".equals(node.path("kind").asText())));
+        assertTrue(has(facts, "diagnostic", node ->
+                        node.path("message").asText().contains("naming strategy")),
+                "stayed silent about the entity whose table it could not name");
+
+        // The entity annotation itself is still recorded -- javax, not jakarta.
+        assertTrue(has(facts, "edge", node ->
+                        "annotated_with".equals(node.path("kind").asText())
+                                && "javax.persistence.Entity".equals(node.path("dst").path("fqn").asText())),
+                "missed a javax-namespace annotation");
     }
 
     @Test

@@ -10,6 +10,7 @@ import org.openrewrite.java.JavaParser;
 import org.openrewrite.java.UpdateSourcePositions;
 import org.openrewrite.java.tree.J;
 import org.openrewrite.java.tree.JavaType;
+import org.openrewrite.java.tree.Statement;
 import org.openrewrite.java.tree.TypeTree;
 import org.openrewrite.java.tree.TypeUtils;
 import org.openrewrite.marker.Range;
@@ -127,7 +128,8 @@ final class JavaFactExtractor {
         // Declarations before references, so a node is described before
         // anything points at it and the store never has to upgrade a stub for a
         // type this same file went on to declare.
-        DeclarationVisitor declarations = new DeclarationVisitor(path, packageName);
+        DeclarationVisitor declarations =
+                new DeclarationVisitor(path, packageName, new TypeResolver(cu, packageName));
         declarations.visit(cu, null);
         declarations.reportUnresolvedCalls();
 
@@ -145,10 +147,40 @@ final class JavaFactExtractor {
 
     /** Fallback for a compilation unit that declares no type we could attribute. */
     private static String declaredPackage(J.CompilationUnit cu) {
-        if (cu.getPackageDeclaration() == null) {
-            return null;
+        return cu.getPackageDeclaration() == null
+                ? null
+                : writtenName(cu.getPackageDeclaration().getExpression());
+    }
+
+    /**
+     * A type name exactly as the source spells it, read off the tree rather than
+     * printed.
+     *
+     * Printing needs a cursor that can reach the enclosing source file, which
+     * makes it awkward to call from a helper and fragile when it is. Walking
+     * the name nodes is both simpler and exact — and "exactly as written" is
+     * what {@link TypeResolver} needs, since the whole point is to tell
+     * `Service` from `org.springframework.stereotype.Service`.
+     */
+    static String writtenName(Object tree) {
+        if (tree instanceof J.Identifier) {
+            return ((J.Identifier) tree).getSimpleName();
         }
-        return cu.getPackageDeclaration().getExpression().print(new org.openrewrite.Cursor(null, cu)).trim();
+        if (tree instanceof J.FieldAccess) {
+            J.FieldAccess access = (J.FieldAccess) tree;
+            String target = writtenName(access.getTarget());
+            return target.isEmpty() ? access.getSimpleName() : target + "." + access.getSimpleName();
+        }
+        if (tree instanceof J.ParameterizedType) {
+            return writtenName(((J.ParameterizedType) tree).getClazz());
+        }
+        if (tree instanceof J.ArrayType) {
+            return writtenName(((J.ArrayType) tree).getElementType());
+        }
+        if (tree instanceof J.AnnotatedType) {
+            return writtenName(((J.AnnotatedType) tree).getTypeExpression());
+        }
+        return "";
     }
 
     private void emitImports(J.CompilationUnit cu, String path, String owner) {
@@ -175,11 +207,16 @@ final class JavaFactExtractor {
     private final class DeclarationVisitor extends JavaIsoVisitor<Void> {
         private final String path;
         private final String packageName;
+        private final TypeResolver resolver;
         private int unresolvedCalls;
 
-        DeclarationVisitor(String path, String packageName) {
+        /** Class-level context a method needs: its stereotype and its base path. */
+        private final Map<String, ClassContext> contexts = new LinkedHashMap<>();
+
+        DeclarationVisitor(String path, String packageName, TypeResolver resolver) {
             this.path = path;
             this.packageName = packageName;
+            this.resolver = resolver;
         }
 
         @Override
@@ -226,7 +263,150 @@ final class JavaFactExtractor {
                     emitSupertype("implements", kind, fqn, implemented);
                 }
             }
+
+            NodeRef self = new NodeRef(kind, fqn);
+            List<ResolvedAnnotation> annotations =
+                    emitAnnotations(declaration.getLeadingAnnotations(), self);
+
+            ClassContext context = new ClassContext(kind, fqn, annotations, declaration);
+            contexts.put(fqn, context);
+
+            emitEntityMapping(context, self, declaration);
+            emitConstructorInjection(context, self, declaration);
+
             return super.visitClassDeclaration(declaration, unused);
+        }
+
+        /**
+         * Resolve every annotation on a declaration and record the ones we can
+         * name. ADR-0005 in one method.
+         */
+        private List<ResolvedAnnotation> emitAnnotations(List<J.Annotation> annotations, NodeRef target) {
+            List<ResolvedAnnotation> resolved = new ArrayList<>();
+            for (J.Annotation annotation : annotations) {
+                String asWritten = writtenName(annotation.getAnnotationType());
+                TypeResolver.Resolved answer = resolver.resolve(annotation.getType(), asWritten);
+
+                if (!answer.isResolved()) {
+                    // ADR-0005 rule 4. Emitting no fact *and* no diagnostic
+                    // would under-report endpoints as if the codebase had
+                    // fewer, which reads the same as a clean bill of health.
+                    emitter.diagnostic("warn",
+                            "@" + asWritten + " cannot be resolved to a fully qualified name: a "
+                                    + "wildcard import makes it ambiguous, so no stereotype, endpoint "
+                                    + "or mapping facts are recorded for it",
+                            path, line(annotation));
+                    continue;
+                }
+
+                Map<String, Object> attrs = new LinkedHashMap<>();
+                attrs.put("resolution", answer.resolution.wireName);
+                emitter.edge("annotated_with", target,
+                        new NodeRef("annotation", answer.fqn),
+                        path, line(annotation), attrs);
+
+                resolved.add(new ResolvedAnnotation(answer.fqn, annotation));
+            }
+            return resolved;
+        }
+
+        /**
+         * `@Entity` plus `@Table(name = ...)` maps a type to a table.
+         *
+         * Only with an explicit name. An `@Entity` with no `@Table` gets its
+         * table name from the persistence provider's naming strategy at
+         * runtime -- `Order` becomes `order`, `orders` or `ORDER` depending on
+         * configuration we cannot see -- so the honest output is a diagnostic
+         * rather than a plausible table.
+         */
+        private void emitEntityMapping(ClassContext context, NodeRef self, J.ClassDeclaration declaration) {
+            if (!context.hasAny(FrameworkAnnotations.JPA_ENTITY)) {
+                return;
+            }
+            ResolvedAnnotation table = context.first(FrameworkAnnotations.JPA_TABLE);
+            String name = table == null ? null : new AnnotationArgs(table.node).string("name");
+            if (name == null || name.isBlank()) {
+                emitter.diagnostic("info",
+                        context.fqn + " is an entity with no explicit @Table(name=...); its table "
+                                + "name comes from the persistence provider's naming strategy and "
+                                + "was not recorded",
+                        path, line(declaration));
+                return;
+            }
+            emitter.node("table", Fqn.table(name), name, null, null, null, null, null);
+            emitter.edge("maps_to", self, new NodeRef("table", Fqn.table(name)),
+                    path, line(table.node), null);
+        }
+
+        /**
+         * Constructor injection, but only where the source says so.
+         *
+         * A stereotyped class with exactly one constructor has that
+         * constructor's parameters injected -- that is Spring's documented
+         * behaviour and it needs no annotation. With several constructors,
+         * only an explicitly marked one is an injection point; guessing which
+         * of them the container picks is not something source can tell us.
+         */
+        private void emitConstructorInjection(ClassContext context, NodeRef self, J.ClassDeclaration declaration) {
+            List<J.MethodDeclaration> constructors = new ArrayList<>();
+            for (Statement statement : declaration.getBody().getStatements()) {
+                if (statement instanceof J.MethodDeclaration
+                        && ((J.MethodDeclaration) statement).isConstructor()) {
+                    constructors.add((J.MethodDeclaration) statement);
+                }
+            }
+
+            for (J.MethodDeclaration constructor : constructors) {
+                boolean marked = resolveAll(constructor.getLeadingAnnotations())
+                        .stream().anyMatch(a -> FrameworkAnnotations.INJECTION_MARKERS.contains(a.fqn));
+                boolean soleConstructorOfABean =
+                        context.stereotype() != null && constructors.size() == 1;
+                if (!marked && !soleConstructorOfABean) {
+                    continue;
+                }
+                for (Statement parameter : constructor.getParameters()) {
+                    if (parameter instanceof J.VariableDeclarations) {
+                        J.VariableDeclarations declared = (J.VariableDeclarations) parameter;
+                        emitInjection(self, declared.getTypeExpression(), "constructor",
+                                declared.getVariables().isEmpty()
+                                        ? null
+                                        : declared.getVariables().get(0).getSimpleName(),
+                                line(constructor));
+                    }
+                }
+            }
+        }
+
+        private void emitInjection(NodeRef target, TypeTree declaredType, String via, String member, Integer line) {
+            if (declaredType == null) {
+                return;
+            }
+            String asWritten = writtenName(declaredType);
+            TypeResolver.Resolved answer = resolver.resolve(declaredType.getType(), asWritten);
+            if (!answer.isResolved()) {
+                return;
+            }
+            Map<String, Object> attrs = new LinkedHashMap<>();
+            attrs.put("via", via);
+            if (member != null) {
+                attrs.put("member", member);
+            }
+            attrs.put("resolution", answer.resolution.wireName);
+            emitter.edge("injects", target,
+                    new NodeRef(nodeKindFor(declaredType.getType()), answer.fqn),
+                    path, line, attrs);
+        }
+
+        private List<ResolvedAnnotation> resolveAll(List<J.Annotation> annotations) {
+            List<ResolvedAnnotation> out = new ArrayList<>();
+            for (J.Annotation annotation : annotations) {
+                String asWritten = writtenName(annotation.getAnnotationType());
+                TypeResolver.Resolved answer = resolver.resolve(annotation.getType(), asWritten);
+                if (answer.isResolved()) {
+                    out.add(new ResolvedAnnotation(answer.fqn, annotation));
+                }
+            }
+            return out;
         }
 
         @Override
@@ -248,11 +428,123 @@ final class JavaFactExtractor {
                 attrs.put("returns", returns);
             }
 
+            NodeRef self = new NodeRef("method", Fqn.method(type));
             emitter.node("method", Fqn.method(type),
                     declaration.isConstructor() ? "<init>" : declaration.getSimpleName(),
                     new NodeRef(nodeKindOf(type.getDeclaringType()), Fqn.type(type.getDeclaringType())),
                     path, line(declaration), endLine(declaration), attrs);
+
+            List<ResolvedAnnotation> annotations =
+                    emitAnnotations(declaration.getLeadingAnnotations(), self);
+            ClassContext owner = contexts.get(Fqn.type(type.getDeclaringType()));
+
+            emitEndpoints(owner, self, annotations, declaration);
+            emitSetterInjection(owner, annotations, declaration);
             return super.visitMethodDeclaration(declaration, unused);
+        }
+
+        /**
+         * HTTP endpoints, from whichever of the three shapes the code uses.
+         *
+         * The node's identity is framework-neutral (`GET /api/orders/{id}`,
+         * ADR-0007) so a Spring MVC application, a Boot application and a
+         * JAX-RS application all land in the same table. `attrs.framework`
+         * records which one was actually observed.
+         */
+        private void emitEndpoints(
+                ClassContext owner,
+                NodeRef method,
+                List<ResolvedAnnotation> annotations,
+                J.MethodDeclaration declaration) {
+            if (owner == null) {
+                return;
+            }
+            List<String> basePaths = owner.basePaths();
+
+            for (ResolvedAnnotation annotation : annotations) {
+                AnnotationArgs args = new AnnotationArgs(annotation.node);
+
+                String shorthand = FrameworkAnnotations.SPRING_METHOD_MAPPINGS.get(annotation.fqn);
+                if (shorthand != null) {
+                    emitEndpoint(method, basePaths, args.strings("value"), List.of(shorthand),
+                            "spring-mvc", line(annotation.node));
+                    continue;
+                }
+
+                if (FrameworkAnnotations.SPRING_REQUEST_MAPPING.equals(annotation.fqn)) {
+                    List<String> paths = args.strings("value");
+                    if (paths.isEmpty()) {
+                        paths = args.strings("path");
+                    }
+                    // The pre-Boot form. No `method` element means Spring maps
+                    // every verb, and saying ANY is what the source supports.
+                    List<String> verbs = args.enumNames("method");
+                    emitEndpoint(method, basePaths, paths,
+                            verbs.isEmpty() ? List.of("ANY") : verbs, "spring-mvc",
+                            line(annotation.node));
+                    continue;
+                }
+
+                String jaxrs = FrameworkAnnotations.JAXRS_METHODS.get(annotation.fqn);
+                if (jaxrs != null) {
+                    List<String> paths = new ArrayList<>();
+                    for (ResolvedAnnotation other : annotations) {
+                        if (FrameworkAnnotations.JAXRS_PATH.contains(other.fqn)) {
+                            paths.addAll(new AnnotationArgs(other.node).strings("value"));
+                        }
+                    }
+                    emitEndpoint(method, basePaths, paths, List.of(jaxrs), "jaxrs",
+                            line(annotation.node));
+                }
+            }
+        }
+
+        private void emitEndpoint(
+                NodeRef method,
+                List<String> basePaths,
+                List<String> paths,
+                List<String> verbs,
+                String framework,
+                Integer line) {
+            List<String> bases = basePaths.isEmpty() ? List.of("") : basePaths;
+            List<String> suffixes = paths.isEmpty() ? List.of("") : paths;
+
+            for (String base : bases) {
+                for (String suffix : suffixes) {
+                    String full = joinPath(base, suffix);
+                    for (String verb : verbs) {
+                        String fqn = Fqn.endpoint(verb, full);
+                        Map<String, Object> attrs = new LinkedHashMap<>();
+                        attrs.put("method", verb);
+                        attrs.put("path", full);
+                        attrs.put("framework", framework);
+                        emitter.node("endpoint", fqn, full, null, path, line, null, attrs);
+                        emitter.edge("handles", method, new NodeRef("endpoint", fqn), path, line, null);
+                    }
+                }
+            }
+        }
+
+        /** `@Autowired` on a setter, which is how a lot of pre-constructor-injection code wires up. */
+        private void emitSetterInjection(
+                ClassContext owner,
+                List<ResolvedAnnotation> annotations,
+                J.MethodDeclaration declaration) {
+            if (owner == null || declaration.isConstructor()) {
+                return;
+            }
+            boolean marked = annotations.stream()
+                    .anyMatch(a -> FrameworkAnnotations.INJECTION_MARKERS.contains(a.fqn));
+            if (!marked) {
+                return;
+            }
+            for (Statement parameter : declaration.getParameters()) {
+                if (parameter instanceof J.VariableDeclarations) {
+                    J.VariableDeclarations declared = (J.VariableDeclarations) parameter;
+                    emitInjection(new NodeRef(owner.kind, owner.fqn), declared.getTypeExpression(),
+                            "setter", declaration.getSimpleName(), line(declaration));
+                }
+            }
         }
 
         @Override
@@ -264,6 +556,11 @@ final class JavaFactExtractor {
             String ownerFqn = Fqn.type(owner.getType());
             String ownerKind = nodeKind(owner.getKind());
 
+            List<ResolvedAnnotation> annotations = resolveAll(declaration.getLeadingAnnotations());
+            ResolvedAnnotation column = first(annotations, FrameworkAnnotations.JPA_COLUMN);
+            String columnName = column == null ? null : new AnnotationArgs(column.node).string("name");
+            boolean isId = first(annotations, FrameworkAnnotations.JPA_ID) != null;
+
             for (J.VariableDeclarations.NamedVariable variable : declaration.getVariables()) {
                 Map<String, Object> attrs = new LinkedHashMap<>();
                 String fieldType = Fqn.erase(declaration.getType());
@@ -274,10 +571,30 @@ final class JavaFactExtractor {
                 if (!modifiers.isEmpty()) {
                     attrs.put("modifiers", modifiers);
                 }
+                // The column name is a fact only when @Column states it; the
+                // default is the provider's naming strategy, same as @Table.
+                if (columnName != null && !columnName.isBlank()) {
+                    attrs.put("column", columnName);
+                }
+                if (isId) {
+                    attrs.put("id", true);
+                }
+
+                NodeRef self = new NodeRef("field",
+                        Fqn.field(ownerFqn, variable.getSimpleName()));
                 emitter.node("field", Fqn.field(ownerFqn, variable.getSimpleName()),
                         variable.getSimpleName(),
                         new NodeRef(ownerKind, ownerFqn),
                         path, line(declaration), null, attrs);
+                emitAnnotations(declaration.getLeadingAnnotations(), self);
+
+                // Field injection: the pre-constructor-injection style that
+                // most legacy Spring code is written in.
+                if (annotations.stream()
+                        .anyMatch(a -> FrameworkAnnotations.INJECTION_MARKERS.contains(a.fqn))) {
+                    emitInjection(new NodeRef(ownerKind, ownerFqn), declaration.getTypeExpression(),
+                            "field", variable.getSimpleName(), line(declaration));
+                }
             }
             return super.visitVariableDeclarations(declaration, unused);
         }
@@ -354,25 +671,36 @@ final class JavaFactExtractor {
             }
         }
 
+        /**
+         * A supertype edge, resolved through imports when the parser could not
+         * attribute the type.
+         *
+         * This matters more than it looks. Without a classpath the supertype of
+         * anything interesting in an enterprise codebase — `HttpServlet`,
+         * `JpaRepository`, `AbstractController` — is unattributed, and dropping
+         * all of them would leave the inheritance graph empty on exactly the
+         * repositories this tool is for. `import x.y.Z; class C extends Z` names
+         * the supertype outright, which is a fact the parser read (ADR-0005),
+         * not a type we inferred.
+         */
         private void emitSupertype(String edgeKind, String ownerKind, String ownerFqn, TypeTree supertype) {
-            if (Fqn.unresolved(supertype.getType())) {
-                // A supertype from a jar we never read. Recording an edge to a
-                // name we cannot resolve would be exactly the confident guess
-                // this project forbids.
+            String asWritten = writtenName(supertype);
+            TypeResolver.Resolved answer = resolver.resolve(supertype.getType(), asWritten);
+
+            if (!answer.isResolved()) {
                 emitter.diagnostic("info",
-                        "supertype of " + ownerFqn + " could not be resolved from source: "
-                                + supertype.printTrimmed(getCursor()),
+                        "supertype " + asWritten + " of " + ownerFqn + " cannot be resolved to a "
+                                + "fully qualified name: a wildcard import makes it ambiguous",
                         path, line(supertype));
                 return;
             }
-            JavaType.FullyQualified resolved = TypeUtils.asFullyQualified(supertype.getType());
-            if (resolved == null) {
-                return;
-            }
+
+            Map<String, Object> attrs = new LinkedHashMap<>();
+            attrs.put("resolution", answer.resolution.wireName);
             emitter.edge(edgeKind,
                     new NodeRef(ownerKind, ownerFqn),
-                    new NodeRef(nodeKindOf(resolved), Fqn.type(resolved)),
-                    path, line(supertype), null);
+                    new NodeRef(nodeKindFor(supertype.getType()), answer.fqn),
+                    path, line(supertype), attrs);
         }
 
         /**
@@ -406,6 +734,110 @@ final class JavaFactExtractor {
             Object grandparent = getCursor().getParentTreeCursor().getParentTreeCursor().getValue();
             return grandparent instanceof J.ClassDeclaration ? (J.ClassDeclaration) grandparent : null;
         }
+    }
+
+    /** An annotation we were able to name, paired with the node it was written on. */
+    private static final class ResolvedAnnotation {
+        final String fqn;
+        final J.Annotation node;
+
+        ResolvedAnnotation(String fqn, J.Annotation node) {
+            this.fqn = fqn;
+            this.node = node;
+        }
+    }
+
+    /** What a method needs to know about the class it is declared in. */
+    private static final class ClassContext {
+        final String kind;
+        final String fqn;
+        private final List<ResolvedAnnotation> annotations;
+        private final J.ClassDeclaration declaration;
+
+        ClassContext(String kind, String fqn, List<ResolvedAnnotation> annotations,
+                     J.ClassDeclaration declaration) {
+            this.kind = kind;
+            this.fqn = fqn;
+            this.annotations = annotations;
+            this.declaration = declaration;
+        }
+
+        /** The stereotype this class declares, or null when it declares none we recognise. */
+        String stereotype() {
+            for (ResolvedAnnotation annotation : annotations) {
+                String stereotype = FrameworkAnnotations.STEREOTYPES.get(annotation.fqn);
+                if (stereotype != null) {
+                    return stereotype;
+                }
+            }
+            return null;
+        }
+
+        /** Class-level path prefixes, from Spring's `@RequestMapping` or JAX-RS's `@Path`. */
+        List<String> basePaths() {
+            List<String> paths = new ArrayList<>();
+            for (ResolvedAnnotation annotation : annotations) {
+                if (FrameworkAnnotations.SPRING_REQUEST_MAPPING.equals(annotation.fqn)) {
+                    AnnotationArgs args = new AnnotationArgs(annotation.node);
+                    paths.addAll(args.strings("value"));
+                    paths.addAll(args.strings("path"));
+                } else if (FrameworkAnnotations.JAXRS_PATH.contains(annotation.fqn)) {
+                    paths.addAll(new AnnotationArgs(annotation.node).strings("value"));
+                }
+            }
+            return paths;
+        }
+
+        boolean hasAny(java.util.Set<String> fqns) {
+            return first(fqns) != null;
+        }
+
+        ResolvedAnnotation first(java.util.Set<String> fqns) {
+            for (ResolvedAnnotation annotation : annotations) {
+                if (fqns.contains(annotation.fqn)) {
+                    return annotation;
+                }
+            }
+            return null;
+        }
+
+        @SuppressWarnings("unused")
+        J.ClassDeclaration declaration() {
+            return declaration;
+        }
+    }
+
+    private static ResolvedAnnotation first(List<ResolvedAnnotation> annotations, Set<String> fqns) {
+        for (ResolvedAnnotation annotation : annotations) {
+            if (fqns.contains(annotation.fqn)) {
+                return annotation;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Join a class-level path prefix to a method-level suffix.
+     *
+     * Purely mechanical string work over two values the source states, which is
+     * why the result is still a fact rather than a derivation.
+     */
+    static String joinPath(String base, String suffix) {
+        String joined = base.trim() + "/" + suffix.trim();
+        joined = joined.replaceAll("/{2,}", "/");
+        if (!joined.startsWith("/")) {
+            joined = "/" + joined;
+        }
+        if (joined.length() > 1 && joined.endsWith("/")) {
+            joined = joined.substring(0, joined.length() - 1);
+        }
+        return joined;
+    }
+
+    /** Node kind for a referenced type, falling back to `class` when nothing attributed it. */
+    static String nodeKindFor(JavaType type) {
+        JavaType.FullyQualified resolved = TypeUtils.asFullyQualified(type);
+        return resolved == null ? "class" : nodeKindOf(resolved);
     }
 
     private static List<String> modifiers(List<J.Modifier> modifiers) {
