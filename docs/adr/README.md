@@ -1,0 +1,17 @@
+# Architecture decision records
+
+This project produces ADR candidates from other people's codebases, so it keeps
+its own.
+
+Write the ADR **before** the code when the decision is architectural, **after**
+the code when it is incidental. Either way, before the commit.
+
+| # | Decision | Status |
+| --- | --- | --- |
+| [0001](0001-language-split.md) | TypeScript core, per-language extractor processes | accepted |
+| [0002](0002-sqlite-fact-store.md) | SQLite fact store; facts and interpretation in separate tables | accepted |
+| [0003](0003-ndjson-fact-protocol.md) | NDJSON over stdout as the extractor protocol | accepted |
+| [0004](0004-distribution-and-runtime-independence.md) | One npm package, fetched extractor jar, Docker image | accepted |
+
+Format: context, decision, alternatives considered (with why each was rejected),
+consequences — including the costs, not only the benefits.
