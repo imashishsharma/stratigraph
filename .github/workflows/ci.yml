@@ -40,6 +40,10 @@ jobs:
       - name: Test
         run: npm test
 
+      # Note: the packaging test in the suite above is what actually proves the
+      # published artefact works — it packs, installs the tarball and drives the
+      # bin symlink. Running `node dist/cli.js` here only proves the module
+      # loads, which is how 1.0.0 shipped with a CLI that silently did nothing.
       - name: Smoke test the built CLI
         shell: bash
         run: |

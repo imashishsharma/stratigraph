@@ -1,8 +1,14 @@
 /**
- * Logs go to stderr, always. stdout belongs to machine-readable output so that
- * `stratigraph ... | jq` keeps working.
+ * Progress and diagnostics go to stderr; a command's actual product goes to
+ * stdout. So `stratigraph doctor > report.txt` captures the report, while
+ * `stratigraph ingest` progress stays out of a pipe feeding `jq`.
  */
 let quiet = false;
+
+/** A command's output proper. Never suppressed by --quiet. */
+export function print(message: string): void {
+  process.stdout.write(`${message}\n`);
+}
 
 export function setQuiet(value: boolean): void {
   quiet = value;

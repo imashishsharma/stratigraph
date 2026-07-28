@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { realpathSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 
 import { Command, Option } from 'commander';
@@ -8,7 +9,7 @@ import { runIngest } from './commands/ingest.js';
 import { runInit } from './commands/init.js';
 import { ConfigError } from './config.js';
 import { FactProtocolError } from './facts/ndjson.js';
-import { error, info, setQuiet } from './log.js';
+import { error, print, setQuiet } from './log.js';
 import { TOOL_VERSION } from './version.js';
 
 interface GlobalOptions {
@@ -75,7 +76,8 @@ export function buildProgram(): Command {
       const width = Math.max(...checks.map((c) => c.name.length));
       for (const check of checks) {
         const mark = check.status === 'ok' ? 'ok  ' : check.status === 'warn' ? 'warn' : '--  ';
-        info(`${mark} ${check.name.padEnd(width)}  ${check.detail}`);
+        // The report is what the user asked for, so it goes to stdout.
+        print(`${mark} ${check.name.padEnd(width)}  ${check.detail}`);
       }
     });
 
@@ -121,12 +123,28 @@ function isCommanderExit(err: unknown): err is { exitCode: number } {
   );
 }
 
-/* c8 ignore start */
-const invokedDirectly =
-  process.argv[1] !== undefined &&
-  import.meta.url === pathToFileURL(process.argv[1]).href;
+/**
+ * True when this module is the process entry point.
+ *
+ * `argv[1]` must be resolved through symlinks first: npm installs the bin as
+ * `node_modules/.bin/stratigraph`, a symlink to this file, so `argv[1]` is the
+ * link path while `import.meta.url` is always the real path. Comparing them
+ * unresolved makes this false for every installed user — the CLI exits 0 having
+ * done nothing, which is exactly how 1.0.0 shipped broken.
+ */
+function isEntryPoint(): boolean {
+  const entry = process.argv[1];
+  if (entry === undefined) return false;
+  if (import.meta.url === pathToFileURL(entry).href) return true;
+  try {
+    return import.meta.url === pathToFileURL(realpathSync(entry)).href;
+  } catch {
+    return false;
+  }
+}
 
-if (invokedDirectly) {
+/* c8 ignore start */
+if (isEntryPoint()) {
   process.exitCode = await main(process.argv);
 }
 /* c8 ignore stop */
