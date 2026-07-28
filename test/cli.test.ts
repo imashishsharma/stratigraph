@@ -234,7 +234,15 @@ describe('stratigraph doctor', () => {
     const dir = scratch();
     const checks = runDoctor({ repo: FIXTURE, cwd: dir });
     const names = checks.map((c) => c.name);
-    expect(names).toEqual(['stratigraph', 'node', 'git', 'java', 'config', 'database']);
+    expect(names).toEqual([
+      'stratigraph',
+      'node',
+      'git',
+      'java',
+      'extractor',
+      'config',
+      'database',
+    ]);
     // A missing or old JDK limits one extractor; it is never a hard failure.
     expect(checks.every((c) => c.status !== 'ok' || c.detail.length > 0)).toBe(true);
     expect(checks.find((c) => c.name === 'database')?.status).toBe('missing');

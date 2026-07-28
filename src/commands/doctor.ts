@@ -1,9 +1,10 @@
 import { execFileSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, statSync } from 'node:fs';
 
 import { loadConfig, type ConfigOverrides } from '../config.js';
 import { currentVersion, openDatabase } from '../db/database.js';
 import { SCHEMA_VERSION } from '../db/migrations/index.js';
+import { findExtractorJar, JAR_ENV_VAR } from '../toolchain/extractor-jar.js';
 import { discoverJavaRuntimes, findJava, MIN_JAVA_MAJOR } from '../toolchain/java.js';
 import { TOOL_VERSION } from '../version.js';
 
@@ -66,6 +67,27 @@ export function runDoctor(overrides: ConfigOverrides): Check[] {
     });
   }
 
+  // A missing jar disables the Java extractor, exactly as a missing JDK does.
+  // Reported separately from `java` because the two fail for different reasons
+  // and have different fixes.
+  const jar = findExtractorJar({ jar: overrides.extractorJar });
+  checks.push(
+    jar
+      ? {
+          name: 'extractor',
+          status: 'ok',
+          // The build date is here because `mvn test` does not repackage, so a
+          // developer can easily be running a jar older than their last change
+          // and see stale facts with nothing to explain them.
+          detail: `${jar.path} (${jar.source}, built ${builtAt(jar.path)})`,
+        }
+      : {
+          name: 'extractor',
+          status: 'warn',
+          detail: `Java extractor jar not found — build it with \`cd extractors/java && ./mvnw package\`, or set java.jar / ${JAR_ENV_VAR}`,
+        },
+  );
+
   try {
     const config = loadConfig(overrides);
     checks.push({
@@ -97,6 +119,14 @@ export function runDoctor(overrides: ConfigOverrides): Check[] {
   }
 
   return checks;
+}
+
+function builtAt(path: string): string {
+  try {
+    return statSync(path).mtime.toISOString().slice(0, 16).replace('T', ' ');
+  } catch {
+    return 'unknown';
+  }
 }
 
 function probe(bin: string, args: string[], missingHint: string): Check {

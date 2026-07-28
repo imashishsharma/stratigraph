@@ -20,6 +20,11 @@ export interface JavaConfig {
    * The published package never assumes the machine's default JDK.
    */
   home: string | null;
+  /**
+   * Path to the extractor jar. Null means "look in the usual places"
+   * (see `src/toolchain/extractor-jar.ts`).
+   */
+  jar: string | null;
 }
 
 export interface StratigraphConfig {
@@ -43,6 +48,7 @@ export interface ConfigOverrides {
   llm?: boolean | undefined;
   sendSource?: boolean | undefined;
   javaHome?: string | undefined;
+  extractorJar?: string | undefined;
   cwd?: string | undefined;
 }
 
@@ -65,7 +71,7 @@ const DEFAULT_EXCLUDES = [
 
 const KNOWN_KEYS = new Set(['repo', 'db', 'include', 'exclude', 'llm', 'java']);
 const KNOWN_LLM_KEYS = new Set(['enabled', 'model', 'sendSource']);
-const KNOWN_JAVA_KEYS = new Set(['home']);
+const KNOWN_JAVA_KEYS = new Set(['home', 'jar']);
 
 /**
  * Precedence: CLI flags > config file > defaults.
@@ -115,6 +121,7 @@ export function loadConfig(overrides: ConfigOverrides = {}): StratigraphConfig {
     },
     java: {
       home: overrides.javaHome ?? file.java?.home ?? null,
+      jar: overrides.extractorJar ?? file.java?.jar ?? null,
     },
     source: configPath,
   };
@@ -126,7 +133,7 @@ interface ConfigFile {
   include?: string[];
   exclude?: string[];
   llm?: { enabled?: boolean; model?: string; sendSource?: boolean };
-  java?: { home?: string };
+  java?: { home?: string; jar?: string };
 }
 
 function readConfigFile(path: string): ConfigFile {
@@ -191,6 +198,8 @@ function readConfigFile(path: string): ConfigFile {
     out.java = {};
     if (javaObj['home'] !== undefined)
       out.java.home = expectString(path, 'java.home', javaObj['home']);
+    if (javaObj['jar'] !== undefined)
+      out.java.jar = expectString(path, 'java.jar', javaObj['jar']);
   }
 
   return out;

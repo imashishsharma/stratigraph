@@ -6,6 +6,7 @@ import { Command, Option } from 'commander';
 
 import { AnalysisError, runAnalyze } from './commands/analyze.js';
 import { runDoctor } from './commands/doctor.js';
+import { ExtractError, runExtract } from './commands/extract.js';
 import { runIngest } from './commands/ingest.js';
 import { runInit } from './commands/init.js';
 import { ConfigError } from './config.js';
@@ -20,6 +21,7 @@ interface GlobalOptions {
   llm?: boolean;
   sendSource?: boolean;
   javaHome?: string;
+  extractorJar?: string;
   quiet?: boolean;
 }
 
@@ -40,6 +42,7 @@ export function buildProgram(): Command {
     .option('--db <path>', 'fact store location (default: .stratigraph/<repo-name>.db)')
     .option('--config <path>', `config file (default: ./stratigraph.config.json)`)
     .option('--java-home <path>', 'JDK used to run the Java extractor')
+    .option('--extractor-jar <path>', 'Java extractor jar (default: discovered)')
     .addOption(
       new Option('--no-llm', 'skip the interpretation layer; structural output only'),
     )
@@ -67,6 +70,21 @@ export function buildProgram(): Command {
     .option('--from <file>', 'read facts from a file instead of stdin')
     .action(async (options: { from?: string }) => {
       await runIngest({ ...overrides(program), from: options.from });
+    });
+
+  program
+    .command('extract')
+    .description('run an extractor over the repository and store the facts it emits')
+    .option('--extractor-jar <path>', 'Java extractor jar to run')
+    .option('--emit', 'write raw NDJSON to stdout instead of storing it')
+    .option('--java-opts <opts>', 'extra JVM arguments, e.g. "-Xmx8g"')
+    .action(async (options: { extractorJar?: string; emit?: boolean; javaOpts?: string }) => {
+      await runExtract({
+        ...overrides(program),
+        extractorJar: options.extractorJar,
+        emit: options.emit,
+        javaOpts: options.javaOpts ? options.javaOpts.split(/\s+/).filter(Boolean) : undefined,
+      });
     });
 
   program
@@ -104,6 +122,7 @@ function overrides(program: Command) {
     llm: opts.llm === false ? false : undefined,
     sendSource: opts.sendSource === true ? true : undefined,
     javaHome: opts.javaHome,
+    extractorJar: opts.extractorJar,
   };
 }
 
@@ -115,7 +134,8 @@ export async function main(argv: string[]): Promise<number> {
     if (
       err instanceof ConfigError ||
       err instanceof FactProtocolError ||
-      err instanceof AnalysisError
+      err instanceof AnalysisError ||
+      err instanceof ExtractError
     ) {
       error(err.message);
       return 2;

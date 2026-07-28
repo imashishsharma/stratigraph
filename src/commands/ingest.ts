@@ -4,8 +4,8 @@ import type { Readable } from 'node:stream';
 import { loadConfig, type ConfigOverrides } from '../config.js';
 import { assertSchemaCurrent, openDatabase } from '../db/database.js';
 import { createRun, finishRun } from '../db/run.js';
-import { readFacts } from '../facts/ndjson.js';
-import { SqliteFactWriter, type FactWriterStats } from '../facts/writer.js';
+import { ingestInto } from '../facts/ingest.js';
+import type { FactWriterStats } from '../facts/writer.js';
 import { info } from '../log.js';
 
 export interface IngestOptions extends ConfigOverrides {
@@ -31,26 +31,26 @@ export async function runIngest(options: IngestOptions): Promise<IngestResult> {
   try {
     assertSchemaCurrent(db);
     const run = createRun(db, config.repoPath);
-    const writer = new SqliteFactWriter(db, run.id);
     const source: Readable = options.from ? createReadStream(options.from) : process.stdin;
 
     try {
-      for await (const fact of readFacts(source)) {
-        writer.write(fact);
-      }
-      const stats = writer.close();
+      const stats = await ingestInto(db, run.id, source);
       finishRun(db, run.id, 'ok');
-      info(
-        `run ${run.id}: ${stats.nodes} nodes (+${stats.stubs} stubs), ${stats.edges} edges, ` +
-          `${stats.files} files, ${stats.diagnostics} diagnostics`,
-      );
+      info(summarise(run.id, stats));
       return { runId: run.id, ...stats };
     } catch (err) {
-      writer.close();
       finishRun(db, run.id, 'failed');
       throw err;
     }
   } finally {
     db.close();
   }
+}
+
+/** One line naming everything that landed, so a run is auditable from the log. */
+export function summarise(runId: number, stats: FactWriterStats): string {
+  return (
+    `run ${runId}: ${stats.nodes} nodes (+${stats.stubs} stubs), ${stats.edges} edges, ` +
+    `${stats.files} files, ${stats.diagnostics} diagnostics`
+  );
 }
