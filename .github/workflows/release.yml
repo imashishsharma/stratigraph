@@ -1,0 +1,45 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+# OIDC for npm provenance: no long-lived NPM_TOKEN with publish rights needed
+# beyond the granular automation token, and the package page gets a verified
+# provenance badge. See ADR-0004.
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  npm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: https://registry.npmjs.org
+          cache: npm
+
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+
+      - name: Fail if the tag does not match package.json
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          pkg="$(node -p "require('./package.json').version")"
+          [ "$tag" = "$pkg" ] || { echo "tag $tag != package version $pkg"; exit 1; }
+
+      - run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  # Added in M1, when there is a jar to build: build the OpenRewrite extractor
+  # fat jar, attach it to the GitHub release with its checksum (the core fetches
+  # it on first use, pinned to this package version), and push the ghcr.io image.
+  # Deliberately not stubbed out here — an empty job that always passes is worse
+  # than no job.

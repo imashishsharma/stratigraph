@@ -1,0 +1,69 @@
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: node ${{ matrix.node }} / ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # The published package claims Node >=18.18 on every desktop platform.
+        # Claiming it is cheap; proving it is what this matrix is for.
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        node: ['18', '20', '22']
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+
+      - run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build
+        run: npm run build
+
+      - name: Test
+        run: npm test
+
+      - name: Smoke test the built CLI
+        shell: bash
+        run: |
+          node dist/cli.js --version
+          node dist/cli.js doctor --repo fixtures/tiny-java
+          node dist/cli.js init --repo fixtures/tiny-java
+
+  no-jdk:
+    name: no JDK installed
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+
+      # A missing JDK must degrade one extractor, never fail the tool. Ubuntu
+      # runners ship a JDK, so hide it and confirm the CLI still works.
+      - name: Run with java hidden
+        run: |
+          sudo rm -f /usr/bin/java /usr/local/bin/java || true
+          JAVA_HOME= PATH="$(echo "$PATH" | tr ':' '\n' | grep -v -i jdk | grep -v -i java | paste -sd:)" \
+            node dist/cli.js doctor --repo fixtures/tiny-java
+          JAVA_HOME= node dist/cli.js init --repo fixtures/tiny-java
