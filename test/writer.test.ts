@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { migrate, openDatabase, type Db } from '../src/db/database.js';
 import { createRun } from '../src/db/run.js';
 import { parseFact } from '../src/facts/ndjson.js';
-import { SqliteFactWriter } from '../src/facts/writer.js';
+import { lastSegment, SqliteFactWriter } from '../src/facts/writer.js';
 import type { Fact } from '../src/facts/types.js';
 
 let db: Db;
@@ -243,11 +243,77 @@ describe('SqliteFactWriter', () => {
     ).toEqual({ level: 'warn', message: 'unresolved type Foo', path: 'src/A.java' });
   });
 
+  it('maps an entity to a table', () => {
+    ingest([
+      meta,
+      {
+        v: 1,
+        type: 'edge',
+        kind: 'maps_to',
+        src: { kind: 'class', fqn: 'com.example.shop.domain.Order' },
+        dst: { kind: 'table', fqn: 'orders' },
+        file: 'src/Order.java',
+        line: 9,
+        attrs: { resolution: 'import' },
+      },
+    ]);
+    expect(
+      db
+        .prepare(
+          `SELECT e.kind, e.confidence, s.fqn AS src, d.fqn AS dst, d.kind AS dst_kind
+             FROM edge e JOIN node s ON s.id = e.src_id JOIN node d ON d.id = e.dst_id`,
+        )
+        .get(),
+    ).toEqual({
+      kind: 'maps_to',
+      confidence: 'fact',
+      src: 'com.example.shop.domain.Order',
+      dst: 'orders',
+      dst_kind: 'table',
+    });
+  });
+
   it('refuses to write after close', () => {
     const writer = new SqliteFactWriter(db, runId);
     writer.close();
     expect(() =>
       writer.write(parseFact('{"v":1,"type":"file","path":"a","language":"java"}')),
     ).toThrow(/closed/);
+  });
+
+  it('names a stubbed method sensibly', () => {
+    // Every call into a third-party jar creates one of these, so the name it
+    // gets is what a report will actually print.
+    ingest([
+      meta,
+      {
+        v: 1,
+        type: 'edge',
+        kind: 'calls',
+        src: { kind: 'method', fqn: 'com.example.A#run()' },
+        dst: { kind: 'method', fqn: 'org.slf4j.Logger#info(java.lang.String)' },
+      },
+    ]);
+    expect(
+      db.prepare(`SELECT name, is_stub FROM node WHERE fqn LIKE 'org.slf4j%'`).get(),
+    ).toEqual({ name: 'info', is_stub: 1 });
+  });
+});
+
+describe('lastSegment', () => {
+  it.each([
+    // ADR-0007 identity scheme.
+    ['com.example.shop.service.OrderService#findOne(java.lang.Long)', 'findOne'],
+    ['com.example.Order#<init>(java.lang.String)', '<init>'],
+    ['com.example.Order#customerRef', 'customerRef'],
+    ['com.example.shop.web.OrderController', 'OrderController'],
+    ['com.example.Outer$Inner', 'Inner'],
+    ['com.example.shop.web', 'web'],
+    ['com.example:shop-web', 'shop-web'],
+    ['<default>', '<default>'],
+    ['orders', 'orders'],
+    ['GET /api/orders/{id}', 'GET /api/orders/{id}'],
+  ])('%s -> %s', (fqn, expected) => {
+    expect(lastSegment(fqn)).toBe(expected);
   });
 });

@@ -36,6 +36,10 @@ export const EDGE_KINDS = [
   'annotated_with',
   'reads_table',
   'writes_table',
+  // A declared mapping between a type and a table (`@Entity` + `@Table`). Not a
+  // read and not a write — an ORM mapping says the two correspond, not that
+  // anything touched the table.
+  'maps_to',
   'http_calls', // a client calls an HTTP endpoint
   'handles', // a method handles an endpoint
   'imports',

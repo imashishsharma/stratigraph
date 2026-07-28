@@ -292,7 +292,25 @@ function key(kind: string, fqn: string): string {
   return `${kind} ${fqn}`;
 }
 
-function lastSegment(fqn: string): string {
-  const match = /[^.#/$]+$/.exec(fqn);
-  return match ? match[0] : fqn;
+/**
+ * A display name for a node we know only by `fqn` — i.e. a stub, created
+ * because an edge referred to something no extractor declared. Follows the
+ * identity scheme in ADR-0007.
+ *
+ * Stub *methods* are the common case, not the rare one: every call into a
+ * third-party jar produces one. Splitting those on `.` yields `Long)` for
+ * `com.example.OrderService#findOne(java.lang.Long)`, so the member separator
+ * has to be handled before the package separator.
+ */
+export function lastSegment(fqn: string): string {
+  const hash = fqn.lastIndexOf('#');
+  if (hash !== -1) {
+    const member = fqn.slice(hash + 1);
+    const paren = member.indexOf('(');
+    return paren === -1 ? member : member.slice(0, paren);
+  }
+  // `GET /api/orders/{id}` has no segment structure worth splitting.
+  if (fqn.includes(' ')) return fqn;
+  const match = /[^.$:/]+$/.exec(fqn);
+  return match?.[0] ?? fqn;
 }
