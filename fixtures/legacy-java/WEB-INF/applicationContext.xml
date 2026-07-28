@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Hand-written fixture. The extractor does not parse this in M1, and the test
+  asserts that it says so rather than reporting an application with no bean
+  wiring. `reportDao` must appear nowhere as a bean fact.
+-->
+<beans>
+  <bean id="reportDao" class="com.example.legacy.service.ReportDao"/>
+  <bean id="reportService" class="com.example.legacy.service.ReportService">
+    <property name="reportDao" ref="reportDao"/>
+  </bean>
+</beans>

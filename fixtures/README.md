@@ -38,3 +38,28 @@ Expected facts:
 
 That last row is the important one. It is easy to write an extractor that scores
 well by guessing; the fixture asserts that this one refuses to.
+
+## `legacy-java`
+
+The pre-Boot world, which is most of what this tool will actually be pointed at.
+**No build file at all**, sources under `src/` rather than `src/main/java`,
+`javax.*` rather than `jakarta.*`, and Spring MVC rather than Spring Boot.
+
+Expected facts:
+
+| File | Expected |
+| --- | --- |
+| `web/ReportController.java` | stereotype `Controller`; `@Resource` **field** injection of `ReportService`; endpoints `GET /reports/daily` and `POST /reports/daily` from one `@RequestMapping(method = {GET, POST})`, plus `ANY /reports/index` where no method element is given |
+| `service/ReportService.java` | stereotype `Service`; `@Autowired` field injection of `ReportDao` |
+| `service/ReportDao.java` | a plain class — **no stereotype and no injection facts**, because it is declared in XML |
+| `domain/Report.java` | entity → table `report_run`; field `title` → column `report_title`, all via `javax.persistence` |
+| `WEB-INF/applicationContext.xml` | **a diagnostic and nothing else** — the beans and the `<property ref>` wiring in here are absent from the graph, and the report must be able to say so |
+
+The module is named `legacy-java` after its directory, because there is no
+`pom.xml` to name it. That is a supported case, not a degraded one.
+
+The XML row is this fixture's version of `tiny-spring`'s wildcard import. A
+legacy Spring MVC application can define most of its wiring in
+`applicationContext.xml`, and a graph that omits it while looking complete is
+the confidently-wrong map CLAUDE.md forbids. Parsing that XML is a later
+milestone; admitting we did not costs nothing now.
