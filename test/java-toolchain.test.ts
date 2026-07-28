@@ -9,8 +9,10 @@ import {
   extractVersion,
   findJava,
   inspectJavaHome,
+  installRoots,
   parseMajor,
   readReleaseVersion,
+  type JavaSearchRoot,
 } from '../src/toolchain/java.js';
 
 /** Build a fake JDK: a `bin/java` and the `release` file every JDK ships. */
@@ -33,6 +35,16 @@ function sdkmanHome(versions: string[], current?: string): string {
     symlinkSync(join(candidates, `${current}-amzn`), join(candidates, 'current'));
   }
   return userHome;
+}
+
+/**
+ * Scan only the fake SDKMAN tree. The real roots include absolute system paths
+ * (`/usr/lib/jvm`, `/Library/Java/...`), so without this a test would also find
+ * whatever JDKs the machine happens to have — which is precisely how these
+ * tests passed locally and failed on a CI runner with five JDKs installed.
+ */
+function sdkmanRoots(userHome: string): JavaSearchRoot[] {
+  return [{ dir: join(userHome, '.sdkman', 'candidates', 'java'), source: 'sdkman' }];
 }
 
 describe('parseMajor', () => {
@@ -100,21 +112,46 @@ describe('inspectJavaHome', () => {
   });
 });
 
+describe('installRoots', () => {
+  it('scans SDKMAN, jenv and Gradle toolchains on every platform', () => {
+    const dirs = installRoots({}, 'linux', '/home/dev').map((r) => r.dir);
+    expect(dirs).toContain('/home/dev/.sdkman/candidates/java');
+    expect(dirs).toContain('/home/dev/.jenv/versions');
+    expect(dirs).toContain('/home/dev/.gradle/jdks');
+  });
+
+  it('honours SDKMAN_DIR over the default location', () => {
+    const dirs = installRoots({ SDKMAN_DIR: '/opt/sdkman' }, 'linux', '/home/dev').map(
+      (r) => r.dir,
+    );
+    expect(dirs).toContain('/opt/sdkman/candidates/java');
+    expect(dirs).not.toContain('/home/dev/.sdkman/candidates/java');
+  });
+
+  it.each([
+    ['darwin' as const, '/Library/Java/JavaVirtualMachines'],
+    ['linux' as const, '/usr/lib/jvm'],
+    ['win32' as const, 'C:\\Program Files\\Java'],
+  ])('includes the %s system location', (platform, expected) => {
+    expect(installRoots({}, platform, '/home/dev').map((r) => r.dir)).toContain(expected);
+  });
+});
+
 describe('discoverJavaRuntimes', () => {
   it('finds every SDKMAN-managed JDK, newest first', () => {
     const userHome = sdkmanHome(['1.8.0_432', '11.0.25', '17.0.13']);
-    const found = discoverJavaRuntimes({ env: {}, platform: 'linux', userHome });
+    const found = discoverJavaRuntimes({ roots: sdkmanRoots(userHome) });
     expect(found.map((r) => r.major)).toEqual([17, 11, 8]);
     expect(found.every((r) => r.source === 'sdkman')).toBe(true);
   });
 
   it('does not report SDKMAN’s `current` symlink as a second JDK', () => {
     const userHome = sdkmanHome(['1.8.0_432', '17.0.13'], '1.8.0_432');
-    const found = discoverJavaRuntimes({ env: {}, platform: 'linux', userHome });
+    const found = discoverJavaRuntimes({ roots: sdkmanRoots(userHome) });
     expect(found.map((r) => r.major)).toEqual([17, 8]);
   });
 
-  it('honours SDKMAN_DIR', () => {
+  it('finds a JDK through SDKMAN_DIR', () => {
     const userHome = mkdtempSync(join(tmpdir(), 'strat-home-'));
     const sdkmanDir = mkdtempSync(join(tmpdir(), 'strat-sdkman-'));
     fakeJdk(join(sdkmanDir, 'candidates', 'java', '21.0.2-tem'), '21.0.2');
@@ -122,13 +159,14 @@ describe('discoverJavaRuntimes', () => {
       env: { SDKMAN_DIR: sdkmanDir },
       platform: 'linux',
       userHome,
+      roots: [{ dir: join(sdkmanDir, 'candidates', 'java'), source: 'sdkman' }],
     });
     expect(found.map((r) => r.major)).toEqual([21]);
   });
 
-  it('returns nothing, without throwing, when no JDK is installed anywhere', () => {
+  it('returns nothing, without throwing, when the roots do not exist', () => {
     const userHome = mkdtempSync(join(tmpdir(), 'strat-bare-'));
-    expect(discoverJavaRuntimes({ env: {}, platform: 'win32', userHome })).toEqual([]);
+    expect(discoverJavaRuntimes({ roots: sdkmanRoots(userHome) })).toEqual([]);
   });
 });
 
@@ -140,8 +178,7 @@ describe('findJava', () => {
     const java8 = join(userHome, '.sdkman', 'candidates', 'java', '1.8.0_432-amzn');
     const found = findJava({
       env: { JAVA_HOME: java8 },
-      platform: 'linux',
-      userHome,
+      roots: sdkmanRoots(userHome),
     });
     expect(found).toMatchObject({ major: 17, source: 'sdkman', meetsMinimum: true });
   });
@@ -150,16 +187,23 @@ describe('findJava', () => {
     const userHome = sdkmanHome(['17.0.13', '21.0.2']);
     const jdk17 = join(userHome, '.sdkman', 'candidates', 'java', '17.0.13-amzn');
     // Explicit config wins outright: we do not second-guess it upward to 21.
-    expect(findJava({ home: jdk17, env: {}, platform: 'linux', userHome })).toMatchObject({
+    expect(findJava({ home: jdk17, env: {}, roots: sdkmanRoots(userHome) })).toMatchObject({
       major: 17,
       source: 'config',
     });
   });
 
+  it('takes the lowest qualifying JDK, not the newest available', () => {
+    // The extractor is validated against the minimum. A just-released major
+    // that OpenRewrite may not support yet is not an upgrade.
+    const userHome = sdkmanHome(['11.0.25', '17.0.13', '21.0.2', '25.0.1']);
+    expect(findJava({ env: {}, roots: sdkmanRoots(userHome) })).toMatchObject({ major: 17 });
+  });
+
   it('reports the old JDK it did find when nothing meets the minimum', () => {
     const userHome = sdkmanHome(['1.8.0_432']);
     const java8 = join(userHome, '.sdkman', 'candidates', 'java', '1.8.0_432-amzn');
-    const found = findJava({ home: java8, env: {}, platform: 'linux', userHome });
+    const found = findJava({ home: java8, env: {}, roots: sdkmanRoots(userHome) });
     // Not null: "you have 8, you need 17" is a far more useful message than
     // "java not found".
     expect(found).toMatchObject({ major: 8, meetsMinimum: false });
@@ -167,9 +211,9 @@ describe('findJava', () => {
 
   it('returns null when there is genuinely no JVM', () => {
     const userHome = mkdtempSync(join(tmpdir(), 'strat-bare-'));
-    // platform win32 on a mac means none of the scanned roots exist, and the
-    // PATH probe is the only thing that could succeed.
-    const found = findJava({ env: {}, platform: 'win32', userHome });
+    const found = findJava({ env: {}, roots: sdkmanRoots(userHome) });
+    // The PATH probe is the only thing left that could succeed, and it will on
+    // any machine with java installed.
     expect(found === null || found.source === 'PATH').toBe(true);
   });
 });

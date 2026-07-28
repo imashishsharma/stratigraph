@@ -40,14 +40,25 @@ export interface JavaRuntime {
   meetsMinimum: boolean;
 }
 
+export interface JavaSearchRoot {
+  dir: string;
+  source: JavaSource;
+}
+
 export interface FindJavaOptions {
   /** Explicit JDK home from config, highest precedence. */
   home?: string | undefined;
   env?: NodeJS.ProcessEnv | undefined;
-  /** Override the platform, for tests. */
+  /** Override the platform. Defaults to the running one. */
   platform?: NodeJS.Platform | undefined;
-  /** Override the home directory, for tests. */
+  /** Override the home directory. Defaults to the running user's. */
   userHome?: string | undefined;
+  /**
+   * Directories to scan for installed JDKs. Defaults to `installRoots()`.
+   * Overridable because the defaults include absolute system paths, which a
+   * test cannot otherwise redirect away from the real JDKs on the machine.
+   */
+  roots?: JavaSearchRoot[] | undefined;
 }
 
 /**
@@ -64,24 +75,31 @@ export function findJava(options: FindJavaOptions = {}): JavaRuntime | null {
   }
 
   const discovered = discoverJavaRuntimes(options);
-  const best = discovered.filter((c) => c.meetsMinimum).sort((a, b) => b.major - a.major)[0];
-  if (best) return best;
+
+  // Of the JDKs that qualify, take the *lowest*. Counter-intuitive, but the
+  // extractor is validated against the minimum, and silently running it on a
+  // JDK newer than anything we have tested — a just-released major that
+  // OpenRewrite may not support yet — trades a clear "needs JDK 17" for an
+  // obscure parser failure. Bump MIN_JAVA_MAJOR to move the target.
+  const qualifying = discovered.filter((c) => c.meetsMinimum).sort((a, b) => a.major - b.major);
+  if (qualifying[0]) return qualifying[0];
 
   // Nothing is good enough. Return the most visible too-old JVM so the user is
   // told what they have and what is needed, rather than "java not found".
-  return explicit[0] ?? discovered.sort((a, b) => b.major - a.major)[0] ?? null;
+  return explicit[0] ?? discovered[0] ?? null;
 }
 
-/** Every JDK we can find, best-known-first. Exposed for `doctor` and tests. */
+/** Every JDK we can find, newest first. Exposed for `doctor` and tests. */
 export function discoverJavaRuntimes(options: FindJavaOptions = {}): JavaRuntime[] {
   const env = options.env ?? process.env;
   const platform = options.platform ?? process.platform;
   const userHome = options.userHome ?? homedir();
+  const roots = options.roots ?? installRoots(env, platform, userHome);
 
   const found: JavaRuntime[] = [];
   const seen = new Set<string>();
 
-  for (const { dir, source } of installRoots(env, platform, userHome)) {
+  for (const { dir, source } of roots) {
     for (const home of childDirectories(dir)) {
       const runtime = inspectJavaHome(home, source, platform);
       if (!runtime) continue;
@@ -144,12 +162,12 @@ function explicitCandidates(options: FindJavaOptions): JavaRuntime[] {
 }
 
 /** Where JDKs live, by convention, on each platform and version manager. */
-function installRoots(
-  env: NodeJS.ProcessEnv,
-  platform: NodeJS.Platform,
-  userHome: string,
-): Array<{ dir: string; source: JavaSource }> {
-  const roots: Array<{ dir: string; source: JavaSource }> = [
+export function installRoots(
+  env: NodeJS.ProcessEnv = process.env,
+  platform: NodeJS.Platform = process.platform,
+  userHome: string = homedir(),
+): JavaSearchRoot[] {
+  const roots: JavaSearchRoot[] = [
     { dir: join(env['SDKMAN_DIR'] ?? join(userHome, '.sdkman'), 'candidates', 'java'), source: 'sdkman' },
     { dir: join(userHome, '.jenv', 'versions'), source: 'jenv' },
     { dir: join(userHome, '.gradle', 'jdks'), source: 'installed' },
