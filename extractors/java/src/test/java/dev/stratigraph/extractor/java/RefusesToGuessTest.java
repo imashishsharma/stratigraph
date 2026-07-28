@@ -127,6 +127,31 @@ class RefusesToGuessTest {
     }
 
     @Test
+    void callsAnInterfaceSupertypeExtendsBecauseTheSourceDoes(@TempDir Path repo) throws Exception {
+        // OpenRewrite files an interface's supertypes under getImplements(),
+        // which would have us report "interface A implements B" -- a sentence
+        // about the source that the source does not say.
+        write(repo, "src/A.java", "package p;\npublic interface A extends B {}\n");
+        write(repo, "src/B.java", "package p;\npublic interface B {}\n");
+        write(repo, "src/C.java", "package p;\npublic class C extends D implements A {}\n");
+        write(repo, "src/D.java", "package p;\npublic class D {}\n");
+
+        List<JsonNode> facts = extract(repo);
+        List<String> inheritance = facts.stream()
+                .filter(node -> "edge".equals(node.path("type").asText()))
+                .filter(node -> node.path("kind").asText().matches("extends|implements"))
+                .map(node -> node.path("kind").asText() + " "
+                        + node.path("src").path("fqn").asText() + " -> "
+                        + node.path("dst").path("fqn").asText())
+                .sorted()
+                .toList();
+
+        assertEquals(
+                List.of("extends p.A -> p.B", "extends p.C -> p.D", "implements p.C -> p.A"),
+                inheritance);
+    }
+
+    @Test
     void willNotNameATableTheSourceDoesNotName(@TempDir Path repo) throws Exception {
         // An @Entity with no @Table gets its table name from the persistence
         // provider's naming strategy at runtime -- `Order` could become

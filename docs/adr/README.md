@@ -15,6 +15,7 @@ the code when it is incidental. Either way, before the commit.
 | [0005](0005-framework-annotations-without-a-classpath.md) | Resolve framework annotations from source, not from a classpath | accepted |
 | [0006](0006-parse-the-source-set-not-the-build.md) | Parse the source set; never run or resolve the target's build | accepted |
 | [0007](0007-fact-identity.md) | How a node's `fqn` is formed | accepted |
+| [0008](0008-cycles-are-findings-not-facts.md) | A package cycle is a finding with citations, not a fact | accepted |
 
 Format: context, decision, alternatives considered (with why each was rejected),
 consequences — including the costs, not only the benefits.

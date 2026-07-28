@@ -259,8 +259,16 @@ final class JavaFactExtractor {
                 emitSupertype("extends", kind, fqn, declaration.getExtends());
             }
             if (declaration.getImplements() != null) {
+                // OpenRewrite files an interface's supertypes under
+                // `getImplements()`, but Java spells that relationship
+                // `extends` and so must we: "interface A implements B" is a
+                // sentence about the source that the source does not say.
+                String supertypeKind =
+                        declaration.getKind() == J.ClassDeclaration.Kind.Type.Interface
+                                ? "extends"
+                                : "implements";
                 for (TypeTree implemented : declaration.getImplements()) {
-                    emitSupertype("implements", kind, fqn, implemented);
+                    emitSupertype(supertypeKind, kind, fqn, implemented);
                 }
             }
 
