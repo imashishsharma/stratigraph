@@ -4,6 +4,7 @@ import { pathToFileURL } from 'node:url';
 
 import { Command, Option } from 'commander';
 
+import { AnalysisError, runAnalyze } from './commands/analyze.js';
 import { runDoctor } from './commands/doctor.js';
 import { runIngest } from './commands/ingest.js';
 import { runInit } from './commands/init.js';
@@ -69,6 +70,14 @@ export function buildProgram(): Command {
     });
 
   program
+    .command('analyze')
+    .description('derive structure from stored facts: package graph and cycles')
+    .option('--run <id>', 'analyse a specific run instead of the most recent')
+    .action((options: { run?: string }) => {
+      runAnalyze({ ...overrides(program), run: parseRunId(options.run) });
+    });
+
+  program
     .command('doctor')
     .description('report what this machine can run')
     .action(() => {
@@ -103,7 +112,11 @@ export async function main(argv: string[]): Promise<number> {
     await buildProgram().parseAsync(argv);
     return 0;
   } catch (err) {
-    if (err instanceof ConfigError || err instanceof FactProtocolError) {
+    if (
+      err instanceof ConfigError ||
+      err instanceof FactProtocolError ||
+      err instanceof AnalysisError
+    ) {
       error(err.message);
       return 2;
     }
@@ -113,6 +126,15 @@ export async function main(argv: string[]): Promise<number> {
     error((err as Error).stack ?? String(err));
     return 1;
   }
+}
+
+function parseRunId(value: string | undefined): number | undefined {
+  if (value === undefined) return undefined;
+  const id = Number(value);
+  if (!Number.isInteger(id) || id <= 0) {
+    throw new ConfigError(`--run must be a positive integer, got "${value}"`);
+  }
+  return id;
 }
 
 function isCommanderExit(err: unknown): err is { exitCode: number } {

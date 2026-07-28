@@ -157,6 +157,78 @@ describe('stratigraph ingest', () => {
   });
 });
 
+describe('stratigraph analyze', () => {
+  /** A three-package cycle, written the way an extractor would emit it. */
+  function seed(dir: string): string {
+    const factsPath = join(dir, 'facts.ndjson');
+    const facts: object[] = [
+      { v: 1, type: 'meta', extractor: 'test', extractorVersion: '0.0.0' },
+    ];
+    for (const name of ['web', 'service', 'repo']) {
+      facts.push(
+        { v: 1, type: 'file', path: `src/${name}/C.java`, language: 'java' },
+        { v: 1, type: 'node', kind: 'package', fqn: `com.example.${name}`, name },
+        {
+          v: 1,
+          type: 'node',
+          kind: 'class',
+          fqn: `com.example.${name}.C`,
+          name: 'C',
+          parent: { kind: 'package', fqn: `com.example.${name}` },
+          file: `src/${name}/C.java`,
+        },
+      );
+    }
+    const ring = [
+      ['web', 'service'],
+      ['service', 'repo'],
+      ['repo', 'web'],
+    ];
+    for (const [from, to] of ring) {
+      facts.push({
+        v: 1,
+        type: 'edge',
+        kind: 'imports',
+        src: { kind: 'class', fqn: `com.example.${from}.C` },
+        dst: { kind: 'class', fqn: `com.example.${to}.C` },
+        file: `src/${from}/C.java`,
+        line: 3,
+      });
+    }
+    writeFileSync(factsPath, facts.map((f) => JSON.stringify(f)).join('\n'));
+    return factsPath;
+  }
+
+  it('reports a cycle on stdout with a file and line for every hop', async () => {
+    const dir = scratch();
+    runInit({ repo: FIXTURE, cwd: dir });
+    await runIngest({ repo: FIXTURE, cwd: dir, from: seed(dir) });
+
+    const { status, stdout } = runCli(['analyze', '--repo', FIXTURE], dir);
+    expect(status).toBe(0);
+    expect(stdout).toMatch(/1 package cycle:/);
+    expect(stdout).toMatch(/com\.example\.repo → com\.example\.web → com\.example\.service/);
+    // Every hop must be checkable against the source, not merely asserted.
+    expect(stdout.match(/src\/\w+\/C\.java:3/g)).toHaveLength(3);
+  });
+
+  it('exits non-zero with a readable message when there are no facts yet', () => {
+    const dir = scratch();
+    runInit({ repo: FIXTURE, cwd: dir });
+    const { status, stderr } = runCli(['analyze', '--repo', FIXTURE], dir);
+    expect(status).toBe(2);
+    expect(stderr).toMatch(/no facts in/);
+  });
+
+  it('rejects a --run that is not a positive integer', () => {
+    const dir = scratch();
+    runInit({ repo: FIXTURE, cwd: dir });
+    const { status, stderr } = runCli(['analyze', '--repo', FIXTURE, '--run', 'x'], dir);
+    expect(status).toBe(2);
+    expect(stderr).toMatch(/--run must be a positive integer/);
+  });
+});
+
 describe('stratigraph doctor', () => {
   it('reports on the toolchain without failing when a JDK is missing', () => {
     const dir = scratch();
