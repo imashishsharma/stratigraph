@@ -130,6 +130,7 @@ describe('detectIntentMismatches', () => {
     ]);
     expect(mismatch?.expectedPrefix).toBe('shop.billing');
     expect(mismatch?.actualPrefix).toBe('shop.admin');
+    expect(mismatch?.landedAlone).toBe(false);
     expect(mismatch?.severity).toBe('high');
     expect(mismatch?.unanimous).toBe(true);
     expect(mismatch?.pulledBy).toEqual([
@@ -158,6 +159,7 @@ describe('detectIntentMismatches', () => {
     };
     expect(detail.authored_by).toBe('algorithm');
     expect(detail.title).toContain('shop.billing.report');
+    expect(detail.title).toContain('groups with shop.admin');
     expect(detail.detail).toContain('shop.billing.invoice');
     expect(detail.detail).toMatch(
       /imports shop\.billing\.report\.A → shop\.admin\.\w+\.A \(src\/.+:\d+\)/,
@@ -237,6 +239,7 @@ describe('detectIntentMismatches', () => {
     const { detail } = db
       .prepare('SELECT detail FROM finding WHERE id = ?')
       .get(found[0]?.findingId as number) as { detail: string };
+    expect(detail).toContain('This one is in a group of its own.');
     expect(detail).toContain('an absence we looked for, not one we assumed');
   });
 

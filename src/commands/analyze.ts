@@ -129,18 +129,14 @@ export async function runAnalyze(options: AnalyzeOptions): Promise<AnalyzeResult
       info(
         `run ${runId}: ${graph.packages.size} packages, ${graph.dependencies.length} package dependencies`,
       );
-
-      // Layer 4, but algorithmic: clustering and the mismatch rule need no
-      // model, which is what lets `--no-llm` produce a complete report.
-      result.clusters = detectClusters(db, runId, config.interpret);
-      result.mismatches = detectIntentMismatches(db, runId, result.clusters.clusters);
-      info(
-        `run ${runId}: ${result.clusters.clusters.length} clusters ` +
-          `(modularity ${result.clusters.modularity.toFixed(3)}), ` +
-          `${result.mismatches.length} intent mismatches`,
-      );
     }
 
+    // Coupling is computed before clustering, not after, because clustering
+    // *reads* `temporal_coupling` and this is the command that writes it. With
+    // the other order the first `analyze` after `history` clusters on structure
+    // alone and the second picks up the rows the first one stored — the same
+    // facts producing two different partitions depending on how many times you
+    // have run the command. Petclinic went from three clusters to one that way.
     if (commits > 0) {
       const { stats, pairs } = computeTemporalCoupling(db, runId, config.history);
       result.couplingStats = stats;
@@ -157,6 +153,18 @@ export async function runAnalyze(options: AnalyzeOptions): Promise<AnalyzeResult
       info(
         `run ${runId}: ${commits} commits, ${stats.commitsConsidered} considered, ` +
           `${stats.stored} coupled pairs stored`,
+      );
+    }
+
+    if (graph.packages.size > 0) {
+      // Layer 4, but algorithmic: clustering and the mismatch rule need no
+      // model, which is what lets `--no-llm` produce a complete report.
+      result.clusters = detectClusters(db, runId, config.interpret);
+      result.mismatches = detectIntentMismatches(db, runId, result.clusters.clusters);
+      info(
+        `run ${runId}: ${result.clusters.clusters.length} clusters ` +
+          `(modularity ${result.clusters.modularity.toFixed(3)}), ` +
+          `${result.mismatches.length} intent mismatches`,
       );
     }
 

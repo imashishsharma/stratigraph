@@ -469,7 +469,7 @@ describe('runAnalyze clustering', () => {
     expect(out).toContain('2 package clusters');
     expect(out).toContain('coupling weight 1');
     expect(out).toContain('Packages whose name and edges disagree');
-    expect(out).toContain('shop.billing.report is named under shop.billing');
+    expect(out).toContain('shop.billing.report is named under shop.billing but groups with shop.admin');
     expect(out).toContain('Interpretation is off (--no-llm)');
     expect(result.interpretation).toBeNull();
     expect(result.interpretationSkipped).toBe('disabled');
@@ -581,5 +581,48 @@ describe('runAnalyze interpretation', () => {
 
     expect(result.interpretationSkipped).toBe('no-credential');
     expect(stdout()).toContain('Interpretation skipped: no model credential found');
+  });
+});
+
+describe('runAnalyze determinism', () => {
+  it('gives the same clusters on the second run as on the first', async () => {
+    // Clustering reads temporal_coupling, and this command writes it. Computed
+    // in the wrong order, the first analyze after `history` clusters on
+    // structure alone and the second picks up the rows the first one stored.
+    // Petclinic went from three clusters to one that way.
+    seedTwoGroups();
+    for (let i = 0; i < 8; i += 1) {
+      commit([
+        'src/shop/billing/payment/A.java',
+        'src/shop/admin/role/A.java',
+      ]);
+    }
+    background();
+    db.close();
+
+    const first = await runAnalyze({ repo: FIXTURE, cwd, llm: false, couplingWeight: 3 });
+    const second = await runAnalyze({ repo: FIXTURE, cwd, llm: false, couplingWeight: 3 });
+
+    const shape = (result: Awaited<ReturnType<typeof runAnalyze>>) =>
+      result.clusters?.clusters.map((cluster) => cluster.members.map((m) => m.fqn));
+
+    expect(shape(second)).toEqual(shape(first));
+    expect(second.clusters?.modularity).toBe(first.clusters?.modularity);
+    expect(second.mismatches.map((m) => m.fqn)).toEqual(first.mismatches.map((m) => m.fqn));
+  });
+
+  it('lets co-change reach the clustering on the very first analyze', async () => {
+    seedTwoGroups();
+    for (let i = 0; i < 8; i += 1) {
+      commit(['src/shop/billing/payment/A.java', 'src/shop/admin/role/A.java']);
+    }
+    background();
+    db.close();
+
+    const structural = await runAnalyze({ repo: FIXTURE, cwd, llm: false, couplingWeight: 0 });
+    const combined = await runAnalyze({ repo: FIXTURE, cwd, llm: false, couplingWeight: 3 });
+
+    // If coupling were still being written after clustering, these would match.
+    expect(combined.clusters?.clusters.length).not.toBe(structural.clusters?.clusters.length);
   });
 });

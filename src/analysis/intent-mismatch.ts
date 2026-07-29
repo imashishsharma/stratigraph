@@ -41,7 +41,7 @@ export interface IntentMismatch {
   expectedPrefix: string;
   /**
    * Where it actually landed, named by the common prefix of its *other* cluster
-   * members.
+   * members. Empty when it landed alone.
    *
    * Not the cluster's own label: this package is in that cluster, so it drags
    * the shared prefix up to whatever it has in common with the others —
@@ -50,6 +50,8 @@ export interface IntentMismatch {
    * it is about.
    */
   actualPrefix: string;
+  /** It grouped with nothing at all, rather than with the wrong group. */
+  landedAlone: boolean;
   /** Packages in the actual cluster that this one is connected to. */
   pulledBy: string[];
   severity: 'medium' | 'high';
@@ -102,13 +104,15 @@ export function detectIntentMismatches(
       const home = strictMajorityCluster(nameGroup, clusterOf);
       if (home === null || home.cluster.clusterId === mine.clusterId) continue;
 
+      const landed = neighbourPrefix(mine, fqn);
       candidates.push({
         findingId: 0,
         fqn,
         parent,
         nameGroup: [...nameGroup].sort(),
         expectedPrefix: home.cluster.prefix,
-        actualPrefix: neighbourPrefix(mine, fqn),
+        actualPrefix: landed.prefix,
+        landedAlone: landed.alone,
         pulledBy: [],
         severity: home.unanimous ? 'high' : 'medium',
         unanimous: home.unanimous,
@@ -122,19 +126,28 @@ export function detectIntentMismatches(
 }
 
 /**
- * The common prefix of a cluster's members other than `exclude`.
+ * The common prefix of a cluster's members other than `exclude`, and whether
+ * there were any.
  *
  * A cluster of `shop.admin.{user,role,audit}` plus a stray `shop.billing.report`
  * has the common prefix `shop`, which tells a reader nothing. Dropping the
  * package the finding is about recovers `shop.admin` — the thing it actually
- * landed among. A cluster of one leaves nothing to name, so its own label
- * stands in.
+ * landed among.
+ *
+ * A cluster of one has no neighbours to name. Falling back to the cluster's own
+ * label there produced "X is named under P but clusters with X", which is both
+ * confusing and vacuous; the honest statement is that it grouped with nothing.
  */
-function neighbourPrefix(cluster: ClusterSummary, exclude: string): string {
+function neighbourPrefix(
+  cluster: ClusterSummary,
+  exclude: string,
+): { prefix: string; alone: boolean } {
   const others = cluster.members
     .map((member) => member.fqn)
     .filter((fqn) => fqn !== exclude);
-  return others.length > 0 ? commonPrefix(others) : cluster.prefix;
+  return others.length > 0
+    ? { prefix: commonPrefix(others), alone: false }
+    : { prefix: '', alone: true };
 }
 
 /**
@@ -327,9 +340,29 @@ function couplingBetween(
     .all(runId, fqn, runId, fqn, ...others, fqn, ...others, limit) as CoupledPull[];
 }
 
+/**
+ * Three shapes, because one sentence cannot carry all of them honestly.
+ *
+ * The package landed alone, landed with the very package its name sits under,
+ * or landed with some other group. Petclinic produced the first two on the
+ * first real run, and the single-sentence version rendered them as
+ * "X is named under P but clusters with X" — vacuous — and
+ * "X is named under P but clusters with P" — which reads like a contradiction
+ * rather than the real claim, that it went with its parent instead of its
+ * siblings.
+ */
 function title(mismatch: IntentMismatch): string {
+  if (mismatch.landedAlone) {
+    return `${mismatch.fqn} is named under ${mismatch.parent} but groups with nothing`;
+  }
+  if (mismatch.actualPrefix === mismatch.parent) {
+    return (
+      `${mismatch.fqn} groups with ${mismatch.parent} itself rather than with the ` +
+      `packages named alongside it`
+    );
+  }
   return (
-    `${mismatch.fqn} is named under ${mismatch.parent} but clusters with ` +
+    `${mismatch.fqn} is named under ${mismatch.parent} but groups with ` +
     `${mismatch.actualPrefix}`
   );
 }
@@ -343,14 +376,16 @@ function detail(
     `  ${mismatch.unanimous ? 'All' : 'A majority'} of the ${mismatch.nameGroup.length} ` +
       `packages named under ${mismatch.parent} sit in ${mismatch.expectedPrefix}: ` +
       `${mismatch.nameGroup.join(', ')}.`,
-    `  This one sits in ${mismatch.actualPrefix} instead.`,
+    mismatch.landedAlone
+      ? `  This one is in a group of its own.`
+      : `  This one sits with ${mismatch.actualPrefix} instead.`,
   ];
 
   if (pulls.length === 0 && coupled.length === 0) {
     lines.push(
-      `  Nothing connects it to the rest of its cluster: no import, call, inheritance ` +
-        `or injection, and no co-change. The static graph was built for this run, so ` +
-        `that is an absence we looked for, not one we assumed.`,
+      `  Nothing connects it to ${mismatch.landedAlone ? 'anything else' : 'the rest of its group'}: ` +
+        `no import, call, inheritance or injection, and no co-change. The static graph was ` +
+        `built for this run, so that is an absence we looked for, not one we assumed.`,
     );
     return lines.join('\n');
   }
