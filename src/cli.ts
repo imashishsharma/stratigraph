@@ -7,6 +7,7 @@ import { Command, Option } from 'commander';
 import { AnalysisError, runAnalyze } from './commands/analyze.js';
 import { runDoctor } from './commands/doctor.js';
 import { ExtractError, runExtract } from './commands/extract.js';
+import { HistoryError, runHistory } from './commands/history.js';
 import { runIngest } from './commands/ingest.js';
 import { runInit } from './commands/init.js';
 import { ConfigError } from './config.js';
@@ -88,11 +89,24 @@ export function buildProgram(): Command {
     });
 
   program
+    .command('history')
+    .description("mine the repository's git history: commits, churn, complexity, authorship")
+    .option('--since <when>', 'only commits after this date; anything `git log --since` accepts')
+    .option('--run <id>', 'attach to a specific run instead of the most recent')
+    .action(async (options: { since?: string; run?: string }) => {
+      await runHistory({
+        ...overrides(program),
+        since: options.since,
+        run: parsePositiveInt('--run', options.run),
+      });
+    });
+
+  program
     .command('analyze')
     .description('derive structure from stored facts: package graph and cycles')
     .option('--run <id>', 'analyse a specific run instead of the most recent')
     .action((options: { run?: string }) => {
-      runAnalyze({ ...overrides(program), run: parseRunId(options.run) });
+      runAnalyze({ ...overrides(program), run: parsePositiveInt('--run', options.run) });
     });
 
   program
@@ -135,7 +149,8 @@ export async function main(argv: string[]): Promise<number> {
       err instanceof ConfigError ||
       err instanceof FactProtocolError ||
       err instanceof AnalysisError ||
-      err instanceof ExtractError
+      err instanceof ExtractError ||
+      err instanceof HistoryError
     ) {
       error(err.message);
       return 2;
@@ -148,13 +163,13 @@ export async function main(argv: string[]): Promise<number> {
   }
 }
 
-function parseRunId(value: string | undefined): number | undefined {
+function parsePositiveInt(flag: string, value: string | undefined): number | undefined {
   if (value === undefined) return undefined;
-  const id = Number(value);
-  if (!Number.isInteger(id) || id <= 0) {
-    throw new ConfigError(`--run must be a positive integer, got "${value}"`);
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    throw new ConfigError(`${flag} must be a positive integer, got "${value}"`);
   }
-  return id;
+  return parsed;
 }
 
 function isCommanderExit(err: unknown): err is { exitCode: number } {

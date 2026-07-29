@@ -110,3 +110,63 @@ describe('loadConfig', () => {
     );
   });
 });
+
+describe('history config', () => {
+  it('defaults to the thresholds ADR-0011 records', () => {
+    const { dir, repo } = sandbox();
+    expect(loadConfig({ repo, cwd: dir }).history).toEqual({
+      since: null,
+      maxFilesPerCommit: 50,
+      minShared: 5,
+      minCommits: 5,
+    });
+  });
+
+  it('reads the block from the config file', () => {
+    const { dir, repo } = sandbox();
+    writeFileSync(
+      join(dir, CONFIG_FILENAME),
+      JSON.stringify({ repo, history: { since: '2 years ago', maxFilesPerCommit: 20 } }),
+    );
+    expect(loadConfig({ cwd: dir }).history).toEqual({
+      since: '2 years ago',
+      maxFilesPerCommit: 20,
+      minShared: 5,
+      minCommits: 5,
+    });
+  });
+
+  it('lets flags win over the file', () => {
+    const { dir, repo } = sandbox();
+    writeFileSync(
+      join(dir, CONFIG_FILENAME),
+      JSON.stringify({ repo, history: { since: '2 years ago', maxFilesPerCommit: 20 } }),
+    );
+    const config = loadConfig({ cwd: dir, since: '2020-01-01', maxFilesPerCommit: 5 });
+    expect(config.history).toMatchObject({ since: '2020-01-01', maxFilesPerCommit: 5 });
+  });
+
+  it('rejects a threshold that is not a positive integer', () => {
+    const { dir, repo } = sandbox();
+    for (const value of [0, -1, 2.5, '10']) {
+      writeFileSync(
+        join(dir, CONFIG_FILENAME),
+        JSON.stringify({ repo, history: { minShared: value } }),
+      );
+      expect(() => loadConfig({ cwd: dir }), `minShared: ${JSON.stringify(value)}`).toThrow(
+        /"history.minShared" must be a positive integer/,
+      );
+    }
+  });
+
+  it('rejects an unknown history key rather than ignoring it', () => {
+    // A misspelled threshold that is silently ignored looks exactly like one
+    // that had no effect.
+    const { dir, repo } = sandbox();
+    writeFileSync(
+      join(dir, CONFIG_FILENAME),
+      JSON.stringify({ repo, history: { maxFilesPerCommmit: 20 } }),
+    );
+    expect(() => loadConfig({ cwd: dir })).toThrow(/unknown key "history.maxFilesPerCommmit"/);
+  });
+});

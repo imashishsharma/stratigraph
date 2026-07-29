@@ -31,15 +31,33 @@ export function finishRun(db: Db, runId: number, status: 'ok' | 'failed'): void 
   );
 }
 
+export function findRun(db: Db, id: number): Run | null {
+  return toRun(
+    db
+      .prepare(`SELECT id, repo_path, repo_head, started_at FROM run WHERE id = ?`)
+      .get(id) as RunRow | undefined,
+  );
+}
+
 export function latestRun(db: Db): Run | null {
-  const row = db
-    .prepare(
-      `SELECT id, repo_path, repo_head, started_at FROM run
-        ORDER BY id DESC LIMIT 1`,
-    )
-    .get() as
-    | { id: number; repo_path: string; repo_head: string | null; started_at: string }
-    | undefined;
+  return toRun(
+    db
+      .prepare(
+        `SELECT id, repo_path, repo_head, started_at FROM run
+          ORDER BY id DESC LIMIT 1`,
+      )
+      .get() as RunRow | undefined,
+  );
+}
+
+interface RunRow {
+  id: number;
+  repo_path: string;
+  repo_head: string | null;
+  started_at: string;
+}
+
+function toRun(row: RunRow | undefined): Run | null {
   if (!row) return null;
   return {
     id: row.id,

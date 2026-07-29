@@ -306,6 +306,20 @@ export function gitToplevel(repoPath: string): string | null {
 }
 
 /**
+ * Where this path sits below the work tree root, as `sub/dir/` or `''`.
+ *
+ * It is needed because git's own commands disagree: `git log` prints paths
+ * relative to the work tree root, while `git ls-files` prints them relative to
+ * the current directory. Analysing a subdirectory of a larger repository — a
+ * single service in a monorepo — means stripping this prefix off the log's
+ * paths so both agree with each other, and with the repo-relative paths the
+ * extractors emit.
+ */
+export function gitPrefix(repoPath: string): string {
+  return gitOutput(repoPath, ['rev-parse', '--show-prefix']) ?? '';
+}
+
+/**
  * Paths tracked at HEAD, repo-relative with forward slashes.
  *
  * ADR-0011 keeps metrics to files that still exist: a deleted file has no

@@ -27,6 +27,31 @@ export interface JavaConfig {
   jar: string | null;
 }
 
+/**
+ * Knobs that decide whether the coupling report is signal or noise. Every one
+ * of them, and the failure it prevents, is recorded in ADR-0011.
+ */
+export interface HistoryConfig {
+  /** Anything `git log --since` accepts. Null mines the whole history. */
+  since: string | null;
+  /**
+   * Commits touching more than this many files take no part in coupling. One
+   * repo-wide reformat otherwise couples everything it touched.
+   */
+  maxFilesPerCommit: number;
+  /** A pair must co-change at least this often to be reported. */
+  minShared: number;
+  /** Each file must have changed at least this often, or the ratio is an artefact. */
+  minCommits: number;
+}
+
+export const DEFAULT_HISTORY: HistoryConfig = {
+  since: null,
+  maxFilesPerCommit: 50,
+  minShared: 5,
+  minCommits: 5,
+};
+
 export interface StratigraphConfig {
   /** Absolute path to the repository under analysis. */
   repoPath: string;
@@ -37,6 +62,7 @@ export interface StratigraphConfig {
   exclude: string[];
   llm: LlmConfig;
   java: JavaConfig;
+  history: HistoryConfig;
   /** Where the config came from, for `stratigraph init` to report. */
   source: string | null;
 }
@@ -49,6 +75,8 @@ export interface ConfigOverrides {
   sendSource?: boolean | undefined;
   javaHome?: string | undefined;
   extractorJar?: string | undefined;
+  since?: string | undefined;
+  maxFilesPerCommit?: number | undefined;
   cwd?: string | undefined;
 }
 
@@ -69,9 +97,10 @@ const DEFAULT_EXCLUDES = [
   '.gradle',
 ];
 
-const KNOWN_KEYS = new Set(['repo', 'db', 'include', 'exclude', 'llm', 'java']);
+const KNOWN_KEYS = new Set(['repo', 'db', 'include', 'exclude', 'llm', 'java', 'history']);
 const KNOWN_LLM_KEYS = new Set(['enabled', 'model', 'sendSource']);
 const KNOWN_JAVA_KEYS = new Set(['home', 'jar']);
+const KNOWN_HISTORY_KEYS = new Set(['since', 'maxFilesPerCommit', 'minShared', 'minCommits']);
 
 /**
  * Precedence: CLI flags > config file > defaults.
@@ -123,6 +152,15 @@ export function loadConfig(overrides: ConfigOverrides = {}): StratigraphConfig {
       home: overrides.javaHome ?? file.java?.home ?? null,
       jar: overrides.extractorJar ?? file.java?.jar ?? null,
     },
+    history: {
+      since: overrides.since ?? file.history?.since ?? DEFAULT_HISTORY.since,
+      maxFilesPerCommit:
+        overrides.maxFilesPerCommit ??
+        file.history?.maxFilesPerCommit ??
+        DEFAULT_HISTORY.maxFilesPerCommit,
+      minShared: file.history?.minShared ?? DEFAULT_HISTORY.minShared,
+      minCommits: file.history?.minCommits ?? DEFAULT_HISTORY.minCommits,
+    },
     source: configPath,
   };
 }
@@ -134,6 +172,12 @@ interface ConfigFile {
   exclude?: string[];
   llm?: { enabled?: boolean; model?: string; sendSource?: boolean };
   java?: { home?: string; jar?: string };
+  history?: {
+    since?: string;
+    maxFilesPerCommit?: number;
+    minShared?: number;
+    minCommits?: number;
+  };
 }
 
 function readConfigFile(path: string): ConfigFile {
@@ -202,7 +246,48 @@ function readConfigFile(path: string): ConfigFile {
       out.java.jar = expectString(path, 'java.jar', javaObj['jar']);
   }
 
+  if (obj['history'] !== undefined) {
+    const history = obj['history'];
+    if (typeof history !== 'object' || history === null || Array.isArray(history)) {
+      throw new ConfigError(`${path}: "history" must be an object`);
+    }
+    const historyObj = history as Record<string, unknown>;
+    for (const key of Object.keys(historyObj)) {
+      if (!KNOWN_HISTORY_KEYS.has(key)) {
+        throw new ConfigError(`${path}: unknown key "history.${key}"`);
+      }
+    }
+    out.history = {};
+    if (historyObj['since'] !== undefined)
+      out.history.since = expectString(path, 'history.since', historyObj['since']);
+    if (historyObj['maxFilesPerCommit'] !== undefined)
+      out.history.maxFilesPerCommit = expectPositiveInteger(
+        path,
+        'history.maxFilesPerCommit',
+        historyObj['maxFilesPerCommit'],
+      );
+    if (historyObj['minShared'] !== undefined)
+      out.history.minShared = expectPositiveInteger(
+        path,
+        'history.minShared',
+        historyObj['minShared'],
+      );
+    if (historyObj['minCommits'] !== undefined)
+      out.history.minCommits = expectPositiveInteger(
+        path,
+        'history.minCommits',
+        historyObj['minCommits'],
+      );
+  }
+
   return out;
+}
+
+function expectPositiveInteger(path: string, key: string, value: unknown): number {
+  if (typeof value !== 'number' || !Number.isInteger(value) || value < 1) {
+    throw new ConfigError(`${path}: "${key}" must be a positive integer`);
+  }
+  return value;
 }
 
 function expectString(path: string, key: string, value: unknown): string {
