@@ -84,6 +84,14 @@ describe the same set of files.
 - **`minShared` 5** and **`minCommits` 5**, both configurable. Below these,
   strength is an artefact of the denominator.
 
+**Single-file commits stay in the denominator.** They produce no pair, but they
+are commits that touched one file and did *not* touch the other, which is
+exactly what lift needs to know. Counting only multi-file commits would inflate
+every file's base rate — a file changed in 100 of 1,000 commits would look like
+one changed in 100 of 200 — and lift would then reject genuine coupling as
+coincidence. This is not a hypothetical: it rejected the whole test suite before
+the denominator was fixed.
+
 ### What is deliberately not filtered
 
 **Bot and CI authors.** Recognising them means pattern-matching on names, which
