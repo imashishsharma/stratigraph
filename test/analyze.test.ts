@@ -207,6 +207,42 @@ describe('runAnalyze with both facts and history', () => {
     db.close();
 
     expect(runAnalyze({ repo: FIXTURE, cwd, top: 2 }).coupling).toHaveLength(2);
+    // Showing 2 of 6 and saying nothing reads as "there are 2".
+    expect(stdout()).toMatch(/Showing 2 of 6 pairs with no static dependency/);
+  });
+
+  it('counts pairs the static graph explains, not pairs it did not print', () => {
+    // The obvious arithmetic — stored minus shown — attributes every pair
+    // beyond --top to "already has a dependency". On dubbo that turned 10
+    // shown out of 4139 into a claim that 4129 were explained by imports.
+    seedFacts([
+      META,
+      { v: 1, type: 'file', path: 'a.java', language: 'java' },
+      { v: 1, type: 'file', path: 'b.java', language: 'java' },
+      { v: 1, type: 'node', kind: 'class', fqn: 'A', name: 'A', file: 'a.java' },
+      { v: 1, type: 'node', kind: 'class', fqn: 'B', name: 'B', file: 'b.java' },
+      {
+        v: 1,
+        type: 'edge',
+        kind: 'imports',
+        src: { kind: 'class', fqn: 'A' },
+        dst: { kind: 'class', fqn: 'B' },
+        file: 'a.java',
+        line: 1,
+      },
+    ]);
+    for (let i = 0; i < 8; i += 1) commit(['a.java', 'b.java']);
+    for (let i = 0; i < 3; i += 1) {
+      for (let j = 0; j < 8; j += 1) commit([`free${i}-a.java`, `free${i}-b.java`]);
+    }
+    background();
+    db.close();
+
+    const result = runAnalyze({ repo: FIXTURE, cwd, top: 1 });
+
+    expect(result.couplingStats).toMatchObject({ stored: 4, withStaticDependency: 1 });
+    expect(stdout()).toMatch(/Showing 1 of 3 pairs with no static dependency/);
+    expect(stdout()).toMatch(/4 coupled pairs stored in total; 1 of them already/);
   });
 
   it('replaces its findings rather than appending across runs', () => {

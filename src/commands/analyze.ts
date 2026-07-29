@@ -210,7 +210,8 @@ function reportCoupling(result: AnalyzeResult, top: number): void {
   const stats = result.couplingStats;
   if (stats === null) return;
 
-  const withDependency = stats.stored - result.coupling.length;
+  const withDependency = stats.withStaticDependency;
+  const unexplained = stats.stored - withDependency;
 
   print('');
   print(
@@ -258,10 +259,30 @@ function reportCoupling(result: AnalyzeResult, top: number): void {
         `${pair.lift.toFixed(1)}x chance ` +
         `(${pair.commitsA} and ${pair.commitsB} commits respectively)`,
     );
+    // Two build files can never have an edge between them, so "no static
+    // dependency" is true of them and says nothing. Marked, so a reader
+    // scanning the list can tell the checkable findings from the rest.
+    if (result.staticGraph && !(pair.parsedA && pair.parsedB)) {
+      const unparsed = [
+        ...(pair.parsedA ? [] : [pair.pathA]),
+        ...(pair.parsedB ? [] : [pair.pathB]),
+      ];
+      print(
+        `   note: no extractor parses ${unparsed.length === 2 ? 'either file' : unparsed[0]}, ` +
+          `so nothing could have connected them`,
+      );
+    }
   }
 
+  print('');
+  if (unexplained > result.coupling.length) {
+    // Showing 20 of 300 and saying nothing reads as "there are 20".
+    print(
+      `  Showing ${result.coupling.length} of ${unexplained} pairs with no static dependency ` +
+        `— raise --top for more.`,
+    );
+  }
   if (withDependency > 0) {
-    print('');
     print(
       `  ${stats.stored} coupled pairs stored in total; ${withDependency} of them already ` +
         `have a dependency in the static graph and are not repeated here.`,

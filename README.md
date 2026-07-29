@@ -10,14 +10,17 @@ reconstructs how the thing came to be shaped the way it is.
 Aimed at monoliths and multi-module builds of 100k+ LOC where nobody remembers
 why things are the way they are. Java/Spring Boot and Angular first.
 
-> **Status: M1.** The Java extractor works and the first analysis runs on top
-> of it. Pointed at [apache/dubbo](https://github.com/apache/dubbo) — 4,053
-> Java files, no Spring Boot, `javax.*`, Spring XML wiring — it produces 47,350
-> nodes and 163,693 edges in 18 seconds, then reports 17 package cycles across
-> 652 packages. Three were verified by hand against the cited lines.
+> **Status: M2.** The Java extractor, the package graph, and history mining all
+> work. Pointed at [apache/dubbo](https://github.com/apache/dubbo) — 4,053 Java
+> files, no Spring Boot, `javax.*`, Spring XML wiring — it produces 47,350 nodes
+> and 163,693 edges in 18 seconds and reports 17 package cycles across 652
+> packages, three verified by hand against the cited lines. It then mines 8,893
+> commits in 4.5 seconds (332 MB peak), resolving 6,189 paths through rename
+> chains, and finds 3,303 co-changing file pairs the dependency graph cannot
+> explain.
 >
-> History mining (M2), interpretation (M3), the MCP server (M4) and the Angular
-> extractor (M5) are still ahead.
+> Interpretation (M3), the MCP server (M4) and the Angular extractor (M5) are
+> still ahead.
 
 ## The rule that shapes everything
 

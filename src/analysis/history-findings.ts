@@ -106,6 +106,34 @@ export function recordHistoryFindings(
 
   const counts: RecordedFindings = { coupling: 0, hotspots: 0, busFactor: 0 };
 
+  /**
+   * What "no static dependency" is actually worth for this pair.
+   *
+   * Three different things wear the same zero: the graph checked and found
+   * nothing, the graph does not exist, and the files are not code the graph
+   * can hold. Only the first is a finding about the code.
+   */
+  function staticNote(pair: CoupledPair, staticGraph: boolean): string {
+    if (!staticGraph) {
+      return (
+        `  This run has no extracted code, so nothing was checked for a dependency — ` +
+        `no evidence was found either way. Run \`stratigraph extract\` to establish it.`
+      );
+    }
+    if (pair.parsedA && pair.parsedB) {
+      return `  No imports, calls, inheritance or injection connects them in the static graph.`;
+    }
+    const unparsed = [
+      ...(pair.parsedA ? [] : [pair.pathA]),
+      ...(pair.parsedB ? [] : [pair.pathB]),
+    ];
+    return (
+      `  No extractor parses ${unparsed.join(' or ')}, so no dependency could have been ` +
+      `observed between them either way. This is co-change without a checkable explanation, ` +
+      `not a demonstrated absence of coupling in the code.`
+    );
+  }
+
   db.transaction(() => {
     for (const rule of RULES) {
       db.prepare('DELETE FROM finding WHERE run_id = ? AND rule = ?').run(runId, rule);
@@ -124,7 +152,7 @@ export function recordHistoryFindings(
 
       write(
         COUPLING_RULE,
-        input.staticGraph
+        input.staticGraph && pair.parsedA && pair.parsedB
           ? `${pair.pathA} and ${pair.pathB} change together, with no dependency between them`
           : `${pair.pathA} and ${pair.pathB} change together`,
         [
@@ -133,10 +161,7 @@ export function recordHistoryFindings(
             `${pair.lift.toFixed(1)}x what independent files would share.`,
           `  ${pair.pathA}: ${pair.commitsA} commits`,
           `  ${pair.pathB}: ${pair.commitsB} commits`,
-          input.staticGraph
-            ? `  No imports, calls, inheritance or injection connects them in the static graph.`
-            : `  This run has no extracted code, so nothing was checked for a dependency — ` +
-              `no evidence was found either way. Run \`stratigraph extract\` to establish it.`,
+          staticNote(pair, input.staticGraph),
         ].join('\n'),
         pair.strength >= 0.8 ? 'high' : pair.strength >= 0.5 ? 'medium' : 'low',
         shas,

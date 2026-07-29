@@ -139,6 +139,16 @@ the database would explain why.
   code, say) gets little coupling output. That is the correct answer for the
   default settings, and the log says so rather than returning an empty table
   with no explanation.
+- **The cap is absolute, and "repo-wide" is relative.** Fifty files is a small
+  fraction of dubbo and a third of spring-petclinic. Measured on petclinic,
+  four of the top eight pairs were produced by two commits — a copyright-header
+  update touching 39 files and a `@NullAway` annotation sweep touching 26 —
+  both of which are repo-wide there and neither of which the cap excludes. They
+  disappear at `--max-files-per-commit 20`. A cap proportional to the
+  repository would fix this and was not adopted for M2, because a threshold
+  that moves with the input is much harder to explain a result by. The flag is
+  the mitigation, and it is worth reaching for on any repository of a few
+  hundred files.
 - The five explanations M2's acceptance criterion asks for are made possible by
   these rules, not despite them: without the cap, the top of the list is
   whatever file the last big sweep touched.

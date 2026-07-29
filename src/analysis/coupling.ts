@@ -39,6 +39,16 @@ export interface CoupledPair {
   lift: number;
   /** Layer-2 edges connecting the two files. The interesting pairs have none. */
   staticEdges: number;
+  /**
+   * Whether each file is one an extractor actually parsed.
+   *
+   * Two `pom.xml` files can never have an edge between them, so "no static
+   * dependency" is true of them and says nothing. A pair of parsed Java files
+   * with no edge is a real finding; a pair of unparsed files is co-change with
+   * no checkable explanation, and the two must not read the same.
+   */
+  parsedA: boolean;
+  parsedB: boolean;
 }
 
 export interface CouplingStats {
@@ -53,6 +63,8 @@ export interface CouplingStats {
   pairsBelowMinShared: number;
   pairsBelowLift: number;
   stored: number;
+  /** Of those stored, how many the static graph already explains. */
+  withStaticDependency: number;
 }
 
 /**
@@ -112,6 +124,7 @@ export function computeTemporalCoupling(
     pairsBelowMinShared: 0,
     pairsBelowLift: 0,
     stored: 0,
+    withStaticDependency: 0,
   };
 
   // Pass one: how often each file changes, among the commits that take part.
@@ -167,6 +180,13 @@ export function computeTemporalCoupling(
   stats.pairsSeen = shared.size;
 
   const staticEdges = fileEdgeCounts(db, runId);
+  const parsed = new Set(
+    (
+      db.prepare('SELECT path FROM source_file WHERE run_id = ?').all(runId) as Array<{
+        path: string;
+      }>
+    ).map((row) => row.path),
+  );
   const total = stats.commitsConsidered;
   const pairs: CoupledPair[] = [];
 
@@ -197,6 +217,8 @@ export function computeTemporalCoupling(
       strength: count / Math.min(commitsA, commitsB),
       lift,
       staticEdges: staticEdges.get(key) ?? 0,
+      parsedA: parsed.has(pathA),
+      parsedB: parsed.has(pathB),
     });
   }
 
@@ -233,6 +255,7 @@ export function computeTemporalCoupling(
     }
   })();
   stats.stored = pairs.length;
+  stats.withStaticDependency = pairs.filter((pair) => pair.staticEdges > 0).length;
 
   return { stats, pairs };
 }

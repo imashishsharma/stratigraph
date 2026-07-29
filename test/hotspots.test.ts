@@ -170,6 +170,8 @@ describe('recordHistoryFindings', () => {
     strength: 0.9,
     lift: 6.2,
     staticEdges: 0,
+    parsedA: true,
+    parsedB: true,
     ...over,
   });
 
@@ -247,6 +249,33 @@ describe('recordHistoryFindings', () => {
     expect(finding?.['title']).toBe('OrderService.java and order-form.html change together');
     expect(finding?.['detail']).toMatch(/no evidence was found either way/);
     expect(finding?.['detail']).not.toMatch(/No imports, calls/);
+  });
+
+  it('does not credit the static graph for files it cannot hold', () => {
+    // Two build files can never have an edge between them. "No dependency
+    // between them" is true of them and worth nothing, and on dubbo pairs of
+    // poms and wrapper scripts are most of the top of the list.
+    recordHistoryFindings(db, runId, {
+      pairs: [pair({ pathA: 'a/pom.xml', pathB: 'b/pom.xml', parsedA: false, parsedB: false })],
+      hotspots: [],
+      busFactor: [],
+      staticGraph: true,
+    });
+
+    const [finding] = findings(COUPLING_RULE);
+    expect(finding?.['title']).toBe('a/pom.xml and b/pom.xml change together');
+    expect(finding?.['detail']).toMatch(/No extractor parses a\/pom\.xml or b\/pom\.xml/);
+    expect(finding?.['detail']).toMatch(/not a demonstrated absence of coupling/);
+  });
+
+  it('names only the unparsed half when one file is code', () => {
+    recordHistoryFindings(db, runId, {
+      pairs: [pair({ pathA: 'A.java', pathB: 'schema.sql', parsedA: true, parsedB: false })],
+      hotspots: [],
+      busFactor: [],
+      staticGraph: true,
+    });
+    expect(findings(COUPLING_RULE)[0]?.['detail']).toMatch(/No extractor parses schema\.sql, so/);
   });
 
   it('reports the lift in the detail, so the claim can be checked', () => {
