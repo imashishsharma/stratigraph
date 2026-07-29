@@ -19,6 +19,7 @@ the code when it is incidental. Either way, before the commit.
 | [0009](0009-rename-tracking-without-follow.md) | One whole-repo `git log -M` pass; resolve rename chains ourselves | accepted |
 | [0010](0010-history-metrics-and-coupling-claims.md) | History metrics are arithmetic; coupling claims are findings citing commits | accepted |
 | [0011](0011-which-commits-count.md) | Merge exclusion, the sweeping-commit cap, and the coupling thresholds | accepted |
+| [0012](0012-the-combined-graph-and-louvain.md) | One undirected package graph from both layers, clustered deterministically | accepted |
 
 Format: context, decision, alternatives considered (with why each was rejected),
 consequences — including the costs, not only the benefits.
