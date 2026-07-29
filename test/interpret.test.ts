@@ -14,7 +14,7 @@ import { parseFact } from '../src/facts/ndjson.js';
 import type { Fact } from '../src/facts/types.js';
 import { SqliteFactWriter } from '../src/facts/writer.js';
 import type { CompletionRequest, ModelClient } from '../src/interpret/client.js';
-import { credentialAvailable } from '../src/interpret/client.js';
+
 import { buildEvidencePack } from '../src/interpret/evidence.js';
 import { ADR_RULE, READING_RULE, RESPONSIBILITY_RULE, runInterpretation } from '../src/interpret/run.js';
 import { setQuiet } from '../src/log.js';
@@ -598,17 +598,4 @@ describe('the prompt', () => {
   });
 });
 
-describe('credentialAvailable', () => {
-  it.each([
-    ['ANTHROPIC_API_KEY', { ANTHROPIC_API_KEY: 'sk-ant-test' }],
-    ['ANTHROPIC_AUTH_TOKEN', { ANTHROPIC_AUTH_TOKEN: 'token' }],
-  ])('finds a credential in %s', (_label, env) => {
-    expect(credentialAvailable(env as NodeJS.ProcessEnv)).toBe(true);
-  });
 
-  it('reports none when nothing is set and no profile exists', () => {
-    expect(
-      credentialAvailable({ ANTHROPIC_CONFIG_DIR: '/nonexistent-stratigraph-test' } as NodeJS.ProcessEnv),
-    ).toBe(false);
-  });
-});

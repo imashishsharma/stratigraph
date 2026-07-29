@@ -255,6 +255,7 @@ describe('stratigraph doctor', () => {
       'java',
       'extractor',
       'config',
+      'model',
       'history',
       'database',
     ]);

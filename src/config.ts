@@ -1,13 +1,35 @@
 import { existsSync, readFileSync, statSync } from 'node:fs';
-import { basename, isAbsolute, join, resolve } from 'node:path';
+import { homedir } from 'node:os';
+import { basename, isAbsolute, join, resolve, sep } from 'node:path';
 
 export const CONFIG_FILENAME = 'stratigraph.config.json';
+
+/**
+ * Per-person settings, merged over `stratigraph.config.json`.
+ *
+ * The shared file describes the project and belongs in version control. This
+ * one describes the machine it is running on — a model choice, a credential —
+ * and belongs in `.gitignore`. Keeping them apart is what lets a team commit
+ * one config and still let each person point at their own key.
+ */
+export const LOCAL_CONFIG_FILENAME = 'stratigraph.config.local.json';
+
+export const DEFAULT_API_KEY_ENV = 'ANTHROPIC_API_KEY';
 
 export interface LlmConfig {
   /** Interpretation layer. The whole pipeline must work with this off. */
   enabled: boolean;
   /** Model id for the interpretation layer. Recorded on every row it writes. */
   model: string;
+  /**
+   * The key itself. Accepted only from `stratigraph.config.local.json`, never
+   * from the shared file — see `readConfigFile`.
+   */
+  apiKey: string | null;
+  /** A file containing the key, so no secret is in any config file at all. */
+  apiKeyFile: string | null;
+  /** Which environment variable holds the key. */
+  apiKeyEnv: string;
   /**
    * Send raw source bodies to the model. Off by default, loudly logged when on.
    * Structural metadata is sent regardless when `enabled` is true.
@@ -90,8 +112,10 @@ export interface StratigraphConfig {
   java: JavaConfig;
   history: HistoryConfig;
   interpret: InterpretConfig;
-  /** Where the config came from, for `stratigraph init` to report. */
+  /** The shared config file, if one was found. */
   source: string | null;
+  /** The per-person overrides file, if one was found. */
+  localSource: string | null;
 }
 
 export interface ConfigOverrides {
@@ -136,7 +160,14 @@ const KNOWN_KEYS = new Set([
   'history',
   'interpret',
 ]);
-const KNOWN_LLM_KEYS = new Set(['enabled', 'model', 'sendSource']);
+const KNOWN_LLM_KEYS = new Set([
+  'enabled',
+  'model',
+  'apiKey',
+  'apiKeyFile',
+  'apiKeyEnv',
+  'sendSource',
+]);
 const KNOWN_JAVA_KEYS = new Set(['home', 'jar']);
 const KNOWN_HISTORY_KEYS = new Set(['since', 'maxFilesPerCommit', 'minShared', 'minCommits']);
 const KNOWN_INTERPRET_KEYS = new Set(['couplingWeight', 'minClusterSize', 'maxClusters']);
@@ -157,11 +188,25 @@ export function loadConfig(overrides: ConfigOverrides = {}): StratigraphConfig {
   }
 
   const candidateRepo = fromCli ? absolute(fromCli, cwd) : cwd;
-  const configPath =
+  const sharedPath =
     explicitConfig ??
     firstExisting([join(cwd, CONFIG_FILENAME), join(candidateRepo, CONFIG_FILENAME)]);
 
-  const file = configPath ? readConfigFile(configPath) : {};
+  // Alongside the shared file when there is one, otherwise looked up the same
+  // way — so a person with no project config can still keep local settings.
+  // Never the same file twice: `--config` may point straight at the local one.
+  const localCandidate = firstExisting(
+    sharedPath
+      ? [join(dirOf(sharedPath), LOCAL_CONFIG_FILENAME)]
+      : [join(cwd, LOCAL_CONFIG_FILENAME), join(candidateRepo, LOCAL_CONFIG_FILENAME)],
+  );
+  const localPath = localCandidate === sharedPath ? null : localCandidate;
+
+  const configPath = sharedPath ?? localPath;
+  const file = mergeConfigFiles(
+    sharedPath ? readConfigFile(sharedPath) : {},
+    localPath ? readConfigFile(localPath) : {},
+  );
 
   const repoRaw = fromCli ?? file.repo ?? cwd;
   const repoBase = configPath && !fromCli ? dirOf(configPath) : cwd;
@@ -185,6 +230,11 @@ export function loadConfig(overrides: ConfigOverrides = {}): StratigraphConfig {
     llm: {
       enabled: overrides.llm ?? file.llm?.enabled ?? true,
       model: overrides.model ?? file.llm?.model ?? DEFAULT_MODEL,
+      apiKey: file.llm?.apiKey ?? null,
+      apiKeyFile: file.llm?.apiKeyFile
+        ? absolute(expandHome(file.llm.apiKeyFile), configPath ? dirOf(configPath) : cwd)
+        : null,
+      apiKeyEnv: file.llm?.apiKeyEnv ?? DEFAULT_API_KEY_ENV,
       sendSource: overrides.sendSource ?? file.llm?.sendSource ?? false,
     },
     java: {
@@ -208,8 +258,34 @@ export function loadConfig(overrides: ConfigOverrides = {}): StratigraphConfig {
       minClusterSize: file.interpret?.minClusterSize ?? DEFAULT_INTERPRET.minClusterSize,
       maxClusters: file.interpret?.maxClusters ?? DEFAULT_INTERPRET.maxClusters,
     },
-    source: configPath,
+    source: sharedPath,
+    localSource: localPath,
   };
+}
+
+/** Where the settings came from, for `init` and `doctor` to report. */
+export function describeSource(config: StratigraphConfig): string {
+  const files = [config.source, config.localSource].filter((path) => path !== null);
+  return files.length > 0 ? files.join(' + ') : `defaults (no ${CONFIG_FILENAME} found)`;
+}
+
+/** Local settings win, key by key, over the shared ones. */
+function mergeConfigFiles(shared: ConfigFile, local: ConfigFile): ConfigFile {
+  return {
+    ...shared,
+    ...local,
+    llm: { ...shared.llm, ...local.llm },
+    java: { ...shared.java, ...local.java },
+    history: { ...shared.history, ...local.history },
+    interpret: { ...shared.interpret, ...local.interpret },
+  };
+}
+
+function expandHome(path: string): string {
+  if (path === '~') return homedir();
+  return path.startsWith('~/') || path.startsWith(`~${sep}`)
+    ? join(homedir(), path.slice(2))
+    : path;
 }
 
 interface ConfigFile {
@@ -217,7 +293,14 @@ interface ConfigFile {
   db?: string;
   include?: string[];
   exclude?: string[];
-  llm?: { enabled?: boolean; model?: string; sendSource?: boolean };
+  llm?: {
+    enabled?: boolean;
+    model?: string;
+    apiKey?: string;
+    apiKeyFile?: string;
+    apiKeyEnv?: string;
+    sendSource?: boolean;
+  };
   java?: { home?: string; jar?: string };
   history?: {
     since?: string;
@@ -276,6 +359,25 @@ function readConfigFile(path: string): ConfigFile {
       out.llm.enabled = expectBoolean(path, 'llm.enabled', llmObj['enabled']);
     if (llmObj['model'] !== undefined)
       out.llm.model = expectString(path, 'llm.model', llmObj['model']);
+    if (llmObj['apiKey'] !== undefined) {
+      // The shared config describes the project and belongs in version
+      // control; a key in it is a key in the repository's history, and by the
+      // time anyone notices it has to be rotated rather than deleted. Refused
+      // rather than warned about, because a warning scrolls past.
+      if (!isLocalConfig(path)) {
+        throw new ConfigError(
+          `${path}: "llm.apiKey" must not go in ${CONFIG_FILENAME} — that file is meant ` +
+            `to be committed. Put it in ${LOCAL_CONFIG_FILENAME} (add that to .gitignore), ` +
+            `or point "llm.apiKeyFile" at a file holding the key, or set the ` +
+            `${DEFAULT_API_KEY_ENV} environment variable.`,
+        );
+      }
+      out.llm.apiKey = expectString(path, 'llm.apiKey', llmObj['apiKey']);
+    }
+    if (llmObj['apiKeyFile'] !== undefined)
+      out.llm.apiKeyFile = expectString(path, 'llm.apiKeyFile', llmObj['apiKeyFile']);
+    if (llmObj['apiKeyEnv'] !== undefined)
+      out.llm.apiKeyEnv = expectString(path, 'llm.apiKeyEnv', llmObj['apiKeyEnv']);
     if (llmObj['sendSource'] !== undefined)
       out.llm.sendSource = expectBoolean(path, 'llm.sendSource', llmObj['sendSource']);
   }
@@ -405,6 +507,11 @@ function absolute(path: string, base: string): string {
 
 function dirOf(filePath: string): string {
   return resolve(filePath, '..');
+}
+
+/** Whether a config path is the per-person file, which may hold a secret. */
+function isLocalConfig(path: string): boolean {
+  return basename(path) === LOCAL_CONFIG_FILENAME;
 }
 
 function firstExisting(paths: string[]): string | null {

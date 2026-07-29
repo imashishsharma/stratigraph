@@ -1,6 +1,6 @@
 import { relative } from 'node:path';
 
-import { loadConfig, type ConfigOverrides } from '../config.js';
+import { describeSource, loadConfig, type ConfigOverrides } from '../config.js';
 import { currentVersion, migrate, openDatabase } from '../db/database.js';
 import { readHead } from '../db/run.js';
 import { info, warn } from '../log.js';
@@ -20,7 +20,7 @@ export function runInit(overrides: ConfigOverrides): InitResult {
   const config = loadConfig(overrides);
 
   info(`repository  ${config.repoPath}`);
-  if (config.source) info(`config      ${config.source}`);
+  if (config.source || config.localSource) info(`config      ${describeSource(config)}`);
 
   const head = readHead(config.repoPath);
   if (head) {

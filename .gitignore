@@ -6,6 +6,10 @@ coverage/
 .DS_Store
 PLAN.md
 
+# Per-person settings, which may hold an API key. The shared
+# stratigraph.config.json is committed; this one never is.
+stratigraph.config.local.json
+
 # Java extractor build output (M1)
 extractors/java/target/
 

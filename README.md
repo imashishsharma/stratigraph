@@ -254,9 +254,11 @@ directory**, never inside the repository being analysed.
 
 ### Configuration
 
-`stratigraph.config.json`, looked up in the working directory then the repo.
-CLI flags win over the file; the file wins over defaults. Unknown keys are an
-error, not a shrug.
+Two files, looked up in the working directory and then the repo. CLI flags win
+over the local file, the local file wins over the shared one, and that wins over
+defaults. Unknown keys are an error, not a shrug.
+
+**`stratigraph.config.json`** — the project. Commit this one.
 
 ```json
 {
@@ -266,9 +268,50 @@ error, not a shrug.
   "java": { "home": "/opt/jdk21", "jar": "./stratigraph-java-extractor.jar" },
   "history": { "since": "3 years ago", "maxFilesPerCommit": 50, "minShared": 5 },
   "interpret": { "couplingWeight": 1, "minClusterSize": 2, "maxClusters": 25 },
-  "llm": { "enabled": true, "model": "claude-opus-5", "sendSource": false }
+  "llm": { "enabled": true, "model": "claude-opus-5", "apiKeyEnv": "ANTHROPIC_API_KEY" }
 }
 ```
+
+**`stratigraph.config.local.json`** — the machine. Add it to `.gitignore`.
+
+```json
+{
+  "llm": { "model": "claude-sonnet-5", "apiKey": "sk-ant-..." }
+}
+```
+
+Merged over the shared file key by key, so a team commits one config and each
+person overrides the model, the credential, or any threshold without touching
+it.
+
+#### The credential
+
+Four ways, in the order they are tried. `stratigraph doctor` prints which one
+answered — and never prints the key itself.
+
+| Where | How |
+| --- | --- |
+| `llm.apiKey` | Inline, **only** in `stratigraph.config.local.json` |
+| `llm.apiKeyFile` | Path to a file holding the key; `~` expands, relative paths resolve against the config file |
+| `llm.apiKeyEnv` | Name of the environment variable to read (default `ANTHROPIC_API_KEY`) |
+| — | `ANTHROPIC_AUTH_TOKEN`, or a profile from `ant auth login` |
+
+`llm.apiKey` in the **shared** `stratigraph.config.json` is refused outright,
+with an error naming the alternatives. That file is meant to be committed, and a
+key in it is a key in the repository's history — by the time anyone notices, it
+has to be rotated rather than deleted. A warning would scroll past.
+
+A configured `apiKeyFile` that cannot be read is an error too, rather than a
+quiet fall-through to whatever else is lying around: silently using a different
+credential than the one you asked for is how the wrong account gets billed.
+
+```console
+$ stratigraph doctor
+ok   config       stratigraph.config.json + stratigraph.config.local.json
+ok   model        claude-opus-5, credential from stratigraph.config.local.json
+```
+
+#### The rest
 
 `llm.sendSource` is off by default and loudly logged when on. Extraction and
 history mining are entirely local; only the interpretation layer talks to a
@@ -277,7 +320,7 @@ model API, and only about structural metadata unless you opt in.
 `interpret.couplingWeight` is the knob that decides the clustering, so `analyze`
 prints the value it used. `maxClusters` caps how many clusters are sent to the
 model, so a large repository cannot run away with your bill. The model comes
-from `--model`, then `llm.model`, then the default; whichever answered is
+from `--model`, then `llm.model`, then the default; whichever *answered* is
 recorded on every row it writes.
 
 ## Architecture

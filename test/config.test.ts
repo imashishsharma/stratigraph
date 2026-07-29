@@ -1,10 +1,18 @@
 import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { CONFIG_FILENAME, ConfigError, DEFAULT_MODEL, loadConfig } from '../src/config.js';
+import {
+  CONFIG_FILENAME,
+  ConfigError,
+  DEFAULT_API_KEY_ENV,
+  DEFAULT_MODEL,
+  describeSource,
+  loadConfig,
+  LOCAL_CONFIG_FILENAME,
+} from '../src/config.js';
 
 function sandbox(): { dir: string; repo: string } {
   const dir = mkdtempSync(join(tmpdir(), 'stratigraph-config-'));
@@ -228,5 +236,124 @@ describe('history config', () => {
       JSON.stringify({ repo, interpret: { couplingWieght: 2 } }),
     );
     expect(() => loadConfig({ cwd: dir })).toThrow(/unknown key "interpret.couplingWieght"/);
+  });
+});
+
+describe('loadConfig — the local overrides file', () => {
+  it('merges stratigraph.config.local.json over the shared one', () => {
+    const { dir, repo } = sandbox();
+    writeFileSync(
+      join(dir, CONFIG_FILENAME),
+      JSON.stringify({ repo, llm: { model: 'claude-sonnet-5' }, interpret: { maxClusters: 4 } }),
+    );
+    writeFileSync(
+      join(dir, LOCAL_CONFIG_FILENAME),
+      JSON.stringify({ llm: { model: 'claude-opus-5' } }),
+    );
+
+    const config = loadConfig({ cwd: dir });
+    expect(config.llm.model).toBe('claude-opus-5');
+    // Untouched keys survive the merge, section by section.
+    expect(config.interpret.maxClusters).toBe(4);
+    expect(config.source).toBe(join(dir, CONFIG_FILENAME));
+    expect(config.localSource).toBe(join(dir, LOCAL_CONFIG_FILENAME));
+    expect(describeSource(config)).toContain(LOCAL_CONFIG_FILENAME);
+  });
+
+  it('works with no shared config at all', () => {
+    const { dir, repo } = sandbox();
+    writeFileSync(join(dir, LOCAL_CONFIG_FILENAME), JSON.stringify({ repo, llm: { apiKey: 'sk-local' } }));
+
+    const config = loadConfig({ cwd: dir });
+    expect(config.source).toBeNull();
+    expect(config.localSource).toBe(join(dir, LOCAL_CONFIG_FILENAME));
+    expect(config.llm.apiKey).toBe('sk-local');
+  });
+
+  it('still lets a CLI flag win over the local file', () => {
+    const { dir, repo } = sandbox();
+    writeFileSync(
+      join(dir, LOCAL_CONFIG_FILENAME),
+      JSON.stringify({ repo, llm: { model: 'claude-sonnet-5' } }),
+    );
+    expect(loadConfig({ cwd: dir, model: 'claude-opus-5' }).llm.model).toBe('claude-opus-5');
+  });
+});
+
+describe('loadConfig — the key', () => {
+  it('refuses an inline key in the shared config, which is meant to be committed', () => {
+    const { dir, repo } = sandbox();
+    writeFileSync(
+      join(dir, CONFIG_FILENAME),
+      JSON.stringify({ repo, llm: { apiKey: 'sk-ant-oops' } }),
+    );
+
+    // Refused rather than warned about: a warning scrolls past, and by the time
+    // anyone notices the key is in the repository's history.
+    expect(() => loadConfig({ cwd: dir })).toThrow(ConfigError);
+    expect(() => loadConfig({ cwd: dir })).toThrow(/must not go in stratigraph\.config\.json/);
+    // The error names every alternative, so it is actionable on its own.
+    expect(() => loadConfig({ cwd: dir })).toThrow(/stratigraph\.config\.local\.json/);
+    expect(() => loadConfig({ cwd: dir })).toThrow(/llm\.apiKeyFile/);
+    expect(() => loadConfig({ cwd: dir })).toThrow(/ANTHROPIC_API_KEY/);
+  });
+
+  it('accepts an inline key from the local file', () => {
+    const { dir, repo } = sandbox();
+    writeFileSync(join(dir, CONFIG_FILENAME), JSON.stringify({ repo }));
+    writeFileSync(
+      join(dir, LOCAL_CONFIG_FILENAME),
+      JSON.stringify({ llm: { apiKey: 'sk-ant-local' } }),
+    );
+    expect(loadConfig({ cwd: dir }).llm.apiKey).toBe('sk-ant-local');
+  });
+
+  it('resolves apiKeyFile relative to the config file, and expands ~', () => {
+    const { dir, repo } = sandbox();
+    writeFileSync(
+      join(dir, CONFIG_FILENAME),
+      JSON.stringify({ repo, llm: { apiKeyFile: 'secrets/key.txt' } }),
+    );
+    expect(loadConfig({ cwd: dir }).llm.apiKeyFile).toBe(join(dir, 'secrets', 'key.txt'));
+
+    const { dir: other, repo: otherRepo } = sandbox();
+    writeFileSync(
+      join(other, CONFIG_FILENAME),
+      JSON.stringify({ repo: otherRepo, llm: { apiKeyFile: '~/keys/anthropic' } }),
+    );
+    expect(loadConfig({ cwd: other }).llm.apiKeyFile).toBe(
+      join(homedir(), 'keys', 'anthropic'),
+    );
+  });
+
+  it('defaults apiKeyEnv, and lets a project point at its own variable', () => {
+    const { dir, repo } = sandbox();
+    expect(loadConfig({ repo, cwd: dir }).llm.apiKeyEnv).toBe(DEFAULT_API_KEY_ENV);
+
+    writeFileSync(
+      join(dir, CONFIG_FILENAME),
+      JSON.stringify({ repo, llm: { apiKeyEnv: 'WORK_ANTHROPIC_KEY' } }),
+    );
+    expect(loadConfig({ cwd: dir }).llm.apiKeyEnv).toBe('WORK_ANTHROPIC_KEY');
+  });
+
+  it('rejects an unknown llm key rather than ignoring it', () => {
+    const { dir, repo } = sandbox();
+    writeFileSync(join(dir, CONFIG_FILENAME), JSON.stringify({ repo, llm: { apikey: 'x' } }));
+    expect(() => loadConfig({ cwd: dir })).toThrow(/unknown key "llm.apikey"/);
+  });
+});
+
+describe('loadConfig — --config pointing at the local file', () => {
+  it('reads it once, not twice', () => {
+    const { dir, repo } = sandbox();
+    const path = join(dir, LOCAL_CONFIG_FILENAME);
+    writeFileSync(path, JSON.stringify({ repo, llm: { apiKey: 'sk-explicit' } }));
+
+    const config = loadConfig({ cwd: dir, config: path });
+    expect(config.llm.apiKey).toBe('sk-explicit');
+    expect(config.source).toBe(path);
+    expect(config.localSource).toBeNull();
+    expect(describeSource(config)).toBe(path);
   });
 });

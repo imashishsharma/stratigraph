@@ -7,11 +7,13 @@
  * that matter are tested exhaustively offline.
  */
 
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
 import Anthropic from '@anthropic-ai/sdk';
+
+import { LOCAL_CONFIG_FILENAME, type LlmConfig } from '../config.js';
 
 export interface CompletionRequest {
   system: string;
@@ -53,29 +55,90 @@ export class InterpretError extends Error {
   }
 }
 
+export type CredentialSource =
+  | 'config'
+  | 'key-file'
+  | 'environment'
+  | 'auth-token'
+  | 'profile';
+
+export interface Credential {
+  source: CredentialSource;
+  /** Where it came from, for `doctor` to print. Never the key itself. */
+  describe: string;
+  /**
+   * The key, when we resolved one ourselves. Null means "the SDK will find it"
+   * — an auth token or an `ant auth login` profile, which the SDK reads and we
+   * deliberately do not.
+   */
+  apiKey: string | null;
+}
+
 /**
- * Whether this machine has a credential the SDK will find.
+ * Find the credential, in the order someone would expect to be able to
+ * override things.
  *
- * An unset `ANTHROPIC_API_KEY` does not mean there is none: the SDK also reads
- * `ANTHROPIC_AUTH_TOKEN` and the profile `ant auth login` writes. Checking only
- * the env var would tell a logged-in user their interpretation was skipped for
- * want of a key they do not need.
+ * A config file first, because that is the thing a person just edited; the
+ * environment next, because that is what CI sets; then the two the SDK can
+ * find on its own. An unset `ANTHROPIC_API_KEY` does not mean there is no
+ * credential — checking only that would tell a logged-in user their
+ * interpretation was skipped for want of a key they do not need.
  */
-export function credentialAvailable(env: NodeJS.ProcessEnv = process.env): boolean {
-  if (env['ANTHROPIC_API_KEY'] || env['ANTHROPIC_AUTH_TOKEN']) return true;
+export function resolveCredential(
+  llm: Pick<LlmConfig, 'apiKey' | 'apiKeyFile' | 'apiKeyEnv'>,
+  env: NodeJS.ProcessEnv = process.env,
+): Credential | null {
+  if (llm.apiKey) {
+    return { source: 'config', describe: LOCAL_CONFIG_FILENAME, apiKey: llm.apiKey };
+  }
+
+  if (llm.apiKeyFile) {
+    // A configured key file that cannot be read is an error, not a fall-through
+    // to whatever else happens to be lying around: someone asked for a specific
+    // credential and silently using a different one is how the wrong account
+    // gets billed.
+    let contents: string;
+    try {
+      contents = readFileSync(llm.apiKeyFile, 'utf8');
+    } catch (cause) {
+      throw new InterpretError(
+        `llm.apiKeyFile: cannot read ${llm.apiKeyFile}: ${(cause as Error).message}`,
+      );
+    }
+    const key = contents.trim();
+    if (key.length === 0) {
+      throw new InterpretError(`llm.apiKeyFile: ${llm.apiKeyFile} is empty`);
+    }
+    return { source: 'key-file', describe: llm.apiKeyFile, apiKey: key };
+  }
+
+  const fromEnv = env[llm.apiKeyEnv];
+  if (fromEnv) {
+    return { source: 'environment', describe: `$${llm.apiKeyEnv}`, apiKey: fromEnv };
+  }
+
+  // The remaining two are the SDK's to read, so no key is carried here.
+  if (env['ANTHROPIC_AUTH_TOKEN']) {
+    return { source: 'auth-token', describe: '$ANTHROPIC_AUTH_TOKEN', apiKey: null };
+  }
   const configDir =
     env['ANTHROPIC_CONFIG_DIR'] ??
     (process.platform === 'win32'
       ? join(env['APPDATA'] ?? '', 'Anthropic')
       : join(homedir(), '.config', 'anthropic'));
-  return existsSync(join(configDir, 'credentials'));
+  if (existsSync(join(configDir, 'credentials'))) {
+    return { source: 'profile', describe: `${configDir} (ant auth login)`, apiKey: null };
+  }
+
+  return null;
 }
 
-export function createModelClient(model: string): ModelClient {
-  // Zero-arg construction on purpose: the SDK resolves an API key, an auth
-  // token or an `ant auth login` profile in that order, and hardcoding one of
-  // them here would break the other two.
-  const anthropic = new Anthropic();
+export function createModelClient(model: string, credential: Credential): ModelClient {
+  // A resolved key is passed explicitly; otherwise the SDK is left to find the
+  // auth token or profile itself, which it does in that order.
+  const anthropic = credential.apiKey
+    ? new Anthropic({ apiKey: credential.apiKey })
+    : new Anthropic();
 
   return {
     async complete(request: CompletionRequest): Promise<Completion> {

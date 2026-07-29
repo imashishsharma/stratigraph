@@ -1,4 +1,4 @@
-import { loadConfig, type ConfigOverrides } from '../config.js';
+import { loadConfig, type ConfigOverrides, type StratigraphConfig } from '../config.js';
 import { detectClusters, loadClusters, type ClusterResult } from '../analysis/clusters.js';
 import {
   computeTemporalCoupling,
@@ -17,7 +17,8 @@ import { assertSchemaCurrent, openDatabase, type Db } from '../db/database.js';
 import { latestRun } from '../db/run.js';
 import {
   createModelClient,
-  credentialAvailable,
+  resolveCredential,
+  type Credential,
   type ModelClient,
 } from '../interpret/client.js';
 import { ADR_RULE, runInterpretation, type InterpretResult } from '../interpret/run.js';
@@ -56,6 +57,8 @@ export interface AnalyzeResult {
   interpretation: InterpretResult | null;
   /** Why interpretation did not run, when it did not. */
   interpretationSkipped: 'disabled' | 'no-credential' | null;
+  /** Where the credential came from. Never the credential itself. */
+  credentialSource: string | null;
   /** Model-authored ADR candidates for this run. Empty without interpretation. */
   adrCandidates: Array<{ title: string; detail: string }>;
   findings: RecordedFindings | null;
@@ -119,6 +122,7 @@ export async function runAnalyze(options: AnalyzeOptions): Promise<AnalyzeResult
       mismatches: [],
       interpretation: null,
       interpretationSkipped: null,
+      credentialSource: null,
       adrCandidates: [],
       findings: null,
       staticGraph: countDependencyEdges(db, runId) > 0,
@@ -172,10 +176,14 @@ export async function runAnalyze(options: AnalyzeOptions): Promise<AnalyzeResult
     // algorithms just wrote, and everything above it is already durable if it
     // fails. `--no-llm` stops here with a complete structural report.
     if (result.clusters !== null) {
-      const client = options.client ?? modelClient(config.llm.enabled, config.llm.model);
-      if (client === null) {
+      const resolved = options.client
+        ? { client: options.client, credential: null }
+        : modelClient(config.llm);
+      if (resolved === null) {
         result.interpretationSkipped = config.llm.enabled ? 'no-credential' : 'disabled';
       } else {
+        const { client } = resolved;
+        result.credentialSource = resolved.credential?.describe ?? null;
         result.interpretation = await runInterpretation(
           db,
           runId,
@@ -217,10 +225,13 @@ export async function runAnalyze(options: AnalyzeOptions): Promise<AnalyzeResult
  * the point of the layering — so the absence is reported in one line and the
  * structural report is printed as normal.
  */
-function modelClient(enabled: boolean, model: string): ModelClient | null {
-  if (!enabled) return null;
-  if (!credentialAvailable()) return null;
-  return createModelClient(model);
+function modelClient(
+  llm: StratigraphConfig['llm'],
+): { client: ModelClient; credential: Credential } | null {
+  if (!llm.enabled) return null;
+  const credential = resolveCredential(llm);
+  if (credential === null) return null;
+  return { client: createModelClient(llm.model, credential), credential };
 }
 
 export class AnalysisError extends Error {
@@ -362,7 +373,8 @@ function reportInterpretation(result: AnalyzeResult): void {
   print('');
   print(
     `Interpretation by ${models.join(', ') || 'no model'} — ` +
-      `${described} of ${attempted} clusters described.`,
+      `${described} of ${attempted} clusters described` +
+      `${result.credentialSource === null ? '' : ` (credential: ${result.credentialSource})`}.`,
   );
   print('  Names and descriptions above this line are inference, not observation.');
   if (considered > attempted) {

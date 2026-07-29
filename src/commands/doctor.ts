@@ -1,11 +1,18 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, statSync } from 'node:fs';
 
-import { loadConfig, type ConfigOverrides } from '../config.js';
+import {
+  describeSource,
+  loadConfig,
+  LOCAL_CONFIG_FILENAME,
+  type ConfigOverrides,
+  type StratigraphConfig,
+} from '../config.js';
 import { currentVersion, openDatabase } from '../db/database.js';
 import { SCHEMA_VERSION } from '../db/migrations/index.js';
 import { countCommits, gitToplevel, isShallowClone } from '../history/git-log.js';
 import { findExtractorJar, JAR_ENV_VAR } from '../toolchain/extractor-jar.js';
+import { resolveCredential, type Credential } from '../interpret/client.js';
 import { discoverJavaRuntimes, findJava, MIN_JAVA_MAJOR } from '../toolchain/java.js';
 import { TOOL_VERSION } from '../version.js';
 
@@ -91,11 +98,8 @@ export function runDoctor(overrides: ConfigOverrides): Check[] {
 
   try {
     const config = loadConfig(overrides);
-    checks.push({
-      name: 'config',
-      status: 'ok',
-      detail: config.source ?? 'defaults (no stratigraph.config.json found)',
-    });
+    checks.push({ name: 'config', status: 'ok', detail: describeSource(config) });
+    checks.push(modelCheck(config));
     checks.push(historyCheck(config.repoPath));
     if (existsSync(config.dbPath)) {
       const db = openDatabase(config.dbPath, { mustExist: true, readonly: true });
@@ -121,6 +125,46 @@ export function runDoctor(overrides: ConfigOverrides): Check[] {
   }
 
   return checks;
+}
+
+/**
+ * Whether the interpretation layer can run, and on what.
+ *
+ * Reports *where* the credential came from and never the credential itself —
+ * `doctor` output is the first thing anyone pastes into an issue. A missing one
+ * is a warning, not an error: the structural report is the larger half of what
+ * this tool does and needs no model at all.
+ */
+function modelCheck(config: StratigraphConfig): Check {
+  if (!config.llm.enabled) {
+    return {
+      name: 'model',
+      status: 'missing',
+      detail: 'interpretation disabled (llm.enabled = false) — structural output only',
+    };
+  }
+
+  let credential: Credential | null;
+  try {
+    credential = resolveCredential(config.llm);
+  } catch (err) {
+    return { name: 'model', status: 'warn', detail: (err as Error).message };
+  }
+
+  return credential === null
+    ? {
+        name: 'model',
+        status: 'warn',
+        detail:
+          `${config.llm.model}, but no credential found — set $${config.llm.apiKeyEnv}, ` +
+          `put "llm.apiKey" in ${LOCAL_CONFIG_FILENAME}, point "llm.apiKeyFile" at a ` +
+          `file holding it, or run \`ant auth login\`. Structural output is unaffected.`,
+      }
+    : {
+        name: 'model',
+        status: 'ok',
+        detail: `${config.llm.model}, credential from ${credential.describe}`,
+      };
 }
 
 /**
