@@ -20,6 +20,7 @@ interface GlobalOptions {
   db?: string;
   config?: string;
   llm?: boolean;
+  model?: string;
   sendSource?: boolean;
   javaHome?: string;
   extractorJar?: string;
@@ -42,6 +43,7 @@ export function buildProgram(): Command {
     .option('--repo <path>', 'repository to analyse (default: current directory)')
     .option('--db <path>', 'fact store location (default: .stratigraph/<repo-name>.db)')
     .option('--config <path>', `config file (default: ./stratigraph.config.json)`)
+    .option('--model <id>', 'model used by the interpretation layer')
     .option('--java-home <path>', 'JDK used to run the Java extractor')
     .option('--extractor-jar <path>', 'Java extractor jar (default: discovered)')
     .addOption(
@@ -112,17 +114,32 @@ export function buildProgram(): Command {
       '--max-files-per-commit <n>',
       'commits touching more than this take no part in coupling',
     )
-    .action((options: { run?: string; top?: string; maxFilesPerCommit?: string }) => {
-      runAnalyze({
-        ...overrides(program),
-        run: parsePositiveInt('--run', options.run),
-        top: parsePositiveInt('--top', options.top),
-        maxFilesPerCommit: parsePositiveInt(
-          '--max-files-per-commit',
-          options.maxFilesPerCommit,
-        ),
-      });
-    });
+    .option(
+      '--coupling-weight <n>',
+      'how much co-change weighs against dependency when clustering (0 disables it)',
+    )
+    .action(
+      (options: {
+        run?: string;
+        top?: string;
+        maxFilesPerCommit?: string;
+        couplingWeight?: string;
+      }) => {
+        runAnalyze({
+          ...overrides(program),
+          run: parsePositiveInt('--run', options.run),
+          top: parsePositiveInt('--top', options.top),
+          maxFilesPerCommit: parsePositiveInt(
+            '--max-files-per-commit',
+            options.maxFilesPerCommit,
+          ),
+          couplingWeight: parseNonNegativeNumber(
+            '--coupling-weight',
+            options.couplingWeight,
+          ),
+        });
+      },
+    );
 
   program
     .command('doctor')
@@ -149,6 +166,7 @@ function overrides(program: Command) {
     // commander sets `llm: false` for --no-llm and leaves it true otherwise;
     // only pass it through when the user actually opted out.
     llm: opts.llm === false ? false : undefined,
+    model: opts.model,
     sendSource: opts.sendSource === true ? true : undefined,
     javaHome: opts.javaHome,
     extractorJar: opts.extractorJar,
@@ -183,6 +201,16 @@ function parsePositiveInt(flag: string, value: string | undefined): number | und
   const parsed = Number(value);
   if (!Number.isInteger(parsed) || parsed <= 0) {
     throw new ConfigError(`${flag} must be a positive integer, got "${value}"`);
+  }
+  return parsed;
+}
+
+/** Zero is meaningful for `--coupling-weight`: it turns the history term off. */
+function parseNonNegativeNumber(flag: string, value: string | undefined): number | undefined {
+  if (value === undefined) return undefined;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    throw new ConfigError(`${flag} must be a number of at least 0, got "${value}"`);
   }
   return parsed;
 }

@@ -1,4 +1,5 @@
 import { loadConfig, type ConfigOverrides } from '../config.js';
+import { detectClusters, type ClusterResult } from '../analysis/clusters.js';
 import {
   computeTemporalCoupling,
   type CoupledPair,
@@ -7,6 +8,10 @@ import {
 import { detectPackageCycles, type CycleFinding } from '../analysis/cycles.js';
 import { recordHistoryFindings, type RecordedFindings } from '../analysis/history-findings.js';
 import { busFactorRisks, topHotspots, type Hotspot } from '../analysis/hotspots.js';
+import {
+  detectIntentMismatches,
+  type IntentMismatch,
+} from '../analysis/intent-mismatch.js';
 import { buildPackageGraph, DEPENDENCY_EDGE_KINDS } from '../analysis/package-graph.js';
 import { assertSchemaCurrent, openDatabase, type Db } from '../db/database.js';
 import { latestRun } from '../db/run.js';
@@ -32,6 +37,10 @@ export interface AnalyzeResult {
   couplingStats: CouplingStats | null;
   hotspots: Hotspot[];
   busFactor: Hotspot[];
+  /** Layer 4: the package partition. Null when there are no packages to group. */
+  clusters: ClusterResult | null;
+  /** Layer 4: packages whose name and edges disagree. */
+  mismatches: IntentMismatch[];
   findings: RecordedFindings | null;
   /**
    * Whether this run has any extracted dependency to have checked against.
@@ -89,6 +98,8 @@ export function runAnalyze(options: AnalyzeOptions): AnalyzeResult {
       couplingStats: null,
       hotspots: [],
       busFactor: [],
+      clusters: null,
+      mismatches: [],
       findings: null,
       staticGraph: countDependencyEdges(db, runId) > 0,
     };
@@ -97,6 +108,16 @@ export function runAnalyze(options: AnalyzeOptions): AnalyzeResult {
       result.cycles = detectPackageCycles(db, runId);
       info(
         `run ${runId}: ${graph.packages.size} packages, ${graph.dependencies.length} package dependencies`,
+      );
+
+      // Layer 4, but algorithmic: clustering and the mismatch rule need no
+      // model, which is what lets `--no-llm` produce a complete report.
+      result.clusters = detectClusters(db, runId, config.interpret);
+      result.mismatches = detectIntentMismatches(db, runId, result.clusters.clusters);
+      info(
+        `run ${runId}: ${result.clusters.clusters.length} clusters ` +
+          `(modularity ${result.clusters.modularity.toFixed(3)}), ` +
+          `${result.mismatches.length} intent mismatches`,
       );
     }
 
@@ -119,7 +140,7 @@ export function runAnalyze(options: AnalyzeOptions): AnalyzeResult {
       );
     }
 
-    report(result, top, graph.packages.size, commits);
+    report(result, top, graph.packages.size, commits, config.interpret.couplingWeight);
     return result;
   } finally {
     db.close();
@@ -166,14 +187,94 @@ function countDependencyEdges(db: Db, runId: number): number {
  * opening the database is the unfalsifiable kind this project is written
  * against.
  */
-function report(result: AnalyzeResult, top: number, packages: number, commits: number): void {
+function report(
+  result: AnalyzeResult,
+  top: number,
+  packages: number,
+  commits: number,
+  couplingWeight: number,
+): void {
   reportCycles(result.cycles, packages);
+  reportClusters(result.clusters, top, couplingWeight);
+  reportMismatches(result.mismatches, top);
   reportCoupling(result, top);
   reportHotspots(result.hotspots, top);
   reportBusFactor(result.busFactor, top);
   if (commits === 0) {
     print('');
     print('No history mined for this run — run `stratigraph history` for churn and coupling.');
+  }
+}
+
+/**
+ * Clusters, with the knob that produced them printed alongside.
+ *
+ * `couplingWeight` decides how much history is allowed to move a package
+ * (ADR-0012), so a reader who disagrees with the grouping can see which value
+ * produced it and change it, rather than arguing with a black box.
+ */
+function reportClusters(
+  clusters: ClusterResult | null,
+  top: number,
+  couplingWeight: number,
+): void {
+  if (clusters === null) return;
+
+  const grouped = clusters.clusters.filter((cluster) => cluster.members.length > 1);
+  print('');
+  if (grouped.length === 0) {
+    print('No package clusters: nothing groups with anything else.');
+    return;
+  }
+
+  print(
+    `${grouped.length} package ${grouped.length === 1 ? 'cluster' : 'clusters'} ` +
+      `(modularity ${clusters.modularity.toFixed(3)}, coupling weight ${couplingWeight}):`,
+  );
+  if (clusters.stats.couplingRows > 0) {
+    print(
+      `  ${clusters.stats.couplingRowsPlaced} of ${clusters.stats.couplingRows} coupled pairs ` +
+        `sit in two different packages and took part; the rest name a file no extractor ` +
+        `parsed, or two files in one package.`,
+    );
+  }
+
+  for (const [n, cluster] of grouped.slice(0, top).entries()) {
+    print('');
+    const label = cluster.name === null ? cluster.prefix : `${cluster.name} (${cluster.prefix})`;
+    print(`${n + 1}. ${label} — ${cluster.members.length} packages`);
+    if (cluster.description !== null) print(`   ${cluster.description}`);
+    for (const member of cluster.members) print(`     ${member.fqn}`);
+  }
+
+  print('');
+  if (grouped.length > top) {
+    print(`  Showing ${top} of ${grouped.length} clusters — raise --top for more.`);
+  }
+  if (clusters.singletons > 0) {
+    // A package that groups with nothing is a fact about the graph, but three
+    // hundred of them one per line would bury the clusters that matter.
+    print(`  ${clusters.singletons} package(s) group with nothing and are not listed.`);
+  }
+  if (clusters.clusters.every((cluster) => cluster.name === null)) {
+    print('  Cluster names and descriptions are not written: no interpretation ran.');
+  }
+}
+
+/** The sharpest thing the structural report produces. See ADR-0014. */
+function reportMismatches(mismatches: IntentMismatch[], top: number): void {
+  if (mismatches.length === 0) return;
+
+  print('');
+  print(`Packages whose name and edges disagree (top ${top}):`);
+  for (const [n, mismatch] of mismatches.slice(0, top).entries()) {
+    print('');
+    print(`${n + 1}. [${mismatch.severity}] ${mismatch.title}`);
+    print(mismatch.detail);
+  }
+  if (mismatches.length > top) {
+    print('');
+    print(`  Showing ${top} of ${mismatches.length} — raise --top for more.`);
   }
 }
 

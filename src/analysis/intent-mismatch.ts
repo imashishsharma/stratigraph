@@ -54,6 +54,9 @@ export interface IntentMismatch {
   pulledBy: string[];
   severity: 'medium' | 'high';
   unanimous: boolean;
+  /** Exactly what was stored, so stdout and the database cannot drift apart. */
+  title: string;
+  detail: string;
 }
 
 /**
@@ -109,6 +112,8 @@ export function detectIntentMismatches(
         pulledBy: [],
         severity: home.unanimous ? 'high' : 'medium',
         unanimous: home.unanimous,
+        title: '',
+        detail: '',
       });
     }
   }
@@ -213,19 +218,24 @@ function record(
       }
 
       const coupled = couplingBetween(db, runId, candidate.fqn, mine, EVIDENCE);
-      const enriched: IntentMismatch = {
+      const withPulls: IntentMismatch = {
         ...candidate,
         pulledBy: [...pulls.map((pull) => pull.fqn), ...coupled.map((pair) => pair.fqn)]
           .filter((fqn, at, all) => all.indexOf(fqn) === at)
           .sort(),
+      };
+      const enriched: IntentMismatch = {
+        ...withPulls,
+        title: title(withPulls),
+        detail: detail(withPulls, pulls, coupled),
       };
 
       const findingId = Number(
         insertFinding.run({
           runId,
           rule: RULE,
-          title: title(enriched),
-          detail: detail(enriched, pulls, coupled),
+          title: enriched.title,
+          detail: enriched.detail,
           severity: enriched.severity,
           clusterId: mine.clusterId,
         }).lastInsertRowid,

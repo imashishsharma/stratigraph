@@ -391,3 +391,94 @@ describe('runAnalyze thresholds', () => {
     expect(result.coupling).toHaveLength(3);
   });
 });
+
+describe('runAnalyze clustering', () => {
+  /** Two groups of three packages, plus a stray named with one and wired to the other. */
+  function seedGroups(): void {
+    const path = (pkg: string) => `src/${pkg.replaceAll('.', '/')}/A.java`;
+    const declare = (pkg: string) => [
+      { v: 1, type: 'file', path: path(pkg), language: 'java' },
+      { v: 1, type: 'node', kind: 'package', fqn: pkg, name: pkg },
+      {
+        v: 1,
+        type: 'node',
+        kind: 'class',
+        fqn: `${pkg}.A`,
+        name: 'A',
+        parent: { kind: 'package', fqn: pkg },
+        file: path(pkg),
+      },
+    ];
+    const link = (from: string, to: string, line: number) => ({
+      v: 1,
+      type: 'edge',
+      kind: 'imports',
+      src: { kind: 'class', fqn: `${from}.A` },
+      dst: { kind: 'class', fqn: `${to}.A` },
+      file: path(from),
+      line,
+    });
+    const clique = (packages: string[], start: number) => {
+      const out: object[] = [];
+      let line = start;
+      for (let i = 0; i < packages.length; i += 1) {
+        for (let j = i + 1; j < packages.length; j += 1) {
+          out.push(link(packages[i] as string, packages[j] as string, line));
+          line += 1;
+        }
+      }
+      return out;
+    };
+
+    const billing = ['shop.billing.invoice', 'shop.billing.payment', 'shop.billing.ledger'];
+    const admin = ['shop.admin.user', 'shop.admin.role', 'shop.admin.audit'];
+    seedFacts([
+      META,
+      ...[...billing, ...admin, 'shop.billing.report'].flatMap(declare),
+      ...clique(billing, 1),
+      ...clique(admin, 100),
+      ...clique(['shop.billing.report', ...admin], 200),
+    ]);
+  }
+
+  it('clusters and reports mismatches with no model involved', () => {
+    seedGroups();
+    db.close();
+
+    const result = runAnalyze({ repo: FIXTURE, cwd, llm: false });
+
+    expect(result.clusters?.clusters).toHaveLength(2);
+    expect(result.mismatches.map((mismatch) => mismatch.fqn)).toEqual([
+      'shop.billing.report',
+    ]);
+
+    const out = stdout();
+    expect(out).toContain('2 package clusters');
+    expect(out).toContain('coupling weight 1');
+    expect(out).toContain('Packages whose name and edges disagree');
+    expect(out).toContain('shop.billing.report is named under shop.billing');
+    expect(out).toContain('Cluster names and descriptions are not written');
+  });
+
+  it('honours --coupling-weight 0, which clusters on structure alone', () => {
+    seedGroups();
+    db.close();
+
+    const result = runAnalyze({ repo: FIXTURE, cwd, llm: false, couplingWeight: 0 });
+
+    expect(stdout()).toContain('coupling weight 0');
+    expect(result.clusters?.clusters).toHaveLength(2);
+  });
+
+  it('says plainly that a history-only run has nothing to cluster', () => {
+    commit(['a.java', 'b.java']);
+    db.close();
+
+    const result = runAnalyze({ repo: FIXTURE, cwd, llm: false });
+
+    expect(result.clusters).toBeNull();
+    expect(result.mismatches).toEqual([]);
+    // No partition is printed, invented or otherwise.
+    expect(stdout()).not.toContain('package clusters');
+  });
+});

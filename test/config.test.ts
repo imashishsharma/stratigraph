@@ -4,7 +4,7 @@ import { join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { CONFIG_FILENAME, ConfigError, loadConfig } from '../src/config.js';
+import { CONFIG_FILENAME, ConfigError, DEFAULT_MODEL, loadConfig } from '../src/config.js';
 
 function sandbox(): { dir: string; repo: string } {
   const dir = mkdtempSync(join(tmpdir(), 'stratigraph-config-'));
@@ -168,5 +168,65 @@ describe('history config', () => {
       JSON.stringify({ repo, history: { maxFilesPerCommmit: 20 } }),
     );
     expect(() => loadConfig({ cwd: dir })).toThrow(/unknown key "history.maxFilesPerCommmit"/);
+  });
+
+  it('defaults the interpretation knobs, model included', () => {
+    const { dir, repo } = sandbox();
+    const config = loadConfig({ repo, cwd: dir });
+    expect(config.interpret).toEqual({
+      couplingWeight: 1,
+      minClusterSize: 2,
+      maxClusters: 25,
+    });
+    expect(config.llm.model).toBe(DEFAULT_MODEL);
+  });
+
+  it('reads the interpret section and lets flags win over it', () => {
+    const { dir, repo } = sandbox();
+    writeFileSync(
+      join(dir, CONFIG_FILENAME),
+      JSON.stringify({
+        repo,
+        interpret: { couplingWeight: 0.5, minClusterSize: 3, maxClusters: 8 },
+        llm: { model: 'claude-sonnet-5' },
+      }),
+    );
+
+    expect(loadConfig({ cwd: dir }).interpret.couplingWeight).toBe(0.5);
+    expect(loadConfig({ cwd: dir }).llm.model).toBe('claude-sonnet-5');
+    expect(loadConfig({ cwd: dir, couplingWeight: 0 }).interpret.couplingWeight).toBe(0);
+    expect(loadConfig({ cwd: dir, model: 'claude-opus-5' }).llm.model).toBe('claude-opus-5');
+  });
+
+  it('accepts a coupling weight of zero, which turns the history term off', () => {
+    const { dir, repo } = sandbox();
+    writeFileSync(
+      join(dir, CONFIG_FILENAME),
+      JSON.stringify({ repo, interpret: { couplingWeight: 0 } }),
+    );
+    expect(loadConfig({ cwd: dir }).interpret.couplingWeight).toBe(0);
+  });
+
+  it('rejects a negative or non-numeric coupling weight', () => {
+    for (const value of [-1, '1', null, Number.NaN, Number.POSITIVE_INFINITY]) {
+      const { dir, repo } = sandbox();
+      writeFileSync(
+        join(dir, CONFIG_FILENAME),
+        JSON.stringify({ repo, interpret: { couplingWeight: value } }),
+      );
+      expect(
+        () => loadConfig({ cwd: dir }),
+        `couplingWeight: ${JSON.stringify(value)}`,
+      ).toThrow(/"interpret.couplingWeight" must be a number of at least 0/);
+    }
+  });
+
+  it('rejects an unknown interpret key rather than ignoring it', () => {
+    const { dir, repo } = sandbox();
+    writeFileSync(
+      join(dir, CONFIG_FILENAME),
+      JSON.stringify({ repo, interpret: { couplingWieght: 2 } }),
+    );
+    expect(() => loadConfig({ cwd: dir })).toThrow(/unknown key "interpret.couplingWieght"/);
   });
 });

@@ -6,7 +6,8 @@ export const CONFIG_FILENAME = 'stratigraph.config.json';
 export interface LlmConfig {
   /** Interpretation layer. The whole pipeline must work with this off. */
   enabled: boolean;
-  model: string | null;
+  /** Model id for the interpretation layer. Recorded on every row it writes. */
+  model: string;
   /**
    * Send raw source bodies to the model. Off by default, loudly logged when on.
    * Structural metadata is sent regardless when `enabled` is true.
@@ -52,6 +53,31 @@ export const DEFAULT_HISTORY: HistoryConfig = {
   minCommits: 5,
 };
 
+/**
+ * Layer 4. Every knob here changes the partition, and therefore which findings
+ * exist, so `analyze` prints the values it used — see ADR-0012.
+ */
+export interface InterpretConfig {
+  /**
+   * What one unit of normalised co-change weighs against one unit of normalised
+   * structural dependency. At 0 the clustering is purely structural.
+   */
+  couplingWeight: number;
+  /** Smallest cluster worth describing. Smaller ones are still stored. */
+  minClusterSize: number;
+  /** Cap on clusters sent to the model, so a huge repository cannot run away. */
+  maxClusters: number;
+}
+
+export const DEFAULT_INTERPRET: InterpretConfig = {
+  couplingWeight: 1,
+  minClusterSize: 2,
+  maxClusters: 25,
+};
+
+/** Used when `llm.enabled` and nothing more specific was configured. */
+export const DEFAULT_MODEL = 'claude-opus-5';
+
 export interface StratigraphConfig {
   /** Absolute path to the repository under analysis. */
   repoPath: string;
@@ -63,6 +89,7 @@ export interface StratigraphConfig {
   llm: LlmConfig;
   java: JavaConfig;
   history: HistoryConfig;
+  interpret: InterpretConfig;
   /** Where the config came from, for `stratigraph init` to report. */
   source: string | null;
 }
@@ -77,6 +104,8 @@ export interface ConfigOverrides {
   extractorJar?: string | undefined;
   since?: string | undefined;
   maxFilesPerCommit?: number | undefined;
+  model?: string | undefined;
+  couplingWeight?: number | undefined;
   cwd?: string | undefined;
 }
 
@@ -97,10 +126,20 @@ const DEFAULT_EXCLUDES = [
   '.gradle',
 ];
 
-const KNOWN_KEYS = new Set(['repo', 'db', 'include', 'exclude', 'llm', 'java', 'history']);
+const KNOWN_KEYS = new Set([
+  'repo',
+  'db',
+  'include',
+  'exclude',
+  'llm',
+  'java',
+  'history',
+  'interpret',
+]);
 const KNOWN_LLM_KEYS = new Set(['enabled', 'model', 'sendSource']);
 const KNOWN_JAVA_KEYS = new Set(['home', 'jar']);
 const KNOWN_HISTORY_KEYS = new Set(['since', 'maxFilesPerCommit', 'minShared', 'minCommits']);
+const KNOWN_INTERPRET_KEYS = new Set(['couplingWeight', 'minClusterSize', 'maxClusters']);
 
 /**
  * Precedence: CLI flags > config file > defaults.
@@ -145,7 +184,7 @@ export function loadConfig(overrides: ConfigOverrides = {}): StratigraphConfig {
     exclude: file.exclude ?? DEFAULT_EXCLUDES,
     llm: {
       enabled: overrides.llm ?? file.llm?.enabled ?? true,
-      model: file.llm?.model ?? null,
+      model: overrides.model ?? file.llm?.model ?? DEFAULT_MODEL,
       sendSource: overrides.sendSource ?? file.llm?.sendSource ?? false,
     },
     java: {
@@ -160,6 +199,14 @@ export function loadConfig(overrides: ConfigOverrides = {}): StratigraphConfig {
         DEFAULT_HISTORY.maxFilesPerCommit,
       minShared: file.history?.minShared ?? DEFAULT_HISTORY.minShared,
       minCommits: file.history?.minCommits ?? DEFAULT_HISTORY.minCommits,
+    },
+    interpret: {
+      couplingWeight:
+        overrides.couplingWeight ??
+        file.interpret?.couplingWeight ??
+        DEFAULT_INTERPRET.couplingWeight,
+      minClusterSize: file.interpret?.minClusterSize ?? DEFAULT_INTERPRET.minClusterSize,
+      maxClusters: file.interpret?.maxClusters ?? DEFAULT_INTERPRET.maxClusters,
     },
     source: configPath,
   };
@@ -177,6 +224,11 @@ interface ConfigFile {
     maxFilesPerCommit?: number;
     minShared?: number;
     minCommits?: number;
+  };
+  interpret?: {
+    couplingWeight?: number;
+    minClusterSize?: number;
+    maxClusters?: number;
   };
 }
 
@@ -280,7 +332,47 @@ function readConfigFile(path: string): ConfigFile {
       );
   }
 
+  if (obj['interpret'] !== undefined) {
+    const interpret = obj['interpret'];
+    if (typeof interpret !== 'object' || interpret === null || Array.isArray(interpret)) {
+      throw new ConfigError(`${path}: "interpret" must be an object`);
+    }
+    const interpretObj = interpret as Record<string, unknown>;
+    for (const key of Object.keys(interpretObj)) {
+      if (!KNOWN_INTERPRET_KEYS.has(key)) {
+        throw new ConfigError(`${path}: unknown key "interpret.${key}"`);
+      }
+    }
+    out.interpret = {};
+    if (interpretObj['couplingWeight'] !== undefined)
+      out.interpret.couplingWeight = expectNonNegativeNumber(
+        path,
+        'interpret.couplingWeight',
+        interpretObj['couplingWeight'],
+      );
+    if (interpretObj['minClusterSize'] !== undefined)
+      out.interpret.minClusterSize = expectPositiveInteger(
+        path,
+        'interpret.minClusterSize',
+        interpretObj['minClusterSize'],
+      );
+    if (interpretObj['maxClusters'] !== undefined)
+      out.interpret.maxClusters = expectPositiveInteger(
+        path,
+        'interpret.maxClusters',
+        interpretObj['maxClusters'],
+      );
+  }
+
   return out;
+}
+
+/** Zero is meaningful here: it turns the history term off entirely. */
+function expectNonNegativeNumber(path: string, key: string, value: unknown): number {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
+    throw new ConfigError(`${path}: "${key}" must be a number of at least 0`);
+  }
+  return value;
 }
 
 function expectPositiveInteger(path: string, key: string, value: unknown): number {
