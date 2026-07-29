@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AnalysisError, runAnalyze } from '../src/commands/analyze.js';
+import type { ModelClient } from '../src/interpret/client.js';
 import { runInit } from '../src/commands/init.js';
 import { openDatabase, type Db } from '../src/db/database.js';
 import { createRun } from '../src/db/run.js';
@@ -26,8 +27,19 @@ let runId: number;
 let sha = 0;
 let printed: string[];
 
+/**
+ * No test here may reach a model API. Tests that exercise interpretation inject
+ * a client; every other test must find no credential, whatever the developer
+ * running them happens to have exported.
+ */
+let savedEnv: NodeJS.ProcessEnv;
+
 beforeEach(() => {
   cwd = mkdtempSync(join(tmpdir(), 'stratigraph-analyze-'));
+  savedEnv = { ...process.env };
+  delete process.env['ANTHROPIC_API_KEY'];
+  delete process.env['ANTHROPIC_AUTH_TOKEN'];
+  process.env['ANTHROPIC_CONFIG_DIR'] = join(cwd, 'no-credentials');
   runInit({ repo: FIXTURE, cwd });
   dbPath = join(cwd, '.stratigraph', 'tiny-java.db');
   db = openDatabase(dbPath, { mustExist: true });
@@ -42,6 +54,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  process.env = savedEnv;
   vi.restoreAllMocks();
   if (db.open) db.close();
 });
@@ -138,13 +151,13 @@ function seedCycle(): void {
 }
 
 describe('runAnalyze with both facts and history', () => {
-  it('reports cycles, coupling, hotspots and ownership together', () => {
+  it('reports cycles, coupling, hotspots and ownership together', async () => {
     seedCycle();
     for (let i = 0; i < 8; i += 1) commit(['OrderService.java', 'order-form.html']);
     background();
     db.close();
 
-    const result = runAnalyze({ repo: FIXTURE, cwd });
+    const result = await runAnalyze({ repo: FIXTURE, cwd });
 
     expect(result.cycles).toHaveLength(1);
     expect(result.coupling).toHaveLength(1);
@@ -158,19 +171,19 @@ describe('runAnalyze with both facts and history', () => {
     expect(out).toMatch(/Hotspots — churn x complexity/);
   });
 
-  it('prints the numbers a coupling claim rests on', () => {
+  it('prints the numbers a coupling claim rests on', async () => {
     for (let i = 0; i < 8; i += 1) commit(['a.java', 'b.java']);
     background();
     db.close();
 
-    runAnalyze({ repo: FIXTURE, cwd });
+    await runAnalyze({ repo: FIXTURE, cwd });
 
     // strength, lift and both commit counts, so the reader can check the claim
     // without opening the database.
     expect(stdout()).toMatch(/8 shared commits — strength 1\.00, [\d.]+x chance \(8 and 8 commits/);
   });
 
-  it('leaves a coupled pair with a dependency out of the report', () => {
+  it('leaves a coupled pair with a dependency out of the report', async () => {
     seedFacts([
       META,
       { v: 1, type: 'file', path: 'a.java', language: 'java' },
@@ -191,7 +204,7 @@ describe('runAnalyze with both facts and history', () => {
     background();
     db.close();
 
-    const result = runAnalyze({ repo: FIXTURE, cwd });
+    const result = await runAnalyze({ repo: FIXTURE, cwd });
 
     expect(result.coupling).toEqual([]);
     expect(result.couplingStats?.stored).toBe(1);
@@ -199,19 +212,19 @@ describe('runAnalyze with both facts and history', () => {
     expect(stdout()).toMatch(/1 coupled pair\(s\) were found, but the static graph already/);
   });
 
-  it('honours --top', () => {
+  it('honours --top', async () => {
     for (let i = 0; i < 6; i += 1) {
       for (let j = 0; j < 8; j += 1) commit([`pair${i}-a.java`, `pair${i}-b.java`]);
     }
     background();
     db.close();
 
-    expect(runAnalyze({ repo: FIXTURE, cwd, top: 2 }).coupling).toHaveLength(2);
+    expect((await runAnalyze({ repo: FIXTURE, cwd, top: 2 })).coupling).toHaveLength(2);
     // Showing 2 of 6 and saying nothing reads as "there are 2".
     expect(stdout()).toMatch(/Showing 2 of 6 pairs with no static dependency/);
   });
 
-  it('counts pairs the static graph explains, not pairs it did not print', () => {
+  it('counts pairs the static graph explains, not pairs it did not print', async () => {
     // The obvious arithmetic — stored minus shown — attributes every pair
     // beyond --top to "already has a dependency". On dubbo that turned 10
     // shown out of 4139 into a claim that 4129 were explained by imports.
@@ -238,21 +251,21 @@ describe('runAnalyze with both facts and history', () => {
     background();
     db.close();
 
-    const result = runAnalyze({ repo: FIXTURE, cwd, top: 1 });
+    const result = await runAnalyze({ repo: FIXTURE, cwd, top: 1 });
 
     expect(result.couplingStats).toMatchObject({ stored: 4, withStaticDependency: 1 });
     expect(stdout()).toMatch(/Showing 1 of 3 pairs with no static dependency/);
     expect(stdout()).toMatch(/4 coupled pairs stored in total; 1 of them already/);
   });
 
-  it('replaces its findings rather than appending across runs', () => {
+  it('replaces its findings rather than appending across runs', async () => {
     seedCycle();
     for (let i = 0; i < 8; i += 1) commit(['a.java', 'b.java']);
     background();
     db.close();
 
-    runAnalyze({ repo: FIXTURE, cwd });
-    runAnalyze({ repo: FIXTURE, cwd });
+    await runAnalyze({ repo: FIXTURE, cwd });
+    await runAnalyze({ repo: FIXTURE, cwd });
 
     const readback = openDatabase(dbPath, { mustExist: true, readonly: true });
     const counts = readback
@@ -272,11 +285,11 @@ describe('runAnalyze with both facts and history', () => {
 });
 
 describe('runAnalyze degrading', () => {
-  it('works on a run with facts and no history', () => {
+  it('works on a run with facts and no history', async () => {
     seedCycle();
     db.close();
 
-    const result = runAnalyze({ repo: FIXTURE, cwd });
+    const result = await runAnalyze({ repo: FIXTURE, cwd });
 
     expect(result.cycles).toHaveLength(1);
     expect(result.couplingStats).toBeNull();
@@ -284,12 +297,12 @@ describe('runAnalyze degrading', () => {
     expect(stdout()).toMatch(/No history mined for this run/);
   });
 
-  it('works on a run with history and no facts — the no-JDK case', () => {
+  it('works on a run with history and no facts — the no-JDK case', async () => {
     for (let i = 0; i < 8; i += 1) commit(['a.java', 'b.java']);
     background();
     db.close();
 
-    const result = runAnalyze({ repo: FIXTURE, cwd });
+    const result = await runAnalyze({ repo: FIXTURE, cwd });
 
     expect(result.packages).toBe(0);
     expect(result.coupling).toHaveLength(1);
@@ -298,7 +311,7 @@ describe('runAnalyze degrading', () => {
     expect(stdout()).not.toMatch(/package cycle/i);
   });
 
-  it('does not claim "no dependency" when it never checked for one', () => {
+  it('does not claim "no dependency" when it never checked for one', async () => {
     // With no extraction every pair has zero static edges — because nothing
     // was looked at, not because nothing connects them. Printing the usual
     // heading here would assert an absence that was never established, which
@@ -307,7 +320,7 @@ describe('runAnalyze degrading', () => {
     background();
     db.close();
 
-    const result = runAnalyze({ repo: FIXTURE, cwd });
+    const result = await runAnalyze({ repo: FIXTURE, cwd });
 
     expect(result.staticGraph).toBe(false);
     expect(result.coupling[0]?.staticEdges).toBe(0);
@@ -316,12 +329,12 @@ describe('runAnalyze degrading', () => {
     expect(stdout()).toMatch(/none of these were checked for a dependency/);
   });
 
-  it('says the same thing in the finding it stores, not only in the report', () => {
+  it('says the same thing in the finding it stores, not only in the report', async () => {
     for (let i = 0; i < 8; i += 1) commit(['a.java', 'b.java']);
     background();
     db.close();
 
-    const { runId } = runAnalyze({ repo: FIXTURE, cwd });
+    const { runId } = await runAnalyze({ repo: FIXTURE, cwd });
 
     const readback = openDatabase(dbPath, { mustExist: true, readonly: true });
     const finding = readback
@@ -333,35 +346,35 @@ describe('runAnalyze degrading', () => {
     expect(finding.detail).toMatch(/no evidence was found either way/);
   });
 
-  it('distinguishes "found nothing" from "could not look"', () => {
+  it('distinguishes "found nothing" from "could not look"', async () => {
     // Two files that never change together. An empty section reads like a
     // clean repository unless it says what was examined.
     for (let i = 0; i < 8; i += 1) commit(['lonely-a.java']);
     for (let i = 0; i < 8; i += 1) commit(['lonely-b.java']);
     db.close();
 
-    runAnalyze({ repo: FIXTURE, cwd });
+    await runAnalyze({ repo: FIXTURE, cwd });
 
     expect(stdout()).toMatch(/None\./);
     expect(stdout()).toMatch(/16 commits considered, 0 co-changing pairs seen/);
   });
 
-  it('refuses a run holding neither facts nor history', () => {
+  it('refuses a run holding neither facts nor history', async () => {
     db.close();
-    expect(() => runAnalyze({ repo: FIXTURE, cwd })).toThrow(AnalysisError);
-    expect(() => runAnalyze({ repo: FIXTURE, cwd })).toThrow(/neither code facts nor history/);
+    await expect(runAnalyze({ repo: FIXTURE, cwd })).rejects.toThrow(AnalysisError);
+    await expect(runAnalyze({ repo: FIXTURE, cwd })).rejects.toThrow(/neither code facts nor history/);
   });
 
-  it('refuses a store with no runs at all', () => {
+  it('refuses a store with no runs at all', async () => {
     db.close();
     const empty = mkdtempSync(join(tmpdir(), 'stratigraph-analyze-'));
     runInit({ repo: FIXTURE, cwd: empty });
-    expect(() => runAnalyze({ repo: FIXTURE, cwd: empty })).toThrow(/no runs in/);
+    await expect(runAnalyze({ repo: FIXTURE, cwd: empty })).rejects.toThrow(/no runs in/);
   });
 });
 
 describe('runAnalyze thresholds', () => {
-  it('takes maxFilesPerCommit from the config file', () => {
+  it('takes maxFilesPerCommit from the config file', async () => {
     writeFileSync(
       join(cwd, 'stratigraph.config.json'),
       JSON.stringify({ history: { maxFilesPerCommit: 2 } }),
@@ -370,13 +383,13 @@ describe('runAnalyze thresholds', () => {
     background();
     db.close();
 
-    const result = runAnalyze({ repo: FIXTURE, cwd });
+    const result = await runAnalyze({ repo: FIXTURE, cwd });
 
     expect(result.couplingStats).toMatchObject({ commitsCapped: 8 });
     expect(result.coupling).toEqual([]);
   });
 
-  it('lets --max-files-per-commit win over the config file', () => {
+  it('lets --max-files-per-commit win over the config file', async () => {
     writeFileSync(
       join(cwd, 'stratigraph.config.json'),
       JSON.stringify({ history: { maxFilesPerCommit: 2 } }),
@@ -385,16 +398,15 @@ describe('runAnalyze thresholds', () => {
     background();
     db.close();
 
-    const result = runAnalyze({ repo: FIXTURE, cwd, maxFilesPerCommit: 10 });
+    const result = await runAnalyze({ repo: FIXTURE, cwd, maxFilesPerCommit: 10 });
 
     expect(result.couplingStats).toMatchObject({ commitsCapped: 0 });
     expect(result.coupling).toHaveLength(3);
   });
 });
 
-describe('runAnalyze clustering', () => {
-  /** Two groups of three packages, plus a stray named with one and wired to the other. */
-  function seedGroups(): void {
+/** Two groups of three packages, plus a stray named with one and wired to the other. */
+function seedTwoGroups(): void {
     const path = (pkg: string) => `src/${pkg.replaceAll('.', '/')}/A.java`;
     const declare = (pkg: string) => [
       { v: 1, type: 'file', path: path(pkg), language: 'java' },
@@ -441,11 +453,12 @@ describe('runAnalyze clustering', () => {
     ]);
   }
 
-  it('clusters and reports mismatches with no model involved', () => {
-    seedGroups();
+describe('runAnalyze clustering', () => {
+  it('clusters and reports mismatches with no model involved', async () => {
+    seedTwoGroups();
     db.close();
 
-    const result = runAnalyze({ repo: FIXTURE, cwd, llm: false });
+    const result = await runAnalyze({ repo: FIXTURE, cwd, llm: false });
 
     expect(result.clusters?.clusters).toHaveLength(2);
     expect(result.mismatches.map((mismatch) => mismatch.fqn)).toEqual([
@@ -457,28 +470,116 @@ describe('runAnalyze clustering', () => {
     expect(out).toContain('coupling weight 1');
     expect(out).toContain('Packages whose name and edges disagree');
     expect(out).toContain('shop.billing.report is named under shop.billing');
-    expect(out).toContain('Cluster names and descriptions are not written');
+    expect(out).toContain('Interpretation is off (--no-llm)');
+    expect(result.interpretation).toBeNull();
+    expect(result.interpretationSkipped).toBe('disabled');
   });
 
-  it('honours --coupling-weight 0, which clusters on structure alone', () => {
-    seedGroups();
+  it('honours --coupling-weight 0, which clusters on structure alone', async () => {
+    seedTwoGroups();
     db.close();
 
-    const result = runAnalyze({ repo: FIXTURE, cwd, llm: false, couplingWeight: 0 });
+    const result = await runAnalyze({ repo: FIXTURE, cwd, llm: false, couplingWeight: 0 });
 
     expect(stdout()).toContain('coupling weight 0');
     expect(result.clusters?.clusters).toHaveLength(2);
   });
 
-  it('says plainly that a history-only run has nothing to cluster', () => {
+  it('says plainly that a history-only run has nothing to cluster', async () => {
     commit(['a.java', 'b.java']);
     db.close();
 
-    const result = runAnalyze({ repo: FIXTURE, cwd, llm: false });
+    const result = await runAnalyze({ repo: FIXTURE, cwd, llm: false });
 
     expect(result.clusters).toBeNull();
     expect(result.mismatches).toEqual([]);
     // No partition is printed, invented or otherwise.
     expect(stdout()).not.toContain('package clusters');
+  });
+});
+
+describe('runAnalyze interpretation', () => {
+  /** Answers whatever the pack asked, citing its first item. */
+  function client(): ModelClient & { calls: number } {
+    return {
+      calls: 0,
+      async complete(request) {
+        this.calls += 1;
+        const id = /\n {2}(n1) {2}/.exec(request.prompt)?.[1] ?? 'n1';
+        return {
+          model: 'claude-opus-5',
+          refusal: null,
+          output: {
+            name: 'Order handling',
+            responsibility: [{ text: 'Groups packages that reference each other.', cites: [id] }],
+            mismatch: null,
+            adrCandidates: [
+              {
+                title: 'These packages form one unit',
+                decision: { text: 'They reference each other directly.', cites: [id] },
+                evidence: { text: 'The edges connect them.', cites: [id] },
+                question: 'Was this grouping intended?',
+              },
+            ],
+          },
+        };
+      },
+    };
+  }
+
+  it('names clusters and prints ADR candidates, marked as inference', async () => {
+    seedTwoGroups();
+    db.close();
+
+    const result = await runAnalyze({ repo: FIXTURE, cwd, client: client() });
+
+    expect(result.interpretation?.described).toBe(2);
+    expect(result.adrCandidates).toHaveLength(2);
+    expect(result.clusters?.clusters.every((c) => c.name === 'Order handling')).toBe(true);
+
+    const out = stdout();
+    expect(out).toContain('Order handling (');
+    expect(out).toContain('Interpretation by claude-opus-5 — 2 of 2 clusters described.');
+    expect(out).toContain('Names and descriptions above this line are inference, not observation.');
+    expect(out).toContain('ADR candidates (2) — proposals, not findings:');
+    expect(out).toContain('Question for the team: Was this grouping intended?');
+  });
+
+  it('reports rejected descriptions rather than quietly dropping them', async () => {
+    seedTwoGroups();
+    db.close();
+
+    const liar: ModelClient = {
+      async complete() {
+        return {
+          model: 'claude-opus-5',
+          refusal: null,
+          output: {
+            name: 'Order handling',
+            responsibility: [
+              { text: 'com.invented.Thing does the work.', cites: ['n1'] },
+            ],
+            mismatch: null,
+            adrCandidates: [],
+          },
+        };
+      },
+    };
+
+    const result = await runAnalyze({ repo: FIXTURE, cwd, client: liar });
+
+    expect(result.interpretation?.described).toBe(0);
+    expect(result.interpretation?.rejected).toBe(2);
+    expect(stdout()).toContain('2 description(s) failed the citation check and were discarded');
+  });
+
+  it('says why it skipped when there is no credential', async () => {
+    seedTwoGroups();
+    db.close();
+
+    const result = await runAnalyze({ repo: FIXTURE, cwd });
+
+    expect(result.interpretationSkipped).toBe('no-credential');
+    expect(stdout()).toContain('Interpretation skipped: no model credential found');
   });
 });

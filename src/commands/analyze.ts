@@ -1,5 +1,5 @@
 import { loadConfig, type ConfigOverrides } from '../config.js';
-import { detectClusters, type ClusterResult } from '../analysis/clusters.js';
+import { detectClusters, loadClusters, type ClusterResult } from '../analysis/clusters.js';
 import {
   computeTemporalCoupling,
   type CoupledPair,
@@ -15,6 +15,12 @@ import {
 import { buildPackageGraph, DEPENDENCY_EDGE_KINDS } from '../analysis/package-graph.js';
 import { assertSchemaCurrent, openDatabase, type Db } from '../db/database.js';
 import { latestRun } from '../db/run.js';
+import {
+  createModelClient,
+  credentialAvailable,
+  type ModelClient,
+} from '../interpret/client.js';
+import { ADR_RULE, runInterpretation, type InterpretResult } from '../interpret/run.js';
 import { info, print } from '../log.js';
 
 /** Rows per report section, unless `--top` says otherwise. */
@@ -25,6 +31,11 @@ export interface AnalyzeOptions extends ConfigOverrides {
   run?: number | undefined;
   /** Rows per section. */
   top?: number | undefined;
+  /**
+   * Model client for the interpretation layer. Injected by tests; in normal use
+   * one is constructed only when `llm.enabled` and a credential resolves.
+   */
+  client?: ModelClient | undefined;
 }
 
 export interface AnalyzeResult {
@@ -41,6 +52,12 @@ export interface AnalyzeResult {
   clusters: ClusterResult | null;
   /** Layer 4: packages whose name and edges disagree. */
   mismatches: IntentMismatch[];
+  /** Layer 4: the model step. Null when it did not run, with `skipped` saying why. */
+  interpretation: InterpretResult | null;
+  /** Why interpretation did not run, when it did not. */
+  interpretationSkipped: 'disabled' | 'no-credential' | null;
+  /** Model-authored ADR candidates for this run. Empty without interpretation. */
+  adrCandidates: Array<{ title: string; detail: string }>;
   findings: RecordedFindings | null;
   /**
    * Whether this run has any extracted dependency to have checked against.
@@ -64,7 +81,7 @@ export interface AnalyzeResult {
  * history works, and so does a run with history and no facts — which is the
  * normal case on a machine with no JDK.
  */
-export function runAnalyze(options: AnalyzeOptions): AnalyzeResult {
+export async function runAnalyze(options: AnalyzeOptions): Promise<AnalyzeResult> {
   const config = loadConfig(options);
   const top = options.top ?? DEFAULT_TOP;
   const db = openDatabase(config.dbPath, { mustExist: true });
@@ -100,6 +117,9 @@ export function runAnalyze(options: AnalyzeOptions): AnalyzeResult {
       busFactor: [],
       clusters: null,
       mismatches: [],
+      interpretation: null,
+      interpretationSkipped: null,
+      adrCandidates: [],
       findings: null,
       staticGraph: countDependencyEdges(db, runId) > 0,
     };
@@ -140,11 +160,59 @@ export function runAnalyze(options: AnalyzeOptions): AnalyzeResult {
       );
     }
 
+    // The model step runs last: it reads the clusters and mismatches the
+    // algorithms just wrote, and everything above it is already durable if it
+    // fails. `--no-llm` stops here with a complete structural report.
+    if (result.clusters !== null) {
+      const client = options.client ?? modelClient(config.llm.enabled, config.llm.model);
+      if (client === null) {
+        result.interpretationSkipped = config.llm.enabled ? 'no-credential' : 'disabled';
+      } else {
+        result.interpretation = await runInterpretation(
+          db,
+          runId,
+          result.clusters.clusters,
+          result.mismatches,
+          client,
+          {
+            minClusterSize: config.interpret.minClusterSize,
+            maxClusters: config.interpret.maxClusters,
+            sendSource: config.llm.sendSource,
+            repoPath: config.repoPath,
+          },
+        );
+        // Re-read so the report prints the names the model just wrote.
+        result.clusters = {
+          ...result.clusters,
+          clusters: loadClusters(db, runId),
+        };
+        result.adrCandidates = db
+          .prepare(
+            `SELECT title, detail FROM finding
+              WHERE run_id = ? AND rule = ? AND authored_by = 'model' ORDER BY id`,
+          )
+          .all(runId, ADR_RULE) as Array<{ title: string; detail: string }>;
+      }
+    }
+
     report(result, top, graph.packages.size, commits, config.interpret.couplingWeight);
     return result;
   } finally {
     db.close();
   }
+}
+
+/**
+ * A client, or null with the reason left to the caller.
+ *
+ * No credential is not a failure. `analyze` is useful without a model — that is
+ * the point of the layering — so the absence is reported in one line and the
+ * structural report is printed as normal.
+ */
+function modelClient(enabled: boolean, model: string): ModelClient | null {
+  if (!enabled) return null;
+  if (!credentialAvailable()) return null;
+  return createModelClient(model);
 }
 
 export class AnalysisError extends Error {
@@ -196,6 +264,7 @@ function report(
 ): void {
   reportCycles(result.cycles, packages);
   reportClusters(result.clusters, top, couplingWeight);
+  reportInterpretation(result);
   reportMismatches(result.mismatches, top);
   reportCoupling(result, top);
   reportHotspots(result.hotspots, top);
@@ -256,8 +325,59 @@ function reportClusters(
     // hundred of them one per line would bury the clusters that matter.
     print(`  ${clusters.singletons} package(s) group with nothing and are not listed.`);
   }
-  if (clusters.clusters.every((cluster) => cluster.name === null)) {
-    print('  Cluster names and descriptions are not written: no interpretation ran.');
+}
+
+/**
+ * What the model wrote, and what it failed to write.
+ *
+ * Both halves are printed. A cluster the model could not describe must not read
+ * like one nobody tried to describe (ADR-0013), and a report that quietly
+ * dropped a third of its descriptions would look like one with less to say.
+ */
+function reportInterpretation(result: AnalyzeResult): void {
+  if (result.clusters === null) return;
+
+  if (result.interpretation === null) {
+    print('');
+    print(
+      result.interpretationSkipped === 'disabled'
+        ? '  Interpretation is off (--no-llm). Everything above is structural.'
+        : '  Interpretation skipped: no model credential found. Set ANTHROPIC_API_KEY ' +
+            'or run `ant auth login`. Everything above is structural.',
+    );
+    return;
+  }
+
+  const { described, attempted, considered, rejected, declined, models } =
+    result.interpretation;
+
+  print('');
+  print(
+    `Interpretation by ${models.join(', ') || 'no model'} — ` +
+      `${described} of ${attempted} clusters described.`,
+  );
+  print('  Names and descriptions above this line are inference, not observation.');
+  if (considered > attempted) {
+    print(`  ${considered - attempted} more were eligible but past the cap (interpret.maxClusters).`);
+  }
+  if (rejected > 0) {
+    print(
+      `  ${rejected} description(s) failed the citation check and were discarded — ` +
+        `see the diagnostic table.`,
+    );
+  }
+  if (declined > 0) {
+    print(`  ${declined} cluster(s) got no usable answer from the model.`);
+  }
+
+  if (result.adrCandidates.length > 0) {
+    print('');
+    print(`ADR candidates (${result.adrCandidates.length}) — proposals, not findings:`);
+    for (const [n, candidate] of result.adrCandidates.entries()) {
+      print('');
+      print(`${n + 1}. ${candidate.title}`);
+      print(candidate.detail);
+    }
   }
 }
 

@@ -31,11 +31,22 @@ const TSX_LOADER = pathToFileURL(
  * Run the CLI as a real subprocess. Invoking node with tsx's loader rather than
  * `node_modules/.bin/tsx` because on Windows that shim is a `.cmd`, which
  * spawnSync cannot execute without a shell.
+ *
+ * The credential environment is stripped deliberately. Without it a developer
+ * who happens to have ANTHROPIC_API_KEY exported would have `npm test` making
+ * real API calls, which is neither hermetic nor free.
  */
 function runCli(args: string[], cwd: string): { status: number; stdout: string; stderr: string } {
+  const env: NodeJS.ProcessEnv = {
+    ...process.env,
+    ANTHROPIC_CONFIG_DIR: join(cwd, 'no-credentials'),
+  };
+  delete env['ANTHROPIC_API_KEY'];
+  delete env['ANTHROPIC_AUTH_TOKEN'];
   try {
     const stdout = execFileSync(process.execPath, ['--import', TSX_LOADER, CLI, ...args], {
       cwd,
+      env,
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'pipe'],
     });

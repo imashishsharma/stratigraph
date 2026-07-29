@@ -74,8 +74,12 @@ not think about toolchains at all. See
 stratigraph init    --repo ../some-monolith   # create the fact store
 stratigraph extract --repo ../some-monolith   # run the Java extractor into it
 stratigraph history --repo ../some-monolith   # mine git: churn, complexity, authors
-stratigraph analyze --repo ../some-monolith   # cycles, coupling, hotspots, ownership
+stratigraph analyze --repo ../some-monolith   # cycles, clusters, coupling, hotspots, ownership
 ```
+
+`analyze --no-llm` is the whole report minus the prose: clusters, mismatches,
+cycles, coupling, hotspots and ownership all come out of algorithms. The model
+adds names and readings on top of that, and never replaces any of it.
 
 `history` attaches to the run `extract` opened, so both halves share one
 `run_id` — which is what lets `analyze` say exactly which co-changing files
@@ -141,6 +145,88 @@ stratigraph history --repo ../some-monolith --since '3 years ago'
 stratigraph analyze --repo ../some-monolith --top 40
 ```
 
+### Clusters, and the packages whose name is a lie
+
+`analyze` groups packages into communities over one graph built from **both**
+layers: the dependency edges the extractor observed, and the co-change the
+history miner measured. History is allowed to move a package into the group it
+actually belongs to, which is the point of combining them at all.
+
+```
+3 package clusters (modularity 0.412, coupling weight 1):
+
+1. Order handling (com.example.shop.order) — 7 packages
+   Serves the order lifecycle and persists it.
+     com.example.shop.order.api
+     ...
+```
+
+`coupling weight` is printed because it decides the answer: at `0` the grouping
+is purely structural, and raising it lets history outvote the imports. Run it
+again with `--coupling-weight 0` and see what moves. The algorithm is Louvain
+with every source of randomness removed, so the same facts always give the same
+clusters — a partition that shifted between runs would make every finding built
+on it unfalsifiable ([ADR-0012](docs/adr/0012-the-combined-graph-and-louvain.md)).
+
+The finding worth the milestone is the next one:
+
+```
+1. [high] shop.billing.report is named under shop.billing but clusters with shop.admin
+   All of the 3 packages named under shop.billing sit in shop.billing:
+   shop.billing.invoice, shop.billing.ledger, shop.billing.payment.
+   This one sits in shop.admin instead.
+   connected to shop.admin.role: imports shop.billing.report.A → shop.admin.role.A
+     (src/shop/billing/report/A.java:201)
+```
+
+A package name is a path, so the packages sharing its parent path are its
+declared neighbourhood, and "named alongside these three, clustered with those
+three" is arithmetic — not a model's opinion about what `report` sounds like.
+The model may later describe what the two responsibilities appear to be; it
+never decides that a mismatch exists
+([ADR-0014](docs/adr/0014-intent-versus-structure.md)).
+
+### Interpretation, and what stops it inventing things
+
+Names, descriptions and ADR candidates are the only things a model writes, and
+they are written under a contract enforced in code rather than in the prompt.
+
+Each cluster is packed into a numbered list of evidence — packages, edges with
+file and line, files with their churn, commits — where every item carries an
+**opaque, pack-local id** (`e12`, not the database's edge id). A model that
+guesses a database id lands on a real row, so guessing fails open. A model that
+guesses `e99` in a pack of twelve lands on nothing.
+
+Four rules reject a response outright:
+
+1. a citation that is not an id in the pack;
+2. a claim that cites nothing;
+3. **any identifier, path or commit sha in the prose that the pack did not
+   contain** — this is the one that catches a real citation attached to a
+   sentence about a class that does not exist;
+4. an ADR candidate whose evidence does not resolve.
+
+A rejected response is retried once with the violations attached, then
+discarded. Nothing rejected is ever stored, and every give-up leaves a
+`diagnostic` row — because a cluster nobody could describe must not read like
+one nobody tried to describe
+([ADR-0013](docs/adr/0013-the-grounding-contract.md)).
+
+```
+Interpretation by claude-opus-5 — 12 of 14 clusters described.
+  Names and descriptions above this line are inference, not observation.
+  2 description(s) failed the citation check and were discarded — see the diagnostic table.
+```
+
+What the check cannot do is verify that the evidence *supports* the sentence. A
+model can cite seven genuine imports and draw the wrong conclusion from all of
+them. That is exactly why the mismatch claim above stays algorithmic, and why
+everything model-authored is stored with `authored_by = 'model'`, the model id
+that answered, and a report that says which lines are inference.
+
+Without a credential — or with `--no-llm` — `analyze` says so in one line and
+prints the structural report unchanged.
+
 ### The Java extractor
 
 Needs a JDK 17+ to *run in*; it parses source of any vintage, including Java 8.
@@ -179,13 +265,20 @@ error, not a shrug.
   "exclude": ["node_modules", "target", "generated"],
   "java": { "home": "/opt/jdk21", "jar": "./stratigraph-java-extractor.jar" },
   "history": { "since": "3 years ago", "maxFilesPerCommit": 50, "minShared": 5 },
-  "llm": { "enabled": true, "sendSource": false }
+  "interpret": { "couplingWeight": 1, "minClusterSize": 2, "maxClusters": 25 },
+  "llm": { "enabled": true, "model": "claude-opus-5", "sendSource": false }
 }
 ```
 
 `llm.sendSource` is off by default and loudly logged when on. Extraction and
 history mining are entirely local; only the interpretation layer talks to a
 model API, and only about structural metadata unless you opt in.
+
+`interpret.couplingWeight` is the knob that decides the clustering, so `analyze`
+prints the value it used. `maxClusters` caps how many clusters are sent to the
+model, so a large repository cannot run away with your bill. The model comes
+from `--model`, then `llm.model`, then the default; whichever answered is
+recorded on every row it writes.
 
 ## Architecture
 

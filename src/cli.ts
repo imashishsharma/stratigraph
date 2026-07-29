@@ -119,13 +119,13 @@ export function buildProgram(): Command {
       'how much co-change weighs against dependency when clustering (0 disables it)',
     )
     .action(
-      (options: {
+      async (options: {
         run?: string;
         top?: string;
         maxFilesPerCommit?: string;
         couplingWeight?: string;
       }) => {
-        runAnalyze({
+        await runAnalyze({
           ...overrides(program),
           run: parsePositiveInt('--run', options.run),
           top: parsePositiveInt('--top', options.top),
