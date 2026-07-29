@@ -31,6 +31,19 @@ function fixture(name: string): string {
 
 const MIXED = fixture('mixed.log.txt');
 
+describe('the captured fixture', () => {
+  it('reaches the test with its bytes intact', () => {
+    // In this stream a newline separates a commit header from its diff; it is
+    // structure, not text. Git's default `core.autocrlf` on Windows rewrites
+    // it on checkout, which leaves a stray CR on every subject and makes ten
+    // assertions below fail in ways that all look like parser bugs.
+    // `.gitattributes` marks the file `-text`; this fails first, and names it.
+    expect(MIXED.includes('\r'), 'fixture was checked out with CRLF — see .gitattributes').toBe(
+      false,
+    );
+  });
+});
+
 function bySubject(commits: Commit[], subject: string): Commit {
   const found = commits.find((c) => c.subject === subject);
   if (!found) throw new Error(`no commit with subject "${subject}"`);

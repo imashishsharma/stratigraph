@@ -1,0 +1,14 @@
+# Line endings.
+#
+# Git converts LF to CRLF on checkout under Windows' default `core.autocrlf`.
+# That is fine for source, and fatal for a fixture that asserts exact bytes:
+# `fixtures/git-log/mixed.log.txt` is a captured `git log` stream in which the
+# newline is a *separator between a commit header and its diff*, not text. A
+# CRLF checkout leaves a stray CR on the end of every subject, and the parser
+# tests fail on Windows in ten places that all look like parser bugs.
+#
+# `-text` means "never convert this file's line endings, in either direction".
+fixtures/git-log/*.log.txt -text
+
+# The extractor goldens are compared byte-for-byte too.
+fixtures/**/expected-facts.ndjson -text
