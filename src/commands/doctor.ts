@@ -4,6 +4,7 @@ import { existsSync, statSync } from 'node:fs';
 import { loadConfig, type ConfigOverrides } from '../config.js';
 import { currentVersion, openDatabase } from '../db/database.js';
 import { SCHEMA_VERSION } from '../db/migrations/index.js';
+import { countCommits, gitToplevel, isShallowClone } from '../history/git-log.js';
 import { findExtractorJar, JAR_ENV_VAR } from '../toolchain/extractor-jar.js';
 import { discoverJavaRuntimes, findJava, MIN_JAVA_MAJOR } from '../toolchain/java.js';
 import { TOOL_VERSION } from '../version.js';
@@ -95,6 +96,7 @@ export function runDoctor(overrides: ConfigOverrides): Check[] {
       status: 'ok',
       detail: config.source ?? 'defaults (no stratigraph.config.json found)',
     });
+    checks.push(historyCheck(config.repoPath));
     if (existsSync(config.dbPath)) {
       const db = openDatabase(config.dbPath, { mustExist: true, readonly: true });
       const version = currentVersion(db);
@@ -119,6 +121,40 @@ export function runDoctor(overrides: ConfigOverrides): Check[] {
   }
 
   return checks;
+}
+
+/**
+ * How much history there is to mine.
+ *
+ * A shallow clone is the trap worth naming: `git log` succeeds, mining
+ * succeeds, and every number comes out a fraction of the truth with nothing to
+ * explain it.
+ */
+function historyCheck(repoPath: string): Check {
+  const toplevel = gitToplevel(repoPath);
+  if (toplevel === null) {
+    return {
+      name: 'history',
+      status: 'missing',
+      detail: `${repoPath} is not inside a git repository — churn, coupling and ownership are unavailable`,
+    };
+  }
+  if (isShallowClone(repoPath)) {
+    return {
+      name: 'history',
+      status: 'warn',
+      detail: `shallow clone — most commits are absent, so every history metric will be understated; run \`git fetch --unshallow\``,
+    };
+  }
+  const commits = countCommits(repoPath);
+  return {
+    name: 'history',
+    status: 'ok',
+    detail:
+      commits === null
+        ? `${toplevel} (no commits yet)`
+        : `${commits} commits in ${toplevel}${repoPath === toplevel ? '' : ` (analysing ${repoPath})`}`,
+  };
 }
 
 function builtAt(path: string): string {

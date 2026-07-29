@@ -4,7 +4,7 @@ import { pathToFileURL } from 'node:url';
 
 import { Command, Option } from 'commander';
 
-import { AnalysisError, runAnalyze } from './commands/analyze.js';
+import { AnalysisError, DEFAULT_TOP, runAnalyze } from './commands/analyze.js';
 import { runDoctor } from './commands/doctor.js';
 import { ExtractError, runExtract } from './commands/extract.js';
 import { HistoryError, runHistory } from './commands/history.js';
@@ -103,10 +103,25 @@ export function buildProgram(): Command {
 
   program
     .command('analyze')
-    .description('derive structure from stored facts: package graph and cycles')
+    .description(
+      'derive structure from stored facts: package cycles, coupling, hotspots, ownership',
+    )
     .option('--run <id>', 'analyse a specific run instead of the most recent')
-    .action((options: { run?: string }) => {
-      runAnalyze({ ...overrides(program), run: parsePositiveInt('--run', options.run) });
+    .option('--top <n>', `rows per report section (default ${DEFAULT_TOP})`)
+    .option(
+      '--max-files-per-commit <n>',
+      'commits touching more than this take no part in coupling',
+    )
+    .action((options: { run?: string; top?: string; maxFilesPerCommit?: string }) => {
+      runAnalyze({
+        ...overrides(program),
+        run: parsePositiveInt('--run', options.run),
+        top: parsePositiveInt('--top', options.top),
+        maxFilesPerCommit: parsePositiveInt(
+          '--max-files-per-commit',
+          options.maxFilesPerCommit,
+        ),
+      });
     });
 
   program

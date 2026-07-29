@@ -39,7 +39,20 @@ export interface RecordedFindings {
 export function recordHistoryFindings(
   db: Db,
   runId: number,
-  input: { pairs: readonly CoupledPair[]; hotspots: readonly Hotspot[]; busFactor: readonly Hotspot[] },
+  input: {
+    pairs: readonly CoupledPair[];
+    hotspots: readonly Hotspot[];
+    busFactor: readonly Hotspot[];
+    /**
+     * Whether this run has a static graph to have checked against.
+     *
+     * Without it, `staticEdges = 0` for every pair — not because nothing
+     * connects them but because nothing was looked at. Reporting that as "no
+     * dependency" would be asserting an absence never established, which is
+     * the failure CLAUDE.md is written against.
+     */
+    staticGraph: boolean;
+  },
 ): RecordedFindings {
   const insertFinding = db.prepare(
     `INSERT INTO finding (run_id, rule, title, detail, severity, authored_by)
@@ -111,14 +124,19 @@ export function recordHistoryFindings(
 
       write(
         COUPLING_RULE,
-        `${pair.pathA} and ${pair.pathB} change together, with no dependency between them`,
+        input.staticGraph
+          ? `${pair.pathA} and ${pair.pathB} change together, with no dependency between them`
+          : `${pair.pathA} and ${pair.pathB} change together`,
         [
           `  ${pair.shared} of the ${Math.min(pair.commitsA, pair.commitsB)} commits touching ` +
             `either file touch both (strength ${pair.strength.toFixed(2)}), ` +
             `${pair.lift.toFixed(1)}x what independent files would share.`,
           `  ${pair.pathA}: ${pair.commitsA} commits`,
           `  ${pair.pathB}: ${pair.commitsB} commits`,
-          `  No imports, calls, inheritance or injection connects them in the static graph.`,
+          input.staticGraph
+            ? `  No imports, calls, inheritance or injection connects them in the static graph.`
+            : `  This run has no extracted code, so nothing was checked for a dependency — ` +
+              `no evidence was found either way. Run \`stratigraph extract\` to establish it.`,
         ].join('\n'),
         pair.strength >= 0.8 ? 'high' : pair.strength >= 0.5 ? 'medium' : 'low',
         shas,

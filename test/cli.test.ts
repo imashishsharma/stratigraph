@@ -217,7 +217,10 @@ describe('stratigraph analyze', () => {
     runInit({ repo: FIXTURE, cwd: dir });
     const { status, stderr } = runCli(['analyze', '--repo', FIXTURE], dir);
     expect(status).toBe(2);
-    expect(stderr).toMatch(/no facts in/);
+    // Both routes into the store are named: with M2 there are two, and a
+    // message that mentions only `extract` sends a user with no JDK nowhere.
+    expect(stderr).toMatch(/no runs in/);
+    expect(stderr).toMatch(/stratigraph extract` or `stratigraph history/);
   });
 
   it('rejects a --run that is not a positive integer', () => {
@@ -241,6 +244,7 @@ describe('stratigraph doctor', () => {
       'java',
       'extractor',
       'config',
+      'history',
       'database',
     ]);
     // A missing or old JDK limits one extractor; it is never a hard failure.

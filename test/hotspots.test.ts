@@ -191,6 +191,7 @@ describe('recordHistoryFindings', () => {
       pairs: [pair()],
       hotspots: [],
       busFactor: [],
+      staticGraph: true,
     });
 
     expect(counts.coupling).toBe(1);
@@ -212,6 +213,7 @@ describe('recordHistoryFindings', () => {
       pairs: [pair({ staticEdges: 4 })],
       hotspots: [],
       busFactor: [],
+      staticGraph: true,
     });
     expect(findings(COUPLING_RULE)).toEqual([]);
   });
@@ -225,12 +227,30 @@ describe('recordHistoryFindings', () => {
       ],
       hotspots: [],
       busFactor: [],
+      staticGraph: true,
     });
     expect(findings(COUPLING_RULE).map((f) => f['severity'])).toEqual(['high', 'medium', 'low']);
   });
 
+  it('does not claim an absence it never checked for', () => {
+    // With no extracted code, staticEdges is zero for every pair because
+    // nothing was looked at. The finding has to say that, or it asserts an
+    // absence that was never established.
+    recordHistoryFindings(db, runId, {
+      pairs: [pair()],
+      hotspots: [],
+      busFactor: [],
+      staticGraph: false,
+    });
+
+    const [finding] = findings(COUPLING_RULE);
+    expect(finding?.['title']).toBe('OrderService.java and order-form.html change together');
+    expect(finding?.['detail']).toMatch(/no evidence was found either way/);
+    expect(finding?.['detail']).not.toMatch(/No imports, calls/);
+  });
+
   it('reports the lift in the detail, so the claim can be checked', () => {
-    recordHistoryFindings(db, runId, { pairs: [pair()], hotspots: [], busFactor: [] });
+    recordHistoryFindings(db, runId, { pairs: [pair()], hotspots: [], busFactor: [], staticGraph: true });
     expect(findings(COUPLING_RULE)[0]?.['detail']).toMatch(/6\.2x what independent files would share/);
   });
 
@@ -243,6 +263,7 @@ describe('recordHistoryFindings', () => {
       pairs: [],
       hotspots: topHotspots(db, runId, 10),
       busFactor: [],
+      staticGraph: true,
     });
 
     const [finding] = findings(HOTSPOT_RULE);
@@ -261,6 +282,7 @@ describe('recordHistoryFindings', () => {
       pairs: [],
       hotspots: topHotspots(db, runId, 10),
       busFactor: [],
+      staticGraph: true,
     });
     expect(findings(HOTSPOT_RULE)[0]?.['detail']).toMatch(/proxy for nesting/);
   });
@@ -273,6 +295,7 @@ describe('recordHistoryFindings', () => {
       pairs: [],
       hotspots: [],
       busFactor: busFactorRisks(db, runId, 10, 5),
+      staticGraph: true,
     });
 
     const [finding] = findings(BUS_FACTOR_RULE);
@@ -288,8 +311,8 @@ describe('recordHistoryFindings', () => {
     metric('order-form.html', {});
     commit('ada', ['OrderService.java', 'order-form.html']);
 
-    recordHistoryFindings(db, runId, { pairs: [pair()], hotspots: [], busFactor: [] });
-    recordHistoryFindings(db, runId, { pairs: [pair()], hotspots: [], busFactor: [] });
+    recordHistoryFindings(db, runId, { pairs: [pair()], hotspots: [], busFactor: [], staticGraph: true });
+    recordHistoryFindings(db, runId, { pairs: [pair()], hotspots: [], busFactor: [], staticGraph: true });
 
     expect(findings(COUPLING_RULE)).toHaveLength(1);
     // Citations went with them, rather than being orphaned.
@@ -302,7 +325,7 @@ describe('recordHistoryFindings', () => {
        VALUES (?, 'package-cycle', 'a cycle', 'high', 'algorithm')`,
     ).run(runId);
 
-    recordHistoryFindings(db, runId, { pairs: [], hotspots: [], busFactor: [] });
+    recordHistoryFindings(db, runId, { pairs: [], hotspots: [], busFactor: [], staticGraph: true });
 
     expect(
       db.prepare(`SELECT COUNT(*) AS n FROM finding WHERE rule = 'package-cycle'`).get(),
