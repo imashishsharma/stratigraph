@@ -24,6 +24,32 @@ let installDir: string;
 let bin: string;
 
 /**
+ * Windows has no extensionless executables. Both `npm` and the installed
+ * `stratigraph` are `.cmd` shims there, and since the fix for CVE-2024-27980
+ * (Node 18.20.2, 20.12.2) Node refuses to run a `.cmd` at all without a shell —
+ * which is why this suite was the one thing failing on every Windows runner.
+ *
+ * So on Windows we go through the shell and quote the arguments ourselves,
+ * because `shell: true` hands the argv to cmd.exe as one string. On POSIX we
+ * exec directly, which is what exercises the bin *symlink* this suite exists
+ * for.
+ */
+const WINDOWS = process.platform === 'win32';
+const NPM = WINDOWS ? 'npm.cmd' : 'npm';
+
+function quoted(args: string[]): string[] {
+  return WINDOWS ? args.map((arg) => `"${arg}"`) : args;
+}
+
+function npm(args: string[], cwd: string): void {
+  execFileSync(NPM, quoted(args), {
+    cwd,
+    shell: WINDOWS,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+}
+
+/**
  * spawnSync rather than execFileSync: the latter returns only stdout on
  * success, so a command whose output goes to stderr looks like it printed
  * nothing. `out` is both streams; `stdout` is asserted separately where the
@@ -33,7 +59,11 @@ function run(
   args: string[],
   cwd = installDir,
 ): { status: number; out: string; stdout: string; stderr: string } {
-  const result = spawnSync(bin, args, { cwd, encoding: 'utf8' });
+  const result = spawnSync(WINDOWS ? `"${bin}"` : bin, quoted(args), {
+    cwd,
+    encoding: 'utf8',
+    shell: WINDOWS,
+  });
   const stdout = result.stdout ?? '';
   const stderr = result.stderr ?? '';
   return { status: result.status ?? 1, out: `${stdout}${stderr}`, stdout, stderr };
@@ -41,21 +71,18 @@ function run(
 
 beforeAll(() => {
   const packDir = mkdtempSync(join(tmpdir(), 'stratigraph-pack-'));
-  execFileSync('npm', ['pack', '--pack-destination', packDir], {
-    cwd: REPO_ROOT,
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
+  npm(['pack', '--pack-destination', packDir], REPO_ROOT);
   const tarball = readdirSync(packDir).find((f) => f.endsWith('.tgz'));
   expect(tarball, 'npm pack produced no tarball').toBeDefined();
 
   installDir = mkdtempSync(join(tmpdir(), 'stratigraph-install-'));
   writeFileSync(join(installDir, 'package.json'), JSON.stringify({ name: 'consumer', private: true }));
-  execFileSync('npm', ['install', '--no-audit', '--no-fund', join(packDir, tarball as string)], {
-    cwd: installDir,
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
+  npm(['install', '--no-audit', '--no-fund', join(packDir, tarball as string)], installDir);
 
-  bin = join(installDir, 'node_modules', '.bin', 'stratigraph');
+  // npm writes three shims on Windows — an extensionless sh script for Git
+  // Bash, plus `.cmd` and `.ps1`. Only the `.cmd` is what a Windows shell
+  // actually runs, so that is the one worth driving.
+  bin = join(installDir, 'node_modules', '.bin', WINDOWS ? 'stratigraph.cmd' : 'stratigraph');
 }, 300_000);
 
 describe('the installed package', () => {
