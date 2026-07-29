@@ -55,7 +55,12 @@ jobs:
     name: java extractor
     runs-on: ubuntu-latest
     steps:
+      # Full history: this is the only job that mines git, and the default
+      # shallow checkout would hand it a single commit. Everything would still
+      # pass, having proved nothing.
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       # OpenRewrite's LST parsers need a JDK 17 toolchain to run in. This is
       # the JDK the extractor runs *on*, not the source level it can read: on
@@ -82,17 +87,27 @@ jobs:
           node-version: '20'
           cache: npm
       - run: npm ci
-      - name: Extract and analyse a fixture end to end
+      #
+      # The fixture is a subdirectory of this repository, so `history` also
+      # exercises the case where `git log` reports paths from the work tree
+      # root while `git ls-files` reports them from the cwd. If those are not
+      # reconciled every metric silently comes out empty, and only a real
+      # repository shows it.
+      - name: Extract, mine and analyse a fixture end to end
         run: |
           npx tsx src/cli.ts init    --repo fixtures/legacy-java
           npx tsx src/cli.ts extract --repo fixtures/legacy-java
+          npx tsx src/cli.ts history --repo fixtures/legacy-java
           npx tsx src/cli.ts analyze --repo fixtures/legacy-java
 
   no-jdk:
     name: no JDK installed
     runs-on: ubuntu-latest
     steps:
+      # History mining needs no JDK, so this job needs real commits to prove it.
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
@@ -108,3 +123,11 @@ jobs:
           JAVA_HOME= PATH="$(echo "$PATH" | tr ':' '\n' | grep -v -i jdk | grep -v -i java | paste -sd:)" \
             node dist/cli.js doctor --repo fixtures/tiny-java
           JAVA_HOME= node dist/cli.js init --repo fixtures/tiny-java
+
+      # Layer 3 needs no JVM at all, so a machine that cannot run the Java
+      # extractor must still get a complete history report. This is the whole
+      # reason `analyze` degrades section by section rather than requiring both.
+      - name: Mine and analyse history with no JDK
+        run: |
+          JAVA_HOME= node dist/cli.js history --repo fixtures/tiny-java
+          JAVA_HOME= node dist/cli.js analyze --repo fixtures/tiny-java

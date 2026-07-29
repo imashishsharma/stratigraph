@@ -70,8 +70,15 @@ not think about toolchains at all. See
 ```sh
 stratigraph init    --repo ../some-monolith   # create the fact store
 stratigraph extract --repo ../some-monolith   # run the Java extractor into it
-stratigraph analyze --repo ../some-monolith   # package graph and cycles
+stratigraph history --repo ../some-monolith   # mine git: churn, complexity, authors
+stratigraph analyze --repo ../some-monolith   # cycles, coupling, hotspots, ownership
 ```
+
+`history` attaches to the run `extract` opened, so both halves share one
+`run_id` — which is what lets `analyze` say exactly which co-changing files
+have no dependency between them. Either half works alone: on a machine with no
+JDK, `init` + `history` + `analyze` still produces a full history report, and
+`analyze` says which sections it could not fill rather than leaving them out.
 
 `analyze` prints each cycle as a path with the edges that justify every hop:
 
@@ -89,6 +96,47 @@ edges that produced them, never as facts — see
 
 `stratigraph extract --emit` writes the raw NDJSON to stdout instead of storing
 it, and `stratigraph ingest --from facts.ndjson` replays a captured stream.
+
+### History, and the coupling nobody wrote down
+
+The output worth having is the second section: files that change together over
+and over with **nothing in the code connecting them**. The static graph cannot
+see that by construction.
+
+```
+Files that change together with no dependency between them (top 20):
+
+1. src/main/java/com/example/order/OrderService.java
+   src/main/resources/db/migration/V12__order_status.sql
+   31 shared commits — strength 0.86, 9.4x chance (36 and 41 commits respectively)
+```
+
+Every such pair is stored as a finding citing the commit shas that produced it,
+so `git show` settles any disagreement. Nothing is filtered silently: the
+report says how many commits were considered, how many were too broad to pair,
+and how many pairs each threshold removed — an empty section reads like a clean
+repository unless it says what was examined.
+
+Three things decide whether that output is signal or noise, and all three are
+written down in [ADR-0011](docs/adr/0011-which-commits-count.md): merge commits
+are excluded, commits touching more than 50 files take no part in pairing (one
+repo-wide reformat otherwise couples everything it touched), and a pair must
+co-change *more often than chance*, not merely often.
+
+Renames are followed, so a file moved three years ago has one history rather
+than two halves. `git log --follow` cannot do this — it takes exactly one
+pathspec — so the miner makes one whole-repository pass and resolves the rename
+chains itself ([ADR-0009](docs/adr/0009-rename-tracking-without-follow.md)).
+
+Alongside it: hotspots ranked by churn × complexity, and files whose history is
+concentrated in one person. Complexity is total indentation — a proxy, named as
+one, chosen because it needs no parser and therefore also scores the XML, SQL
+and properties files that turn up in coupling pairs constantly.
+
+```sh
+stratigraph history --repo ../some-monolith --since '3 years ago'
+stratigraph analyze --repo ../some-monolith --top 40
+```
 
 ### The Java extractor
 
@@ -127,6 +175,7 @@ error, not a shrug.
   "db": ".stratigraph/monolith.db",
   "exclude": ["node_modules", "target", "generated"],
   "java": { "home": "/opt/jdk21", "jar": "./stratigraph-java-extractor.jar" },
+  "history": { "since": "3 years ago", "maxFilesPerCommit": 50, "minShared": 5 },
   "llm": { "enabled": true, "sendSource": false }
 }
 ```
@@ -170,11 +219,19 @@ extractor that prints canned NDJSON, because the protocol is the whole
 contract. The extractor's own suite asserts exact fact output for every
 fixture, and CI runs one job where a real jar meets the real fact store.
 
+It needs git for exactly one test, which builds its own repository with fixed
+dates and authors. Everything else about history is driven from a captured
+`git log` in `fixtures/git-log/` or from seeded rows, so the three-OS matrix
+depends on no binary it did not install.
+
 Conventions:
 
 - Test-first for anything in the fact layer. A parser change without a fixture
   test does not get committed.
 - Fixtures in `fixtures/` are tiny, hand-written, and assert exact fact output.
+  The one exception is `fixtures/git-log/`, captured from a real git — it
+  asserts what *git* emits, and inventing that from memory is how a parser ends
+  up handling a format nobody produces.
 - No speculative abstraction: two concrete implementations before an interface.
 - Every non-obvious decision gets an ADR in [`docs/adr/`](docs/adr/).
 
