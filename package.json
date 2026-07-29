@@ -22,6 +22,7 @@
     "stratigraph": "tsx src/cli.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.115.0",
     "better-sqlite3": "^11.10.0",
     "commander": "^12.1.0"
   },
