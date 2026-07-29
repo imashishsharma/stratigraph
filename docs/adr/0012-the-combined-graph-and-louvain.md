@@ -76,14 +76,25 @@ ever written.
 ### Weights: normalise each family, then add
 
 ```
-w(a,b) = log1p(references) / log1p(maxReferences)   +   couplingWeight × strength
+static(a,b)   = log1p(references) / log1p(maxReferences)      ∈ 0..1
+temporal(a,b) = Σ strength / max Σ strength                   ∈ 0..1
+
+w(a,b) = static(a,b) + couplingWeight × temporal(a,b)
 ```
 
 Static references are log-scaled first because they are not linear in coupling —
 a package pair with 500 references is more entangled than one with 5, but not a
 hundred times more, and without the log a handful of hub pairs dominate the
-modularity sum. The result is divided by the largest such value in the run, so
-the static family spans 0..1. `strength` is already 0..1 by construction.
+modularity sum. Both families are then divided by the largest value of their own
+kind in the run, so each spans 0..1 and `couplingWeight` is the only thing
+deciding the ratio between them.
+
+The temporal term needs that division even though a single `strength` is already
+0..1: several file pairs routinely resolve to the *same* package pair, and their
+strengths sum. Summing is the right aggregate — two packages joined by six
+co-changing file pairs are more entangled than two joined by one — but the sum
+is not bounded by 1, so it is scaled like the static side rather than capped,
+which would discard the difference between "six pairs" and "sixty".
 
 `couplingWeight` defaults to **1.0** — history and structure weigh the same —
 and is exposed as `interpret.couplingWeight`. At `0` the graph is exactly the
