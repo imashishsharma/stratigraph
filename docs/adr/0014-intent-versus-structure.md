@@ -63,6 +63,23 @@ up — so the label is least informative exactly when the finding is most
 interesting. The finding names the common prefix of the cluster's *other*
 members instead, recovering `shop.admin`.
 
+Four cases, because collapsing them produced three separate nonsenses on the
+first real runs:
+
+| Where it went | How the finding says it |
+| --- | --- |
+| Alone in its cluster | "groups with nothing" |
+| With the package its own name sits under | "groups with `P` itself rather than with the packages named alongside it" |
+| With a group sharing no prefix | "groups with N packages that share no common prefix" |
+| With a group sharing a prefix | "groups with `X`" |
+
+The third is the one that matters. `sharedPrefix` returns **null** rather than
+falling back to a member's name, because on dubbo the fallback rendered as
+"groups with com.alibaba.dubbo.config.spring.context.annotation" — a string that
+was simply the alphabetically first member of a 129-package cluster, standing in
+for a group it does not describe. A title that invents a coherent destination is
+the same failure as inventing an edge.
+
 ### The case with no evidence to cite
 
 A package can be a mismatch with no edges at all: its siblings cluster together
@@ -115,3 +132,10 @@ finding sees no majority to have left.
 - When the model later describes the two responsibilities, its sentences hang
   off a finding that was already true. If the model's prose is rejected by the
   citation check, the mismatch itself survives with its evidence intact.
+- The evidence query resolves every node to its package **once**, into an
+  indexed temp table, rather than per candidate-and-neighbour pair. The natural
+  implementation reuses `supportingEdges`, which re-runs the recursive
+  containment walk over the whole graph on every call; on dubbo's 130-package
+  cluster that is thousands of full-graph walks and `analyze` never finishes.
+  This is the one place in the layer where the obvious code is unusable at
+  scale, so it is written down rather than left to be rediscovered.

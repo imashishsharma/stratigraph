@@ -5,7 +5,12 @@ import { fileURLToPath } from 'node:url';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { commonPrefix, detectClusters, loadClusters } from '../src/analysis/clusters.js';
+import {
+  commonPrefix,
+  detectClusters,
+  loadClusters,
+  sharedPrefix,
+} from '../src/analysis/clusters.js';
 import { runInit } from '../src/commands/init.js';
 import { openDatabase, type Db } from '../src/db/database.js';
 import { createRun } from '../src/db/run.js';
@@ -223,6 +228,20 @@ describe('commonPrefix', () => {
     [[], ''],
   ])('%j -> %s', (fqns, expected) => {
     expect(commonPrefix(fqns)).toBe(expected);
+  });
+});
+
+describe('sharedPrefix', () => {
+  it.each([
+    [['com.foo.billing.invoice', 'com.foo.billing.payment'], 'com.foo.billing'],
+    [['com.foo.billing'], 'com.foo.billing'],
+    [['com.foo.billing', 'com.foo.billfold'], 'com.foo'],
+    // Null, not a fallback: callers that need to say "these share nothing"
+    // cannot tell that from a member's name standing in.
+    [['alpha.one', 'beta.two'], null],
+    [[], null],
+  ])('%j -> %s', (fqns, expected) => {
+    expect(sharedPrefix(fqns)).toBe(expected);
   });
 });
 

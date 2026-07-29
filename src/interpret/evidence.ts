@@ -171,7 +171,7 @@ function buildVocabulary(
     addPrefixes(mismatch.fqn);
     addPrefixes(mismatch.parent);
     addPrefixes(mismatch.expectedPrefix);
-    addPrefixes(mismatch.actualPrefix);
+    if (mismatch.actualPrefix !== null) addPrefixes(mismatch.actualPrefix);
     for (const sibling of mismatch.nameGroup) addPrefixes(sibling);
     for (const puller of mismatch.pulledBy) addPrefixes(puller);
   }

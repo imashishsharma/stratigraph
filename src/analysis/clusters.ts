@@ -157,19 +157,23 @@ export function loadClusters(db: Db, runId: number): ClusterSummary[] {
 }
 
 /**
- * The longest dot-separated prefix every fqn shares.
+ * The longest dot-separated prefix every fqn shares, or null when they share
+ * none.
  *
  * Segment-wise rather than character-wise, so `com.foo.billing` and
  * `com.foo.billfold` share `com.foo` and not `com.foo.bill` — the latter is not
  * a package and naming a cluster after it would be asserting a package that
  * does not exist.
  *
- * With nothing in common the alphabetically first member stands in. That is
- * still true of the cluster, whereas an empty label would say nothing at all.
+ * Null rather than a fallback, because callers need to tell the two apart. A
+ * cluster of `com.alibaba.dubbo.config.spring` and `org.apache.dubbo.config`
+ * shares nothing, and a caller that quietly substitutes one member's name for
+ * the group implies a coherent destination that is not there. Dubbo produced
+ * exactly that, in a finding title.
  */
-export function commonPrefix(fqns: readonly string[]): string {
+export function sharedPrefix(fqns: readonly string[]): string | null {
   const first = fqns[0];
-  if (first === undefined) return '';
+  if (first === undefined) return null;
   if (fqns.length === 1) return first;
 
   let shared = first.split('.');
@@ -178,8 +182,20 @@ export function commonPrefix(fqns: readonly string[]): string {
     let at = 0;
     while (at < shared.length && at < segments.length && shared[at] === segments[at]) at += 1;
     shared = shared.slice(0, at);
-    if (shared.length === 0) break;
+    if (shared.length === 0) return null;
   }
 
-  return shared.length > 0 ? shared.join('.') : ([...fqns].sort()[0] as string);
+  return shared.join('.');
+}
+
+/**
+ * A label for a group of packages, for places that need a string.
+ *
+ * Falls back to the alphabetically first member when nothing is shared — true
+ * of the group, and adequate as a list heading where the members are printed
+ * directly underneath. Anywhere the label has to carry the claim on its own,
+ * use `sharedPrefix` and handle the null.
+ */
+export function commonPrefix(fqns: readonly string[]): string {
+  return sharedPrefix(fqns) ?? ([...fqns].sort()[0] ?? '');
 }

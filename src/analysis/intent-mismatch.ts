@@ -14,8 +14,8 @@
  */
 
 import type { Db } from '../db/database.js';
-import { commonPrefix, type ClusterSummary } from './clusters.js';
-import { supportingEdges, type SupportingEdge } from './package-graph.js';
+import { sharedPrefix, type ClusterSummary } from './clusters.js';
+import { DEPENDENCY_EDGE_KINDS, type SupportingEdge } from './package-graph.js';
 
 export const RULE = 'intent-mismatch';
 
@@ -40,8 +40,8 @@ export interface IntentMismatch {
   /** The cluster the majority of the name group sits in. */
   expectedPrefix: string;
   /**
-   * Where it actually landed, named by the common prefix of its *other* cluster
-   * members. Empty when it landed alone.
+   * Where it actually landed, named by the prefix its *other* cluster members
+   * share. Null when they share none, or when it landed alone.
    *
    * Not the cluster's own label: this package is in that cluster, so it drags
    * the shared prefix up to whatever it has in common with the others —
@@ -49,7 +49,9 @@ export interface IntentMismatch {
    * when the mismatch is most interesting, so the finding excludes the package
    * it is about.
    */
-  actualPrefix: string;
+  actualPrefix: string | null;
+  /** How many packages it landed among. Names the destination when the prefix cannot. */
+  actualSize: number;
   /** It grouped with nothing at all, rather than with the wrong group. */
   landedAlone: boolean;
   /** Packages in the actual cluster that this one is connected to. */
@@ -112,6 +114,7 @@ export function detectIntentMismatches(
         nameGroup: [...nameGroup].sort(),
         expectedPrefix: home.cluster.prefix,
         actualPrefix: landed.prefix,
+        actualSize: landed.size,
         landedAlone: landed.alone,
         pulledBy: [],
         severity: home.unanimous ? 'high' : 'medium',
@@ -141,13 +144,15 @@ export function detectIntentMismatches(
 function neighbourPrefix(
   cluster: ClusterSummary,
   exclude: string,
-): { prefix: string; alone: boolean } {
+): { prefix: string | null; size: number; alone: boolean } {
   const others = cluster.members
     .map((member) => member.fqn)
     .filter((fqn) => fqn !== exclude);
-  return others.length > 0
-    ? { prefix: commonPrefix(others), alone: false }
-    : { prefix: '', alone: true };
+  return {
+    prefix: others.length > 0 ? sharedPrefix(others) : null,
+    size: others.length,
+    alone: others.length === 0,
+  };
 }
 
 /**
@@ -178,7 +183,79 @@ function strictMajorityCluster(
   return null;
 }
 
+/**
+ * Resolve every node to its enclosing package, once, into an indexed temp
+ * table.
+ *
+ * The obvious implementation calls `supportingEdges` per (candidate, cluster
+ * member) pair, and each of those runs the recursive containment walk over the
+ * whole graph again. On dubbo — 47k nodes, a 130-package cluster — that is
+ * thousands of full-graph walks and `analyze` does not finish. The walk is the
+ * same every time, so it is done once and joined against.
+ */
+function withPackageIndex<T>(db: Db, runId: number, run: () => T): T {
+  db.exec('DROP TABLE IF EXISTS temp.package_of');
+  db.exec('DROP TABLE IF EXISTS temp.file_package');
+  db.exec(`
+    CREATE TEMP TABLE package_of (node_id INTEGER PRIMARY KEY, package_id INTEGER NOT NULL);
+    CREATE TEMP TABLE file_package (file_id INTEGER NOT NULL, fqn TEXT NOT NULL);
+  `);
+
+  db.prepare(
+    /* sql */ `
+    INSERT INTO temp.package_of (node_id, package_id)
+    WITH RECURSIVE
+      ancestry(start_id, node_id, kind) AS (
+          SELECT n.id, n.id, n.kind FROM node n WHERE n.run_id = ?
+        UNION ALL
+          SELECT a.start_id, p.id, p.kind
+            FROM ancestry a
+            JOIN node c ON c.id = a.node_id
+            JOIN node p ON p.id = c.parent_id
+           WHERE a.kind <> 'package'
+      )
+    SELECT a.start_id, a.node_id
+      FROM ancestry a JOIN node p ON p.id = a.node_id
+     WHERE a.kind = 'package' AND p.is_stub = 0`,
+  ).run(runId);
+
+  db.prepare(
+    /* sql */ `
+    INSERT INTO temp.file_package (file_id, fqn)
+    SELECT DISTINCT n.file_id, p.fqn
+      FROM node n
+      JOIN temp.package_of po ON po.node_id = n.id
+      JOIN node p ON p.id = po.package_id
+     WHERE n.run_id = ? AND n.file_id IS NOT NULL AND n.is_stub = 0`,
+  ).run(runId);
+
+  db.exec(`
+    CREATE INDEX temp.package_of_pkg ON package_of (package_id);
+    CREATE INDEX temp.file_package_file ON file_package (file_id);
+  `);
+
+  try {
+    return run();
+  } finally {
+    db.exec('DROP TABLE IF EXISTS temp.package_of');
+    db.exec('DROP TABLE IF EXISTS temp.file_package');
+  }
+}
+
 function record(
+  db: Db,
+  runId: number,
+  candidates: IntentMismatch[],
+  clusterOf: Map<string, ClusterSummary>,
+  idOf: Map<string, number>,
+): IntentMismatch[] {
+  if (candidates.length === 0) return [];
+  return withPackageIndex(db, runId, () =>
+    recordWithIndex(db, runId, candidates, clusterOf, idOf),
+  );
+}
+
+function recordWithIndex(
   db: Db,
   runId: number,
   candidates: IntentMismatch[],
@@ -219,16 +296,9 @@ function record(
       const mine = clusterOf.get(candidate.fqn) as ClusterSummary;
       const self = idOf.get(candidate.fqn) as number;
 
-      // What in the cluster it landed in is actually connected to it.
-      const pulls: Array<{ fqn: string; edges: SupportingEdge[] }> = [];
-      for (const member of mine.members) {
-        if (member.fqn === candidate.fqn) continue;
-        const edges = [
-          ...supportingEdges(db, runId, self, member.nodeId, EVIDENCE),
-          ...supportingEdges(db, runId, member.nodeId, self, EVIDENCE),
-        ].slice(0, EVIDENCE);
-        if (edges.length > 0) pulls.push({ fqn: member.fqn, edges });
-      }
+      // What in the cluster it landed in is actually connected to it — in one
+      // query, both directions, capped per neighbour by the window function.
+      const pulls = edgesToClusterMates(db, runId, self, mine, EVIDENCE);
 
       const coupled = couplingBetween(db, runId, candidate.fqn, mine, EVIDENCE);
       const withPulls: IntentMismatch = {
@@ -281,6 +351,73 @@ function record(
   return write();
 }
 
+/**
+ * Every dependency edge, in either direction, between one package and the rest
+ * of its cluster — capped per neighbour rather than in total, so one heavily
+ * connected neighbour cannot crowd the others out of the evidence.
+ *
+ * Requires the temp index built by `withPackageIndex`.
+ */
+function edgesToClusterMates(
+  db: Db,
+  runId: number,
+  self: number,
+  cluster: ClusterSummary,
+  perMate: number,
+): Array<{ fqn: string; edges: SupportingEdge[] }> {
+  const mates = cluster.members
+    .filter((member) => member.nodeId !== self)
+    .map((member) => member.nodeId);
+  if (mates.length === 0) return [];
+
+  const kinds = DEPENDENCY_EDGE_KINDS.map((kind) => `'${kind}'`).join(', ');
+  const placeholders = mates.map(() => '?').join(', ');
+
+  const rows = db
+    .prepare(
+      /* sql */ `
+      SELECT edgeId, kind, srcFqn, dstFqn, path, line, otherId FROM (
+        SELECT e.id AS edgeId, e.kind AS kind, sn.fqn AS srcFqn, dn.fqn AS dstFqn,
+               f.path AS path, e.line AS line,
+               CASE WHEN sp.package_id = ? THEN dp.package_id ELSE sp.package_id END AS otherId,
+               ROW_NUMBER() OVER (
+                 PARTITION BY CASE WHEN sp.package_id = ? THEN dp.package_id ELSE sp.package_id END
+                 ORDER BY e.id
+               ) AS rn
+          FROM edge e
+          JOIN temp.package_of sp ON sp.node_id = e.src_id
+          JOIN temp.package_of dp ON dp.node_id = e.dst_id
+          JOIN node sn ON sn.id = e.src_id
+          JOIN node dn ON dn.id = e.dst_id
+          LEFT JOIN source_file f ON f.id = e.file_id
+         WHERE e.run_id = ?
+           AND e.kind IN (${kinds})
+           AND e.confidence = 'fact'
+           AND sp.package_id <> dp.package_id
+           AND ((sp.package_id = ? AND dp.package_id IN (${placeholders}))
+             OR (dp.package_id = ? AND sp.package_id IN (${placeholders})))
+      ) WHERE rn <= ?
+      ORDER BY otherId, edgeId`,
+    )
+    .all(self, self, runId, self, ...mates, self, ...mates, perMate) as Array<
+    SupportingEdge & { otherId: number }
+  >;
+
+  const fqnOf = new Map(cluster.members.map((member) => [member.nodeId, member.fqn]));
+  const byMate = new Map<string, SupportingEdge[]>();
+  for (const row of rows) {
+    const fqn = fqnOf.get(row.otherId);
+    if (fqn === undefined) continue;
+    const edges = byMate.get(fqn);
+    if (edges) edges.push(row);
+    else byMate.set(fqn, [row]);
+  }
+
+  return [...byMate]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([fqn, edges]) => ({ fqn, edges }));
+}
+
 interface CoupledPull {
   fqn: string;
   pathA: string;
@@ -307,37 +444,20 @@ function couplingBetween(
   return db
     .prepare(
       /* sql */ `
-      WITH RECURSIVE
-        ancestry(file_id, node_id, kind) AS (
-            SELECT n.file_id, n.id, n.kind FROM node n
-             WHERE n.run_id = ? AND n.file_id IS NOT NULL AND n.is_stub = 0
-               AND n.kind IN ('class', 'interface', 'enum', 'annotation')
-          UNION ALL
-            SELECT a.file_id, p.id, p.kind
-              FROM ancestry a
-              JOIN node c ON c.id = a.node_id
-              JOIN node p ON p.id = c.parent_id
-             WHERE a.kind <> 'package'
-        ),
-        file_package(file_id, fqn) AS (
-          SELECT DISTINCT a.file_id, p.fqn
-            FROM ancestry a JOIN node p ON p.id = a.node_id
-           WHERE a.kind = 'package' AND p.is_stub = 0
-        )
       SELECT tc.path_a AS pathA, tc.path_b AS pathB, tc.strength AS strength,
              CASE WHEN ka.fqn = ? THEN kb.fqn ELSE ka.fqn END AS fqn
         FROM temporal_coupling tc
         JOIN source_file fa ON fa.run_id = tc.run_id AND fa.path = tc.path_a
         JOIN source_file fb ON fb.run_id = tc.run_id AND fb.path = tc.path_b
-        JOIN file_package ka ON ka.file_id = fa.id
-        JOIN file_package kb ON kb.file_id = fb.id
+        JOIN temp.file_package ka ON ka.file_id = fa.id
+        JOIN temp.file_package kb ON kb.file_id = fb.id
        WHERE tc.run_id = ?
          AND ((ka.fqn = ? AND kb.fqn IN (${placeholders}))
            OR (kb.fqn = ? AND ka.fqn IN (${placeholders})))
        ORDER BY tc.strength DESC, tc.path_a, tc.path_b
        LIMIT ?`,
     )
-    .all(runId, fqn, runId, fqn, ...others, fqn, ...others, limit) as CoupledPull[];
+    .all(fqn, runId, fqn, ...others, fqn, ...others, limit) as CoupledPull[];
 }
 
 /**
@@ -352,19 +472,41 @@ function couplingBetween(
  * siblings.
  */
 function title(mismatch: IntentMismatch): string {
-  if (mismatch.landedAlone) {
-    return `${mismatch.fqn} is named under ${mismatch.parent} but groups with nothing`;
+  return `${mismatch.fqn} is named under ${mismatch.parent} but ${landedPhrase(mismatch)}`;
+}
+
+/**
+ * How to name where it went.
+ *
+ * Four cases, because collapsing them produced three separate nonsenses on the
+ * first real runs: "X groups with X" for a package alone in its cluster, "named
+ * under P but groups with P" for one that went with its own parent, and — the
+ * worst — "groups with com.alibaba.dubbo.config.spring.context.annotation" for
+ * a destination cluster whose members share no prefix at all, where that string
+ * was just the alphabetically first member standing in for a group it does not
+ * describe.
+ */
+function landedPhrase(mismatch: IntentMismatch): string {
+  if (mismatch.landedAlone) return 'groups with nothing';
+  if (mismatch.actualPrefix === null) {
+    return `groups with ${mismatch.actualSize} packages that share no common prefix`;
   }
   if (mismatch.actualPrefix === mismatch.parent) {
-    return (
-      `${mismatch.fqn} groups with ${mismatch.parent} itself rather than with the ` +
-      `packages named alongside it`
-    );
+    return `groups with ${mismatch.parent} itself rather than with the packages named alongside it`;
   }
-  return (
-    `${mismatch.fqn} is named under ${mismatch.parent} but groups with ` +
-    `${mismatch.actualPrefix}`
-  );
+  return `groups with ${mismatch.actualPrefix}`;
+}
+
+/** The same four cases, as a sentence for the detail body. */
+function landedSentence(mismatch: IntentMismatch): string {
+  if (mismatch.landedAlone) return 'This one is in a group of its own.';
+  if (mismatch.actualPrefix === null) {
+    return `This one sits with ${mismatch.actualSize} packages that share no common prefix.`;
+  }
+  if (mismatch.actualPrefix === mismatch.parent) {
+    return `This one sits with ${mismatch.parent} itself instead.`;
+  }
+  return `This one sits with ${mismatch.actualPrefix} instead.`;
 }
 
 function detail(
@@ -376,9 +518,7 @@ function detail(
     `  ${mismatch.unanimous ? 'All' : 'A majority'} of the ${mismatch.nameGroup.length} ` +
       `packages named under ${mismatch.parent} sit in ${mismatch.expectedPrefix}: ` +
       `${mismatch.nameGroup.join(', ')}.`,
-    mismatch.landedAlone
-      ? `  This one is in a group of its own.`
-      : `  This one sits with ${mismatch.actualPrefix} instead.`,
+    `  ${landedSentence(mismatch)}`,
   ];
 
   if (pulls.length === 0 && coupled.length === 0) {

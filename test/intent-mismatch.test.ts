@@ -288,6 +288,45 @@ describe('detectIntentMismatches', () => {
     expect(detail).toContain('changes with');
   });
 
+  it('names a destination that shares no prefix by its size, not by a member', () => {
+    // Dubbo produced "groups with com.alibaba.dubbo.config.spring.context.
+    // annotation" for a cluster whose members share nothing — that string was
+    // just the alphabetically first member standing in for a group it does not
+    // describe.
+    const billing = ['shop.billing.invoice', 'shop.billing.payment', 'shop.billing.ledger'];
+    const mixed = ['alpha.one', 'beta.two'];
+    seed([
+      META,
+      ...[...billing, ...mixed, 'shop.billing.report'].flatMap((pkg) => type(pkg)),
+      ...clique(billing, 1),
+      ...clique([...mixed, 'shop.billing.report'], 100),
+    ]);
+
+    const [mismatch] = detectIntentMismatches(db, runId, cluster().clusters);
+    expect(mismatch?.fqn).toBe('shop.billing.report');
+    expect(mismatch?.actualPrefix).toBeNull();
+    expect(mismatch?.actualSize).toBe(2);
+    expect(mismatch?.title).toContain('groups with 2 packages that share no common prefix');
+    expect(mismatch?.detail).toContain('sits with 2 packages that share no common prefix');
+  });
+
+  it('says it went to its own parent rather than to its siblings', () => {
+    // "named under P but groups with P" reads as a contradiction; the real
+    // claim is that it went with the parent package instead of the siblings.
+    const siblings = ['shop.billing.invoice', 'shop.billing.payment', 'shop.billing.ledger'];
+    seed([
+      META,
+      ...[...siblings, 'shop.billing', 'shop.billing.report'].flatMap((pkg) => type(pkg)),
+      ...clique(siblings, 1),
+      ...clique(['shop.billing', 'shop.billing.report'], 100),
+    ]);
+
+    const found = detectIntentMismatches(db, runId, cluster().clusters);
+    const stray = found.find((m) => m.fqn === 'shop.billing.report');
+    expect(stray?.actualPrefix).toBe('shop.billing');
+    expect(stray?.title).toContain('groups with shop.billing itself rather than with');
+  });
+
   it('replaces findings from a previous analysis rather than appending', () => {
     seedStrayPackage();
     detectIntentMismatches(db, runId, cluster().clusters);
