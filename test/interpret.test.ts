@@ -503,6 +503,91 @@ describe('the prompt', () => {
     expect(client.requests[0]?.system).toContain('Never name a class, package, file or commit');
   });
 
+  it('drops a mismatch reading the algorithm did not ask for', async () => {
+    seedGroups(false);
+    const { clusters, mismatches } = analyse();
+    expect(mismatches).toEqual([]);
+    const response = { ...grounded(db, 0) };
+    const cites = (response['responsibility'] as Array<{ cites: string[] }>)[0]?.cites ?? [];
+    response['mismatch'] = { text: 'Something drifted here.', cites };
+
+    const result = await runInterpretation(
+      db,
+      runId,
+      clusters,
+      mismatches,
+      fakeClient([response]),
+      OPTIONS,
+    );
+
+    // Grounded, so not rejected — but there is no algorithmic claim for it to
+    // hang off, and the model does not get to decide one exists (ADR-0014).
+    expect(result.described).toBe(2);
+    expect(findings(READING_RULE)).toEqual([]);
+  });
+
+  it('sends source bodies only when asked', async () => {
+    // Paths that really exist under `repoPath`, so there is something to read.
+    const real = [
+      'src/main/java/com/example/tiny/web/GreetingController.java',
+      'src/main/java/com/example/tiny/domain/Greeting.java',
+    ];
+    seed([
+      META,
+      ...real.flatMap((file, index) => {
+        const pkg = `com.example.tiny.p${index}`;
+        return [
+          { v: 1, type: 'file', path: file, language: 'java' },
+          { v: 1, type: 'node', kind: 'package', fqn: pkg, name: pkg },
+          {
+            v: 1,
+            type: 'node',
+            kind: 'class',
+            fqn: `${pkg}.A`,
+            name: 'A',
+            parent: { kind: 'package', fqn: pkg },
+            file,
+          },
+        ];
+      }),
+      {
+        v: 1,
+        type: 'edge',
+        kind: 'imports',
+        src: { kind: 'class', fqn: 'com.example.tiny.p0.A' },
+        dst: { kind: 'class', fqn: 'com.example.tiny.p1.A' },
+        file: real[0],
+        line: 1,
+      },
+    ]);
+    const { clusters, mismatches } = analyse();
+    const client = fakeClient([grounded(db, 0)]);
+
+    await runInterpretation(db, runId, clusters, mismatches, client, {
+      ...OPTIONS,
+      sendSource: true,
+      repoPath: FIXTURE,
+    });
+
+    const prompt = client.requests[0]?.prompt as string;
+    expect(prompt).toContain('Source excerpts (--send-source)');
+    expect(prompt).toContain('class GreetingController');
+  });
+
+  it('skips a file it cannot read rather than guessing at it', async () => {
+    seedGroups(false); // synthetic paths that exist nowhere on disk
+    const { clusters, mismatches } = analyse();
+    const client = fakeClient([grounded(db, 0)]);
+
+    await runInterpretation(db, runId, clusters, mismatches, client, {
+      ...OPTIONS,
+      sendSource: true,
+      repoPath: FIXTURE,
+    });
+
+    expect(client.requests[0]?.prompt).not.toContain('Source excerpts');
+  });
+
   it('sends no source bodies unless asked', async () => {
     seedGroups(false);
     const { clusters, mismatches } = analyse();

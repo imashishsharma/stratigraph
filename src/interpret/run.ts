@@ -330,6 +330,10 @@ function write(
     );
     cite(responsibilityId, value.responsibility);
 
+    // Dropped, not rejected, when the model volunteers a reading for a cluster
+    // the algorithm found no mismatch in. It is grounded — the validator
+    // checked it — but there is no algorithmic claim for it to hang off, and
+    // ADR-0014 is explicit that the model does not get to decide one exists.
     if (value.mismatch !== null && pack.mismatch !== null) {
       // A separate finding from the algorithmic `intent-mismatch`: appending
       // model prose to that row would give one row two authors (ADR-0013).
