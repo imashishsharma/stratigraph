@@ -16,6 +16,9 @@ the code when it is incidental. Either way, before the commit.
 | [0006](0006-parse-the-source-set-not-the-build.md) | Parse the source set; never run or resolve the target's build | accepted |
 | [0007](0007-fact-identity.md) | How a node's `fqn` is formed | accepted |
 | [0008](0008-cycles-are-findings-not-facts.md) | A package cycle is a finding with citations, not a fact | accepted |
+| [0009](0009-rename-tracking-without-follow.md) | One whole-repo `git log -M` pass; resolve rename chains ourselves | accepted |
+| [0010](0010-history-metrics-and-coupling-claims.md) | History metrics are arithmetic; coupling claims are findings citing commits | accepted |
+| [0011](0011-which-commits-count.md) | Merge exclusion, the sweeping-commit cap, and the coupling thresholds | accepted |
 
 Format: context, decision, alternatives considered (with why each was rejected),
 consequences — including the costs, not only the benefits.

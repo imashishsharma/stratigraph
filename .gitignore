@@ -8,3 +8,7 @@ PLAN.md
 
 # Java extractor build output (M1)
 extractors/java/target/
+
+# Scratch repo built by fixtures/git-log/build-probe-repo.sh. The captured log
+# is committed; a nested git repo is not.
+fixtures/git-log/repo/
