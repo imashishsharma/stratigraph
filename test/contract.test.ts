@@ -399,6 +399,7 @@ describe('validate — abbreviation versus invention', () => {
   it.each([
     ['interface/implementation'],
     ['demo/compatibility'],
+    ['owner/pet/visit'],
     ['read/write'],
   ])('reads %s as English, not as a path', (phrase) => {
     // Two bare words around a slash is prose. Dubbo rejected true sentences
@@ -414,8 +415,8 @@ describe('validate — abbreviation versus invention', () => {
 
   it.each([
     ['src/main/Invented.java'],
-    ['a/b/c/invented'],
-  ])('still rejects %s, which is path-shaped', (invented) => {
+    ['src/web/Missing.properties'],
+  ])('still rejects %s, a file that was never shown', (invented) => {
     reject(
       good({ responsibility: [{ text: `See ${invented}.`, cites: ['e1'] }] }),
       'invented-identifier',

@@ -152,12 +152,18 @@ function claimSchema(description: string) {
  */
 const PATTERNS = [
   /\b[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)+\b/g,
-  // A path needs three segments or a file extension. Two bare words around a
-  // slash are English — dubbo rejected true descriptions for saying
-  // "interface/implementation" and "demo/compatibility", where the slash means
-  // "or". Anything shorter that really is a path is a directory prefix of a
-  // file the pack showed, and is in the vocabulary for that reason instead.
-  /\b[\w.$-]+(?:\/[\w.$-]+){2,}\b|\b[\w.$-]+\/[\w.$-]*\.[\w$-]+\b/g,
+  // Only *file* paths — a slash and a final segment carrying an extension.
+  //
+  // Writers use a slash to mean "and": dubbo produced "interface/
+  // implementation" and "demo/compatibility", petclinic produced
+  // "owner/pet/visit", and every one of those was rejected as an invented
+  // path. Segment count does not separate the two cases; an extension does.
+  //
+  // The cost is that a fabricated *directory* goes unchecked. That is the
+  // right side to give ground on: a fabricated file path looks like evidence
+  // someone could open, which is the dangerous shape, and fabricated package
+  // names are still caught by the dotted-identifier pattern above.
+  /\b[\w.$-]+(?:\/[\w.$-]+)*\/[\w.$-]*\.[\w$-]+\b/g,
   /\b[0-9a-f]{7,40}\b/g,
   /<[A-Za-z_][\w$]*>[\w$.]*/g,
 ];
