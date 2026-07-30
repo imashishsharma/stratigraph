@@ -100,7 +100,7 @@ export function runDoctor(overrides: ConfigOverrides): Check[] {
   try {
     const config = loadConfig(overrides);
     checks.push({ name: 'config', status: 'ok', detail: describeSource(config) });
-    checks.push(modelCheck(config));
+    checks.push(modelCheck(config, overrides.env ?? process.env));
     checks.push(historyCheck(config.repoPath));
     if (existsSync(config.dbPath)) {
       const db = openDatabase(config.dbPath, { mustExist: true, readonly: true });
@@ -136,7 +136,7 @@ export function runDoctor(overrides: ConfigOverrides): Check[] {
  * is a warning, not an error: the structural report is the larger half of what
  * this tool does and needs no model at all.
  */
-function modelCheck(config: StratigraphConfig): Check {
+function modelCheck(config: StratigraphConfig, env: NodeJS.ProcessEnv): Check {
   if (!config.llm.enabled) {
     return {
       name: 'model',
@@ -147,7 +147,7 @@ function modelCheck(config: StratigraphConfig): Check {
 
   let credential: Credential | null;
   try {
-    credential = resolveCredential(config.llm);
+    credential = resolveCredential(config.llm, env);
   } catch (err) {
     return { name: 'model', status: 'warn', detail: (err as Error).message };
   }

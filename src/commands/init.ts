@@ -78,7 +78,7 @@ export function runInit(overrides: InitOptions): InitResult {
         : `schema      v${schemaVersion} (already current)`,
     );
     info(`tables      ${tables.length}: ${tables.join(', ')}`);
-    reportInterpretation(config);
+    reportInterpretation(config, overrides.env ?? process.env);
     if (config.llm.sendSource) {
       warn('source bodies WILL be sent to the model API (--send-source is on)');
     }
@@ -120,7 +120,7 @@ function writeConfigFile(config: StratigraphConfig, cwd: string): string | null 
  * sets the tool up rather than only when they later wonder why the report has
  * no names in it.
  */
-function reportInterpretation(config: StratigraphConfig): void {
+function reportInterpretation(config: StratigraphConfig, env: NodeJS.ProcessEnv): void {
   if (!config.llm.enabled) {
     info('interpretation disabled — structural output only');
     return;
@@ -128,7 +128,7 @@ function reportInterpretation(config: StratigraphConfig): void {
 
   let credential: Credential | null = null;
   try {
-    credential = resolveCredential(config.llm);
+    credential = resolveCredential(config.llm, env);
   } catch (err) {
     warn((err as Error).message);
     return;

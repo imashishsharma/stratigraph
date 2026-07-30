@@ -185,7 +185,7 @@ export async function runAnalyze(options: AnalyzeOptions): Promise<AnalyzeResult
     if (result.clusters !== null) {
       const resolved = options.client
         ? { client: options.client, credential: null }
-        : modelClient(config.llm);
+        : modelClient(config.llm, options.env ?? process.env);
       if (resolved === null) {
         result.interpretationSkipped = config.llm.enabled ? 'no-credential' : 'disabled';
       } else {
@@ -234,9 +234,10 @@ export async function runAnalyze(options: AnalyzeOptions): Promise<AnalyzeResult
  */
 function modelClient(
   llm: StratigraphConfig['llm'],
+  env: NodeJS.ProcessEnv,
 ): { client: ModelClient; credential: Credential } | null {
   if (!llm.enabled) return null;
-  const credential = resolveCredential(llm);
+  const credential = resolveCredential(llm, env);
   if (credential === null) return null;
   return { client: createModelClient(llm.model, credential), credential };
 }

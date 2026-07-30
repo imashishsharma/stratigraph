@@ -77,7 +77,7 @@ export function runConfigPaths(overrides: ConfigOverrides): ConfigPathsResult {
   let credential: Credential | null = null;
   let credentialError: string | null = null;
   try {
-    credential = resolveCredential(config.llm);
+    credential = resolveCredential(config.llm, overrides.env ?? process.env);
   } catch (err) {
     credentialError = (err as Error).message;
   }
