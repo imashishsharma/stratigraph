@@ -10,17 +10,22 @@ reconstructs how the thing came to be shaped the way it is.
 Aimed at monoliths and multi-module builds of 100k+ LOC where nobody remembers
 why things are the way they are. Java/Spring Boot and Angular first.
 
-> **Status: M2.** The Java extractor, the package graph, and history mining all
-> work. Pointed at [apache/dubbo](https://github.com/apache/dubbo) — 4,053 Java
-> files, no Spring Boot, `javax.*`, Spring XML wiring — it produces 47,350 nodes
-> and 163,693 edges in 18 seconds and reports 17 package cycles across 652
-> packages, three verified by hand against the cited lines. It then mines 8,893
-> commits in 4.5 seconds (332 MB peak), resolving 6,189 paths through rename
-> chains, and finds 3,303 co-changing file pairs the dependency graph cannot
-> explain.
+> **Status: M3.** The Java extractor, the package graph, history mining and the
+> interpretation layer all work. Pointed at
+> [apache/dubbo](https://github.com/apache/dubbo) — 4,053 Java files, no Spring
+> Boot, `javax.*`, Spring XML wiring — it produces 47,350 nodes and 163,693
+> edges in 18 seconds and reports 17 package cycles across 652 packages, three
+> verified by hand against the cited lines. It then mines 8,893 commits in 4.5
+> seconds (332 MB peak), resolving 6,189 paths through rename chains, and finds
+> 3,303 co-changing file pairs the dependency graph cannot explain.
 >
-> Interpretation (M3), the MCP server (M4) and the Angular extractor (M5) are
-> still ahead.
+> It then clusters those packages and has a model name them — under a citation
+> check that rejects any sentence naming something the model was not shown.
+> Across dubbo's 38 evidence packs that check sits at 38 of 38 grounded
+> descriptions accepted and zero fabrications missed, and it is re-run against
+> five kinds of mutated identifier on every change to the rule.
+>
+> The MCP server (M4) and the Angular extractor (M5) are still ahead.
 
 ## The rule that shapes everything
 
