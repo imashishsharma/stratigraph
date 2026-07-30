@@ -6,7 +6,7 @@
  * were hard was that nothing printed them.
  */
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
 import {
@@ -21,7 +21,7 @@ import {
 import { userConfigTemplate } from '../config-template.js';
 import { DOTENV_FILENAME } from '../dotenv.js';
 import { resolveCredential, type Credential } from '../interpret/client.js';
-import { print } from '../log.js';
+import { print, warn } from '../log.js';
 
 export interface ConfigPathEntry {
   path: string;
@@ -173,10 +173,34 @@ export function runConfigSetKey(
   // 0600: this file holds a credential, and the default umask would leave it
   // world-readable on a shared machine.
   writeFileSync(path, `${JSON.stringify(updated, null, 2)}\n`, { encoding: 'utf8', mode: 0o600 });
+  tighten(path);
 
   print(`${replaced ? 'Replaced' : 'Wrote'} llm.apiKey in ${path}`);
   print('Check it with: stratigraph doctor');
   return { path, replaced };
+}
+
+/**
+ * Make the file readable by its owner and nobody else.
+ *
+ * `writeFileSync`'s `mode` applies only when the file is *created*, so someone
+ * who already had a config written at the default umask — `init --write-config`
+ * makes one, and so does anyone with an editor — kept 0644 and got a
+ * world-readable credential. Setting the mode on every write is what actually
+ * holds the guarantee the comment above claims.
+ *
+ * Windows has no POSIX mode bits to set; `chmod` there toggles the read-only
+ * attribute and would achieve nothing but a surprise. Failures elsewhere are
+ * ignored deliberately: the key is written either way, and refusing to store it
+ * because a filesystem does not do permissions helps nobody.
+ */
+function tighten(path: string): void {
+  if (process.platform === 'win32') return;
+  try {
+    chmodSync(path, 0o600);
+  } catch {
+    warn(`could not restrict permissions on ${path} — check them yourself`);
+  }
 }
 
 /** The template, for anyone who wants to write the file themselves. */

@@ -1,4 +1,5 @@
 import {
+  chmodSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -180,10 +181,33 @@ describe('config set-key', () => {
     expect(loadConfig({ repo: FIXTURE, cwd, env }).llm.apiKey).toBe('sk-ant-new');
   });
 
-  it('writes it read-only to the owner', () => {
+  // NTFS has no POSIX permission bits: Node reports 0o666 for every file on
+  // Windows whatever mode it was written with, so asserting the mode there
+  // tests the filesystem's answer rather than ours. Skipped rather than
+  // weakened, because an assertion that cannot fail is not coverage.
+  const posix = process.platform === 'win32' ? it.skip : it;
+
+  posix('writes it read-only to the owner', () => {
     // The default umask would leave a credential world-readable.
     const { path } = runConfigSetKey('sk-ant-new', { env });
     expect(statSync(path).mode & 0o077).toBe(0);
+  });
+
+  posix('tightens a config file that already existed', () => {
+    // `writeFileSync`'s mode applies only on creation, so a file someone else
+    // made — `init --write-config`, an editor, a dotfile repo — kept whatever
+    // the umask gave it and the key went into a world-readable file.
+    mkdirSync(userHome, { recursive: true });
+    const path = join(userHome, 'config.json');
+    writeFileSync(path, JSON.stringify({ llm: { model: 'claude-sonnet-5' } }));
+    // Set explicitly rather than relying on the umask, which on a developer
+    // machine may already be 077 and would make this pass without proving it.
+    chmodSync(path, 0o644);
+
+    runConfigSetKey('sk-ant-new', { env });
+
+    expect(statSync(path).mode & 0o077).toBe(0);
+    expect(loadConfig({ repo: FIXTURE, cwd, env }).llm.apiKey).toBe('sk-ant-new');
   });
 
   it('keeps other settings in the file', () => {
