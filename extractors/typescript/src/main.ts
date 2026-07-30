@@ -28,7 +28,7 @@ export interface Streams {
   stderr: LineSink;
 }
 
-export function run(argv: string[], streams: Streams): number {
+export async function run(argv: string[], streams: Streams): Promise<number> {
   let repo: string | null = null;
   const excludes = new Set(DEFAULT_EXCLUDES);
   const includes: string[] = [];
@@ -85,7 +85,7 @@ export function run(argv: string[], streams: Streams): number {
       `${discovery.templates.length} template(s) in ${discovery.modules.length} module(s)`,
   );
 
-  new TypeScriptExtractor(repoRoot, emitter, discovery).run();
+  await new TypeScriptExtractor(repoRoot, emitter, discovery).run();
   streams.stderr.write(emitter.summary());
   return 0;
 }
@@ -130,7 +130,7 @@ if (isEntryPoint()) {
     stderr: { write: (line) => process.stderr.write(`${line}\n`) },
   };
   try {
-    process.exitCode = run(process.argv.slice(2), streams);
+    process.exitCode = await run(process.argv.slice(2), streams);
   } catch (err) {
     process.stderr.write(`error: ${(err as Error).message}\n`);
     process.exitCode = 1;

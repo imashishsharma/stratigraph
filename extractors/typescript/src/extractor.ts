@@ -1,7 +1,9 @@
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import ts from 'typescript';
 
+import { AngularFacts, loadTemplateParser, type HttpCall } from './angular.js';
 import { countLines, moduleOf, type Discovery } from './discovery.js';
 import { directoryOf, fieldFqn, methodFqn, modulePath, typeFqn } from './fqn.js';
 import { createProgram, Resolver } from './program.js';
@@ -19,8 +21,7 @@ import type { FactEmitter, NodeKind, NodeRef } from './protocol.js';
 export class TypeScriptExtractor {
   private readonly program: ts.Program;
   private readonly resolver: Resolver;
-  /** Types declared per module path, so a local name resolves without the checker. */
-  private readonly declaredHere = new Map<string, Map<string, NodeKind>>();
+  private readonly angular: AngularFacts;
 
   constructor(
     private readonly repoRoot: string,
@@ -29,9 +30,10 @@ export class TypeScriptExtractor {
   ) {
     this.program = createProgram(repoRoot, discovery);
     this.resolver = new Resolver(repoRoot, this.program, discovery);
+    this.angular = new AngularFacts(repoRoot, this.emitter, this.resolver);
   }
 
-  run(): void {
+  async run(): Promise<void> {
     for (const path of [...this.discovery.sources].sort()) {
       this.emitter.file(path, 'typescript', countLines(join(this.repoRoot, path)));
     }
@@ -48,6 +50,24 @@ export class TypeScriptExtractor {
         continue;
       }
       this.extractFile(path, source);
+    }
+
+    // Templates last: a selector used in one directory is usually declared in
+    // another, so nothing can be matched until every component is known.
+    if (await loadTemplateParser()) {
+      this.angular.emitTemplateEdges((path) => {
+        try {
+          return readFileSync(join(this.repoRoot, path), 'utf8');
+        } catch {
+          return null;
+        }
+      });
+    } else {
+      this.emitter.diagnostic(
+        'warn',
+        '@angular/compiler could not be loaded; templates were not read and no ' +
+          'component-to-component edges from templates are present',
+      );
     }
   }
 
@@ -162,7 +182,9 @@ export class TypeScriptExtractor {
     if (declared === null) return;
 
     const fqn = typeFqn(module, declared);
-    this.declare(module, declared, 'class');
+    // Read before emitting: `selector`, `standalone` and `providedIn` belong on
+    // the class node, and they come out of the decorator.
+    const angular = this.angular.readClass(path, source, declaration);
     this.emitter.node({
       kind: 'class',
       fqn,
@@ -171,11 +193,43 @@ export class TypeScriptExtractor {
       file: path,
       startLine: lineOf(source, declaration),
       endLine: endLineOf(source, declaration),
-      ...attrsOf(modifiersOf(declaration)),
+      ...attrsOf(modifiersOf(declaration), angular.attrs),
     });
 
+    this.angular.emitDecorators(path, fqn, angular);
     this.extractHeritage(path, source, fqn, declaration);
+    this.angular.emitInjections(path, source, { kind: 'class', fqn }, declaration);
+    this.angular.emitModuleMetadata(path, source, fqn, angular);
+    this.angular.registerTemplate(path, source, fqn, angular);
     this.extractMembers(path, source, fqn, declaration);
+    this.extractRouteTables(path, source, { kind: 'class', fqn }, declaration);
+  }
+
+  /**
+   * `RouterModule.forRoot([...])` inside an `@NgModule`, which is how every
+   * application written before standalone components declares its routes.
+   */
+  private extractRouteTables(
+    path: string,
+    source: ts.SourceFile,
+    owner: NodeRef,
+    declaration: ts.ClassDeclaration,
+  ): void {
+    const visit = (node: ts.Node): void => {
+      if (
+        ts.isCallExpression(node) &&
+        ts.isPropertyAccessExpression(node.expression) &&
+        ROUTER_FACTORIES.has(node.expression.name.text) &&
+        node.arguments.length > 0
+      ) {
+        const first = node.arguments[0]!;
+        if (ts.isArrayLiteralExpression(first)) {
+          this.angular.emitRoutes(path, source, owner, first);
+        }
+      }
+      ts.forEachChild(node, visit);
+    };
+    for (const decorator of ts.getDecorators(declaration) ?? []) visit(decorator);
   }
 
   private extractInterface(
@@ -187,7 +241,6 @@ export class TypeScriptExtractor {
   ): void {
     const declared = declaration.name.text;
     const fqn = typeFqn(module, declared);
-    this.declare(module, declared, 'interface');
     this.emitter.node({
       kind: 'interface',
       fqn,
@@ -209,7 +262,6 @@ export class TypeScriptExtractor {
     declaration: ts.EnumDeclaration,
   ): void {
     const declared = declaration.name.text;
-    this.declare(module, declared, 'enum');
     this.emitter.node({
       kind: 'enum',
       fqn: typeFqn(module, declared),
@@ -236,16 +288,20 @@ export class TypeScriptExtractor {
   ): void {
     const declared = declaration.name?.text;
     if (declared === undefined) return;
+    const fqn = methodFqn(module, declared);
     this.emitter.node({
       kind: 'method',
-      fqn: methodFqn(module, declared),
+      fqn,
       name: declared,
       parent: { kind: 'package', fqn: packageFqn },
       file: path,
       startLine: lineOf(source, declaration),
       endLine: endLineOf(source, declaration),
-      ...attrsOf(modifiersOf(declaration), returnsOf(declaration)),
+      ...attrsOf(modifiersOf(declaration), returnsOf(declaration), this.callSites(source, declaration)),
     });
+    // A functional route guard or resolver injects without a class to hang the
+    // edge off. Standalone Angular writes a great deal of DI this way.
+    this.angular.emitInjectCalls(path, source, { kind: 'method', fqn }, declaration);
   }
 
   /**
@@ -266,15 +322,27 @@ export class TypeScriptExtractor {
     for (const declaration of statement.declarationList.declarations) {
       if (!ts.isIdentifier(declaration.name)) continue;
       const declared = declaration.name.text;
+      const fqn = fieldFqn(module, declared);
       this.emitter.node({
         kind: 'field',
-        fqn: fieldFqn(module, declared),
+        fqn,
         name: declared,
         parent: { kind: 'package', fqn: packageFqn },
         file: path,
         startLine: lineOf(source, statement),
         ...attrsOf(modifiersOf(statement), typeTextOf(declaration.type)),
       });
+
+      // `export const routes: Routes = [...]` — a standalone application's
+      // whole route table. Recognised by the annotated type rather than by the
+      // binding's name, so `appRoutes` and `ROUTES` are found too.
+      if (
+        declaration.initializer !== undefined &&
+        ts.isArrayLiteralExpression(declaration.initializer) &&
+        isRoutesType(declaration.type)
+      ) {
+        this.angular.emitRoutes(path, source, { kind: 'field', fqn }, declaration.initializer);
+      }
     }
   }
 
@@ -352,7 +420,7 @@ export class TypeScriptExtractor {
           parent: { kind: 'class', fqn: ownerFqn },
           file: path,
           startLine: line,
-          ...attrsOf(modifiersOf(member), typeTextOf(member.type)),
+          ...attrsOf(modifiersOf(member), typeTextOf(member.type), this.callSites(source, member)),
         });
       } else if (ts.isMethodDeclaration(member) && ts.isIdentifier(member.name)) {
         if (!record(member.name.text, line)) continue;
@@ -364,7 +432,7 @@ export class TypeScriptExtractor {
           file: path,
           startLine: line,
           endLine: endLineOf(source, member),
-          ...attrsOf(modifiersOf(member), returnsOf(member)),
+          ...attrsOf(modifiersOf(member), returnsOf(member), this.callSites(source, member)),
         });
       } else if (ts.isConstructorDeclaration(member)) {
         this.emitter.node({
@@ -375,6 +443,7 @@ export class TypeScriptExtractor {
           file: path,
           startLine: line,
           endLine: endLineOf(source, member),
+          ...attrsOf([], this.callSites(source, member)),
         });
         this.extractParameterProperties(path, source, ownerFqn, member);
       }
@@ -411,14 +480,47 @@ export class TypeScriptExtractor {
     }
   }
 
-  private declare(module: string, name: string, kind: NodeKind): void {
-    let declarations = this.declaredHere.get(module);
-    if (declarations === undefined) {
-      declarations = new Map();
-      this.declaredHere.set(module, declarations);
-    }
-    declarations.set(name, kind);
+  /**
+   * Observed call sites, as attributes on the member that contains them.
+   *
+   * Not as edges, deliberately. `.subscribe(...)` says a member named
+   * `subscribe` was called at a line; on a repository with no `node_modules` it
+   * says nothing about the receiver being an rxjs `Observable`, and an edge to
+   * `rxjs:Observable#subscribe()` would assert a type we never saw. The line
+   * number is the whole fact, and it is enough for
+   * `src/analysis/rxjs-findings.ts` to cite.
+   *
+   * `httpCalls` is the same shape for the same reason: the URL is observed,
+   * which endpoint serves it is an inference, and inferences are drawn by the
+   * linker in the core against endpoints this process has never seen.
+   */
+  private callSites(source: ts.SourceFile, member: ts.Node): Record<string, unknown> {
+    const { subscribes, http } = this.angular.callSites(source, member);
+    const attrs: Record<string, unknown> = {};
+    if (subscribes.length > 0) attrs['rxjsSubscribes'] = subscribes;
+    if (http.length > 0) attrs['httpCalls'] = http satisfies HttpCall[];
+    return attrs;
   }
+}
+
+/** `RouterModule.forRoot` / `.forChild`, the pre-standalone route declaration. */
+const ROUTER_FACTORIES = new Set(['forRoot', 'forChild']);
+
+/** `Routes`, or `Route[]` — the two ways a route table is annotated. */
+function isRoutesType(type: ts.TypeNode | undefined): boolean {
+  if (type === undefined) return false;
+  if (ts.isTypeReferenceNode(type) && ts.isIdentifier(type.typeName)) {
+    return type.typeName.text === 'Routes';
+  }
+  if (ts.isArrayTypeNode(type)) {
+    const element = type.elementType;
+    return (
+      ts.isTypeReferenceNode(element) &&
+      ts.isIdentifier(element.typeName) &&
+      element.typeName.text === 'Route'
+    );
+  }
+  return false;
 }
 
 export function lineOf(source: ts.SourceFile, node: ts.Node): number {

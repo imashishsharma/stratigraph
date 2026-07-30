@@ -3,7 +3,7 @@ import { join, relative, sep } from 'node:path';
 import ts from 'typescript';
 
 import type { Discovery, PathAliases } from './discovery.js';
-import { modulePath, typeFqn } from './fqn.js';
+import { fieldFqn, methodFqn, modulePath, typeFqn } from './fqn.js';
 import type { NodeKind, NodeRef } from './protocol.js';
 
 /**
@@ -29,6 +29,17 @@ export interface Resolved {
   ref: NodeRef;
   /** True when the declaration is outside the parsed source set. */
   external: boolean;
+  /**
+   * True when the name refers to a value rather than to a type — a `const`, an
+   * `InjectionToken`, a function. Callers that need a class refuse these: what
+   * an injection token provides is decided at runtime, and an edge into the
+   * token's declaration would claim a dependency on a constant.
+   *
+   * Only ever true for a declaration inside the source set. An uninstalled
+   * library offers no way to tell, and guessing is what this flag exists to
+   * prevent.
+   */
+  value: boolean;
   /** How the name was resolved, recorded on the edge as ADR-0005 does for Java. */
   resolution: 'checker' | 'import';
 }
@@ -109,16 +120,22 @@ export class Resolver {
     if (declaration === undefined) return this.fromImportStatement(node);
 
     const fileName = normalise(declaration.getSourceFile().fileName);
-    const kind = kindOfDeclaration(declaration);
-    if (kind === null) return null;
+    const shape = shapeOfDeclaration(declaration);
+    if (shape === null) return null;
 
     if (this.internal.has(fileName)) {
-      const rel = relative(this.repoRoot, fileName).split(sep).join('/');
-      return {
-        ref: { kind, fqn: typeFqn(modulePath(rel), qualifiedName(declaration, symbol)) },
-        external: false,
-        resolution: 'checker',
-      };
+      // Inside the source set, the extractor already emitted this declaration
+      // under an fqn of its own. It has to be named the same way here, or an
+      // edge would mint a second, stubbed node for something we parsed.
+      const module = modulePath(relative(this.repoRoot, fileName).split(sep).join('/'));
+      const name = qualifiedName(declaration, symbol);
+      const fqn =
+        shape.kind === 'field'
+          ? fieldFqn(module, name)
+          : shape.kind === 'method'
+            ? methodFqn(module, name)
+            : typeFqn(module, name);
+      return { ref: { kind: shape.kind, fqn }, external: false, value: shape.value, resolution: 'checker' };
     }
 
     // Declared outside the source set — a library `.d.ts`, or a lib file. Named
@@ -128,8 +145,11 @@ export class Resolver {
     const specifier = moduleSpecifierOf(declaration) ?? this.specifierFromImport(node);
     if (specifier === null) return null;
     return {
-      ref: { kind, fqn: typeFqn(specifier, symbol.getName()) },
+      // An uninstalled library cannot tell us a class from an interface or a
+      // const, so everything external is a `class` stub (ADR-0017).
+      ref: { kind: 'class', fqn: typeFqn(specifier, symbol.getName()) },
       external: true,
+      value: false,
       resolution: 'checker',
     };
   }
@@ -152,6 +172,7 @@ export class Resolver {
     return {
       ref: { kind: 'class', fqn: typeFqn(found.specifier, found.exported) },
       external: true,
+      value: false,
       resolution: 'import',
     };
   }
@@ -208,23 +229,29 @@ export class Resolver {
   }
 }
 
-/** The declaration a symbol names, preferring one that declares a type. */
+/** The declaration a symbol names, preferring one we know how to name. */
 function declarationOf(symbol: ts.Symbol): ts.Declaration | undefined {
   const declarations = symbol.getDeclarations();
   if (declarations === undefined || declarations.length === 0) return undefined;
-  return declarations.find((d) => kindOfDeclaration(d) !== null) ?? declarations[0];
+  return declarations.find((d) => shapeOfDeclaration(d) !== null) ?? declarations[0];
 }
 
-function kindOfDeclaration(declaration: ts.Declaration): NodeKind | null {
-  if (ts.isClassDeclaration(declaration) || ts.isClassExpression(declaration)) return 'class';
-  if (ts.isInterfaceDeclaration(declaration)) return 'interface';
-  if (ts.isEnumDeclaration(declaration)) return 'enum';
-  // A library type we only ever see through its `.d.ts` may be a variable
-  // declaration of an interface type (`declare const Foo: FooCtor`). Treated as
-  // a class for the reason given on `fromImportStatement`.
-  if (ts.isVariableDeclaration(declaration) || ts.isTypeAliasDeclaration(declaration)) {
-    return 'class';
+/** What a declaration is, in the fact vocabulary, and whether it is a value. */
+function shapeOfDeclaration(
+  declaration: ts.Declaration,
+): { kind: NodeKind; value: boolean } | null {
+  if (ts.isClassDeclaration(declaration) || ts.isClassExpression(declaration)) {
+    return { kind: 'class', value: false };
   }
+  if (ts.isInterfaceDeclaration(declaration)) return { kind: 'interface', value: false };
+  if (ts.isEnumDeclaration(declaration)) return { kind: 'enum', value: false };
+  if (ts.isTypeAliasDeclaration(declaration)) return { kind: 'class', value: false };
+  // `export const API_BASE = new InjectionToken(...)` and `export function
+  // canActivate()` are the shapes ADR-0017 gives module-owned `field` and
+  // `method` fqns, and they are values: an injection edge into one would be a
+  // dependency on a constant.
+  if (ts.isVariableDeclaration(declaration)) return { kind: 'field', value: true };
+  if (ts.isFunctionDeclaration(declaration)) return { kind: 'method', value: true };
   return null;
 }
 
