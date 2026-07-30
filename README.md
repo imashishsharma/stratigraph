@@ -91,6 +91,15 @@ echo 'ANTHROPIC_API_KEY=sk-ant-...' >> .env   # this directory; gitignore it
 ant auth login                            # no key at all, if you use the Anthropic CLI
 ```
 
+> **A Claude Pro or Max subscription is not API credit.** Those cover Claude.ai
+> and Claude Code; this tool calls `api.anthropic.com`, which is billed
+> separately from the [Console](https://console.anthropic.com). A key from an
+> account with no API balance authenticates fine and then fails with *"Your
+> credit balance is too low"*. `ant auth login` does not change this — the
+> OAuth token carries a `user:inference` scope but the organisation still needs
+> credit. Interpretation is the only part affected; everything structural runs
+> regardless.
+
 Then confirm — it prints where the key came from, never the key:
 
 ```console
