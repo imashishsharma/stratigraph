@@ -92,12 +92,35 @@ describable as "the `com.example.shop` packages", and a prefix of a real package
 is not an invented fact. A short stop-list (`e.g`, `i.e`, `etc`, `vs`) keeps
 ordinary English from tripping the token pattern.
 
-Rule 3 will occasionally reject a true sentence — prose that mentions a
-framework type, say. That trade is taken deliberately: the cost of a false
-rejection is a cluster that goes undescribed and says so, and the cost of a false
-acceptance is a fabricated claim carrying a real citation. Those are not
-comparable, and this project's whole premise is that the second is worse than
-having nothing.
+Rule 3 will occasionally reject a true sentence. That trade is taken
+deliberately: the cost of a false rejection is a cluster that goes undescribed
+and says so, and the cost of a false acceptance is a fabricated claim carrying a
+real citation. Those are not comparable, and this project's whole premise is
+that the second is worse than having nothing.
+
+**What that cost out to in practice.** The first live runs rejected 4 of 13
+dubbo descriptions and 1 of 1 on petclinic. Every rejected name turned out to be
+real — not one fabrication among them. Three distinct causes, all of them the
+rule misreading the *form* of a true statement:
+
+| The model wrote | Rule 3 saw | Actually |
+| --- | --- | --- |
+| `dubbo-config/.../org/apache/dubbo/config` | an invented path | a directory above a file it was shown |
+| `adaptive.impl` | an invented package | an abbreviation of `org.apache.dubbo.common.extension.adaptive.impl` |
+| `interface/implementation`, `owner/pet/visit` | an invented path | English, using a slash to mean "and" |
+
+So the vocabulary now admits directory prefixes of shown paths and dot-suffixes
+of shown names, and only *file* paths — a final segment carrying an extension —
+are treated as paths at all. None of that loosens what the rule is for: a suffix
+can smuggle nothing in (`repo.Qux` is the tail of nothing when only
+`repo.OrderRepo` was shown), and a fabricated file path is still caught, which
+is the shape that looks like evidence someone could open.
+
+The check for this is empirical and repeatable rather than argued: every one of
+dubbo's 38 evidence packs is run through the validator with grounded output and
+with five kinds of deliberately mutated identifier. It has stayed at 38/38
+grounded accepted and zero fabrications missed across every change above. **A
+change to rule 3 that cannot hold that line is not a tuning, it is a hole.**
 
 ### What is not checked, and must not be claimed to be
 
