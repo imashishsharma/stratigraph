@@ -90,5 +90,28 @@ least likely to build cleanly on first contact.
 - A codebase that uses wildcard imports heavily will produce many diagnostics and
   few stereotype facts. That is the correct output: the honest answer is
   "unresolved", and the report must show the count rather than hide it.
+
+  **Measured at M5, and it is worse than this paragraph implies.**
+  [jhipster/jhipster-sample-app](https://github.com/jhipster/jhipster-sample-app)
+  opens every REST controller with
+  `import org.springframework.web.bind.annotation.*;`. Out of 136 Java sources
+  it yielded **2 endpoints**, against 21 `@GetMapping`, 12 `@PostMapping` and 9
+  `@RequestMapping` diagnostics — and JHipster is the most widely generated
+  Spring layout there is, so this is not an unusual repository.
+
+  The consequence reaches past this ADR: with no endpoints, M5's cross-stack
+  linker has nothing to match against, so the Angular half of a full-stack
+  monolith cannot be connected to the Java half either (ADR-0018 records that
+  run). This is now the largest single gap in the tool's coverage of real Spring
+  code.
+
+  **It is a gap to close, not a rule to relax.** Guessing that `@GetMapping`
+  under a wildcard import is Spring's is exactly the invention this ADR exists
+  to prevent — a repository can define its own. The fix is to *earn* the
+  resolution rather than assume it: a wildcard import of a package whose known
+  annotations are in the FQN table, combined with no same-named type declared in
+  the parsed source set and no other wildcard import that could supply one,
+  identifies the annotation without guessing. That is a real analysis with real
+  edge cases, and it is scheduled after M6.
 - The known-annotation FQN table is a maintenance burden and will lag new
   framework releases. It is data, not logic, and lives in one file.
