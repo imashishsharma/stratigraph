@@ -25,6 +25,7 @@ the code when it is incidental. Either way, before the commit.
 | [0015](0015-the-mcp-query-surface.md) | The MCP surface: one pinned run, read-only, and empty answers that say which kind of empty | accepted |
 | [0016](0016-angular-without-the-angular-compiler.md) | Parse the TypeScript source set; no `@angular/compiler-cli`, no install | accepted |
 | [0017](0017-typescript-fact-identity.md) | How a TypeScript node's `fqn` is formed, and where it departs from ADR-0007 | accepted |
+| [0018](0018-cross-stack-links-are-inferences.md) | An Angular-to-Spring link is inferred, matched conservatively, and refused on a tie | accepted |
 
 Format: context, decision, alternatives considered (with why each was rejected),
 consequences — including the costs, not only the benefits.
