@@ -51,6 +51,40 @@ export interface AngularClass {
   metadata: ts.ObjectLiteralExpression | null;
 }
 
+/**
+ * An observed `.subscribe(...)` site.
+ *
+ * `guarded` and `retained` are recorded here rather than derived later because
+ * they are syntax, and this is the only place the syntax exists — by the time
+ * `src/analysis/rxjs-findings.ts` runs there is no AST to ask. Both are facts
+ * about the call site, not judgements about it: whether the subscription leaks
+ * is layer 4's to decide, on ADR-0008's rule that a judgement is a finding.
+ */
+export interface Subscribe {
+  line: number;
+  /** The chain bounds its own lifetime — `takeUntil`, `take(1)`, `first()`. */
+  guarded: boolean;
+  /** The returned `Subscription` is kept: assigned, pushed, or `.add`ed. */
+  retained: boolean;
+}
+
+/**
+ * Operators that end a subscription without anyone calling `unsubscribe`.
+ *
+ * `takeUntilDestroyed` and `toSignal` tie it to the injection context;
+ * `take`/`first` complete after n values; `takeUntil` and `takeWhile` complete
+ * on a signal. Any of them means the code has said how this ends.
+ */
+const LIFETIME_OPERATORS = new Set([
+  'takeUntil',
+  'takeUntilDestroyed',
+  'takeWhile',
+  'take',
+  'first',
+  'toSignal',
+  'toPromise',
+]);
+
 /** An observed HTTP call with a URL we could read without guessing. */
 export interface HttpCall {
   method: string;
@@ -365,15 +399,19 @@ export class AngularFacts {
    * observed; which endpoint serves it is an inference, and inferences are made
    * by the linker in the core, against endpoints this process has never seen.
    */
-  callSites(source: ts.SourceFile, member: ts.Node): { subscribes: number[]; http: HttpCall[] } {
-    const subscribes: number[] = [];
+  callSites(source: ts.SourceFile, member: ts.Node): { subscribes: Subscribe[]; http: HttpCall[] } {
+    const subscribes: Subscribe[] = [];
     const http: HttpCall[] = [];
 
     const visit = (node: ts.Node): void => {
       if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression)) {
         const name = node.expression.name.text;
         if (name === 'subscribe') {
-          subscribes.push(lineOf(source, node.expression.name));
+          subscribes.push({
+            line: lineOf(source, node.expression.name),
+            guarded: isGuarded(node.expression.expression),
+            retained: isRetained(node),
+          });
         }
         const verb = HTTP_METHODS.get(name);
         if (verb !== undefined && node.arguments.length > 0 && looksLikeHttpClient(node.expression)) {
@@ -650,6 +688,54 @@ function lazyImport(route: ts.ObjectLiteralExpression): LazyImport | null {
     if (specifier !== null) return { specifier, exported };
   }
   return null;
+}
+
+/**
+ * Whether anything in the chain feeding `.subscribe()` bounds its lifetime.
+ *
+ * The whole receiver expression is searched rather than only the `pipe()`
+ * arguments, because the operator may be applied several links up
+ * (`this.form.valueChanges.pipe(takeUntil(this.destroy$)).pipe(map(…))`) or by
+ * a helper the chain was handed. Searching wide means occasionally calling a
+ * subscription guarded when the operator was somewhere unrelated — which
+ * suppresses a finding rather than fabricating one, and that is the direction
+ * to be wrong in.
+ */
+function isGuarded(receiver: ts.Node): boolean {
+  let guarded = false;
+  const visit = (node: ts.Node): void => {
+    if (guarded) return;
+    if (ts.isIdentifier(node) && LIFETIME_OPERATORS.has(node.text)) {
+      guarded = true;
+      return;
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(receiver);
+  return guarded;
+}
+
+/**
+ * Whether the `Subscription` the call returns is kept.
+ *
+ * `this.sub = x.subscribe(…)`, `this.subs.push(x.subscribe(…))` and
+ * `this.subs.add(x.subscribe(…))` are the three idioms for holding a handle to
+ * tear down later. Holding one is not proof anything tears it down, which is
+ * why layer 4 also checks for `ngOnDestroy` — but not holding one is proof
+ * nothing can.
+ */
+function isRetained(call: ts.CallExpression): boolean {
+  const parent = call.parent;
+  if (parent === undefined) return false;
+  if (ts.isVariableDeclaration(parent) || ts.isPropertyDeclaration(parent)) return true;
+  if (ts.isBinaryExpression(parent) && parent.operatorToken.kind === ts.SyntaxKind.EqualsToken) {
+    return parent.right === call;
+  }
+  if (ts.isCallExpression(parent) && ts.isPropertyAccessExpression(parent.expression)) {
+    const method = parent.expression.name.text;
+    return (method === 'push' || method === 'add') && parent.arguments.includes(call);
+  }
+  return false;
 }
 
 /** `@Inject(TOKEN) foo: unknown` — the token, when one is named. */

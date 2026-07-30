@@ -15,6 +15,7 @@ import {
 import { detectPackageCycles, type CycleFinding } from '../analysis/cycles.js';
 import { recordHistoryFindings, type RecordedFindings } from '../analysis/history-findings.js';
 import { linkHttpCalls, summariseLinks, type LinkResult } from '../analysis/http-links.js';
+import { recordRxjsFindings, summariseRxjs, type RxjsFindings } from '../analysis/rxjs-findings.js';
 import { busFactorRisks, topHotspots, type Hotspot } from '../analysis/hotspots.js';
 import {
   detectIntentMismatches,
@@ -75,6 +76,8 @@ export interface AnalyzeResult {
    * reach the linking step.
    */
   links: LinkResult | null;
+  /** Layer 4: subscriptions with no way to unsubscribe. Null when none were looked for. */
+  rxjs: RxjsFindings | null;
   /**
    * Whether this run has any extracted dependency to have checked against.
    *
@@ -139,6 +142,7 @@ export async function runAnalyze(options: AnalyzeOptions): Promise<AnalyzeResult
       adrCandidates: [],
       findings: null,
       links: null,
+      rxjs: null,
       staticGraph: countDependencyEdges(db, runId) > 0,
     };
 
@@ -158,6 +162,13 @@ export async function runAnalyze(options: AnalyzeOptions): Promise<AnalyzeResult
     result.links = linkHttpCalls(db, runId);
     const linkLine = summariseLinks(result.links);
     if (linkLine !== null) info(`run ${runId}: ${linkLine}`);
+
+    // ADR-0008 again: the subscribe call site is a fact the extractor observed,
+    // and "nothing can unsubscribe from this" is a judgement over three pieces
+    // of syntax. Judgements are findings, with citations.
+    result.rxjs = recordRxjsFindings(db, runId);
+    const rxjsLine = summariseRxjs(result.rxjs);
+    if (rxjsLine !== null) info(`run ${runId}: ${rxjsLine}`);
 
     // Coupling is computed before clustering, not after, because clustering
     // *reads* `temporal_coupling` and this is the command that writes it. With
@@ -308,6 +319,7 @@ function report(
 ): void {
   reportCycles(result.cycles, packages);
   reportCrossStack(result, top);
+  reportRxjs(result, top);
   reportClusters(result.clusters, top, couplingWeight);
   reportInterpretation(result);
   reportMismatches(result.mismatches, top);
@@ -317,6 +329,31 @@ function report(
   if (commits === 0) {
     print('');
     print('No history mined for this run — run `stratigraph history` for churn and coupling.');
+  }
+}
+
+/**
+ * Subscriptions nothing can tear down.
+ *
+ * Prints the ratio, not only the count: "4 of 250" and "4 of 4" mean very
+ * different things about a codebase, and a bare number lets a reader assume
+ * whichever suits them.
+ */
+function reportRxjs(result: AnalyzeResult, top: number): void {
+  const rxjs = result.rxjs;
+  if (rxjs === null || rxjs.leaks === 0) return;
+
+  const rows = rxjs.reported.slice(0, top);
+  print('');
+  print(`${rxjs.leaks} of ${rxjs.sites} subscribe site(s) have no way to unsubscribe:`);
+  print('');
+  for (const row of rows) {
+    print(`  ${row.title}`);
+    print(`    ${row.file ?? '?'}:${row.line}`);
+  }
+  if (rxjs.leaks > rows.length) {
+    print('');
+    print(`  Showing ${rows.length} of ${rxjs.leaks} — raise --top for more.`);
   }
 }
 

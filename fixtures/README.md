@@ -75,7 +75,7 @@ Expected facts:
 
 | File | Expected |
 | --- | --- |
-| `orders/order-list.component.ts` | `@Component` with `selector`, `standalone`, `templateUrl`; **constructor** injection of `OrderService` resolved through the `@app/*` alias; `ngOnInit` carrying `rxjsSubscribes: [21]` |
+| `orders/order-list.component.ts` | `@Component` with `selector`, `standalone`, `templateUrl`; **constructor** injection of `OrderService` resolved through the `@app/*` alias; `ngOnInit` carrying an unguarded, unretained `rxjsSubscribes` site at line 21 |
 | `orders/order-list.component.html` | an `imports` edge to `OrderRowComponent`, matched by element selector, cited at the template's own file and line |
 | `orders/order-row.component.ts` | `@Component` with an inline template; `@Input` field |
 | `orders/orders.module.ts` | `@NgModule`, with `imports` edges carrying `ngModule: "imports"` |

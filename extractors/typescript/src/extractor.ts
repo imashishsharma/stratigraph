@@ -3,7 +3,7 @@ import { join } from 'node:path';
 
 import ts from 'typescript';
 
-import { AngularFacts, loadTemplateParser, type HttpCall } from './angular.js';
+import { AngularFacts, loadTemplateParser, type HttpCall, type Subscribe } from './angular.js';
 import { countLines, moduleOf, type Discovery } from './discovery.js';
 import { directoryOf, fieldFqn, methodFqn, modulePath, typeFqn } from './fqn.js';
 import { createProgram, Resolver } from './program.js';
@@ -497,7 +497,7 @@ export class TypeScriptExtractor {
   private callSites(source: ts.SourceFile, member: ts.Node): Record<string, unknown> {
     const { subscribes, http } = this.angular.callSites(source, member);
     const attrs: Record<string, unknown> = {};
-    if (subscribes.length > 0) attrs['rxjsSubscribes'] = subscribes;
+    if (subscribes.length > 0) attrs['rxjsSubscribes'] = subscribes satisfies Subscribe[];
     if (http.length > 0) attrs['httpCalls'] = http satisfies HttpCall[];
     return attrs;
   }

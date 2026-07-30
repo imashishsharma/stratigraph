@@ -182,7 +182,12 @@ describe('the TypeScript extractor reads Angular', () => {
     const ngOnInit = all.find(
       (f): f is NodeFact => f.type === 'node' && f.fqn.endsWith('OrderListComponent#ngOnInit()'),
     );
-    expect(ngOnInit?.attrs?.['rxjsSubscribes']).toEqual([21]);
+    // `guarded` and `retained` are syntax, recorded here because this is the
+    // only place the syntax exists; whether the subscription leaks is layer 4's
+    // judgement to make from them.
+    expect(ngOnInit?.attrs?.['rxjsSubscribes']).toEqual([
+      { line: 21, guarded: false, retained: false },
+    ]);
     // Nothing claims the receiver is an rxjs Observable, because nothing saw
     // one. The `import { Observable } from 'rxjs'` edge is a different matter —
     // that import is on the page.
