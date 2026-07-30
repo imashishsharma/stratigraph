@@ -165,6 +165,22 @@ function buildVocabulary(
     }
   };
 
+  /**
+   * Every directory above a file the pack showed.
+   *
+   * The same argument as the dotted prefixes, for the other separator: a prefix
+   * of a real path is a real directory, so naming it invents nothing. Dubbo
+   * made the case — three of four rejected descriptions were rejected solely
+   * for saying "dubbo-config/dubbo-config-api/src/main/java/org/apache/dubbo/
+   * config" when the pack had shown a file inside it.
+   */
+  const addPathPrefixes = (path: string): void => {
+    const segments = path.split('/');
+    for (let at = 1; at <= segments.length; at += 1) {
+      vocabulary.add(segments.slice(0, at).join('/'));
+    }
+  };
+
   for (const member of cluster.members) addPrefixes(member.fqn);
   addPrefixes(cluster.prefix);
 
@@ -182,7 +198,8 @@ function buildVocabulary(
   for (const item of items) {
     for (const token of identifiersIn(item.text)) {
       vocabulary.add(token);
-      if (token.includes('.') && !token.includes('/')) addPrefixes(token);
+      if (token.includes('/')) addPathPrefixes(token);
+      else if (token.includes('.')) addPrefixes(token);
     }
   }
   for (const file of source) {

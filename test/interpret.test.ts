@@ -570,6 +570,34 @@ describe('the vocabulary and the check use one tokeniser', () => {
   });
 });
 
+describe('the vocabulary', () => {
+  it('lets a description name a directory above a file it was shown', () => {
+    // Three of four descriptions dubbo rejected were rejected only for naming
+    // the directory holding a file the pack had shown. A prefix of a real path
+    // is a real directory, exactly as a prefix of a real package is a real
+    // package — the two separators deserve the same treatment.
+    seedGroups(false);
+    const { clusters, mismatches } = analyse();
+    const pack = buildEvidencePack(db, runId, clusters[0]!, mismatches[0] ?? null, {
+      sendSource: false,
+      repoPath: FIXTURE,
+    });
+
+    const file = pack.items.find((item) => item.text.includes('/'));
+    expect(file, 'expected the pack to show at least one path').toBeDefined();
+    const path = /([\w.$-]+(?:\/[\w.$-]+)+)/.exec(file!.text)![1] as string;
+
+    // Every directory above it is nameable; the file itself obviously is too.
+    const segments = path.split('/');
+    for (let at = 1; at <= segments.length; at += 1) {
+      const prefix = segments.slice(0, at).join('/');
+      expect(pack.vocabulary.has(prefix), prefix).toBe(true);
+    }
+    // A sibling that was never shown still is not.
+    expect(pack.vocabulary.has(`${segments.slice(0, -1).join('/')}/Invented.java`)).toBe(false);
+  });
+});
+
 describe('the prompt', () => {
   it('sends evidence ids and never database ids', async () => {
     seedGroups(false);

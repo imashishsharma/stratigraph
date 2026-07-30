@@ -276,6 +276,11 @@ function clearPreviousInterpretation(db: Db, runId: number): void {
     for (const rule of MODEL_RULES) {
       db.prepare('DELETE FROM finding WHERE run_id = ? AND rule = ?').run(runId, rule);
     }
+    // Diagnostics go with the findings they explain. Left behind, a rejection
+    // from a run three attempts ago reads exactly like one from this run.
+    db.prepare(
+      `DELETE FROM diagnostic WHERE run_id = ? AND extractor = 'interpret'`,
+    ).run(runId);
     // Clustering itself is the algorithm's; only the model's columns are reset.
     db.prepare(
       `UPDATE cluster SET name = NULL, description = NULL,

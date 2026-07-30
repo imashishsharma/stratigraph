@@ -152,7 +152,12 @@ function claimSchema(description: string) {
  */
 const PATTERNS = [
   /\b[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)+\b/g,
-  /\b[\w.$-]+(?:\/[\w.$-]+)+\b/g,
+  // A path needs three segments or a file extension. Two bare words around a
+  // slash are English — dubbo rejected true descriptions for saying
+  // "interface/implementation" and "demo/compatibility", where the slash means
+  // "or". Anything shorter that really is a path is a directory prefix of a
+  // file the pack showed, and is in the vocabulary for that reason instead.
+  /\b[\w.$-]+(?:\/[\w.$-]+){2,}\b|\b[\w.$-]+\/[\w.$-]*\.[\w$-]+\b/g,
   /\b[0-9a-f]{7,40}\b/g,
   /<[A-Za-z_][\w$]*>[\w$.]*/g,
 ];
@@ -240,7 +245,7 @@ function checkVocabulary(
   violations: Violation[],
 ): void {
   for (const token of identifiersIn(text)) {
-    if (!pack.vocabulary.has(token)) {
+    if (!nameable(token, pack)) {
       violations.push({
         rule: 'invented-identifier',
         at,
@@ -250,6 +255,26 @@ function checkVocabulary(
       });
     }
   }
+}
+
+/**
+ * Whether the pack accounts for this token.
+ *
+ * Exact match, or a dot-suffix of something the pack contains: a model that
+ * writes `adaptive.impl` for `org.apache.dubbo.common.extension.adaptive.impl`
+ * is abbreviating a real name, not inventing one, and on dubbo that shortening
+ * alone sank three otherwise-sound descriptions. A suffix cannot smuggle
+ * anything in — `bar.Qux` is a suffix of nothing when only `foo.bar.Baz` was
+ * shown — so this admits real sub-parts of real names and nothing else.
+ */
+function nameable(token: string, pack: EvidencePack): boolean {
+  if (pack.vocabulary.has(token)) return true;
+  if (!token.includes('.')) return false;
+  const suffix = `.${token}`;
+  for (const known of pack.vocabulary) {
+    if (known.endsWith(suffix)) return true;
+  }
+  return false;
 }
 
 /** Identifier-shaped tokens in a string, deduplicated and stop-listed. */

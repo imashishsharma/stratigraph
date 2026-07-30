@@ -372,6 +372,57 @@ describe('validate — the default package', () => {
   });
 });
 
+describe('validate — abbreviation versus invention', () => {
+  it('accepts a dot-suffix of a name it was shown', () => {
+    // Dubbo sank three sound descriptions for writing `adaptive.impl` where
+    // the pack held org.apache.dubbo.common.extension.adaptive.impl.
+    const result = validate(
+      good({
+        responsibility: [
+          { text: 'The repo.OrderRepo type stores them.', cites: ['e1'] },
+        ],
+      }),
+      pack(),
+    );
+    expect(result.ok).toBe(true);
+  });
+
+  it('still rejects a fragment that is a suffix of nothing', () => {
+    // `repo.Qux` is not the tail of any name in the pack, so abbreviation
+    // cannot explain it.
+    reject(
+      good({ responsibility: [{ text: 'The repo.Qux type stores them.', cites: ['e1'] }] }),
+      'invented-identifier',
+    );
+  });
+
+  it.each([
+    ['interface/implementation'],
+    ['demo/compatibility'],
+    ['read/write'],
+  ])('reads %s as English, not as a path', (phrase) => {
+    // Two bare words around a slash is prose. Dubbo rejected true sentences
+    // for exactly this.
+    const result = validate(
+      good({
+        responsibility: [{ text: `Splits ${phrase} concerns.`, cites: ['e1'] }],
+      }),
+      pack(),
+    );
+    expect(result.ok, `"${phrase}" should not be treated as a path`).toBe(true);
+  });
+
+  it.each([
+    ['src/main/Invented.java'],
+    ['a/b/c/invented'],
+  ])('still rejects %s, which is path-shaped', (invented) => {
+    reject(
+      good({ responsibility: [{ text: `See ${invented}.`, cites: ['e1'] }] }),
+      'invented-identifier',
+    );
+  });
+});
+
 describe('identifiersIn', () => {
   it.each([
     ['com.example.shop.Order', ['com.example.shop.Order']],
