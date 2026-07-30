@@ -63,3 +63,36 @@ legacy Spring MVC application can define most of its wiring in
 `applicationContext.xml`, and a graph that omits it while looking complete is
 the confidently-wrong map CLAUDE.md forbids. Parsing that XML is a later
 milestone; admitting we did not costs nothing now.
+
+## `tiny-angular`
+
+Angular read without Angular ([ADR-0016](../docs/adr/0016-angular-without-the-angular-compiler.md)):
+a standalone component with an external template, an `@NgModule`, a service
+injected two ways, a nested route table with a lazy boundary, and a `tsconfig`
+path alias that the DI graph depends on resolving.
+
+Expected facts:
+
+| File | Expected |
+| --- | --- |
+| `orders/order-list.component.ts` | `@Component` with `selector`, `standalone`, `templateUrl`; **constructor** injection of `OrderService` resolved through the `@app/*` alias; `ngOnInit` carrying an unguarded, unretained `rxjsSubscribes` site at line 21 |
+| `orders/order-list.component.html` | an `imports` edge to `OrderRowComponent`, matched by element selector, cited at the template's own file and line |
+| `orders/order-row.component.ts` | `@Component` with an inline template; `@Input` field |
+| `orders/orders.module.ts` | `@NgModule`, with `imports` edges carrying `ngModule: "imports"` |
+| `core/order.service.ts` | `@Injectable` with `providedIn`; **`inject()`** injection of `HttpClient`; `findOne` carrying `httpCalls: [{GET, "/api/orders/{}"}]`, and **a diagnostic and no call for `findBy`'s computed URL** |
+| `app.routes.ts` | routes `/`, `/orders`, `/orders/:id`; `declares_route` from the table, `handles` from each component, `lazy: true` on the `loadComponent` boundary |
+| `core/tokens.ts` | **an `info` diagnostic and no `injects` edge** — `inject(API_BASE)` names an `InjectionToken`, and what it provides is decided at runtime |
+| `legacy/legacy-page.component.ts` | **a decorated class and nothing more** — `@Page({ selector: 'app-legacy' })` is not Angular's, so no `selector` and no `angular` attribute are read out of it |
+
+The last two rows are this fixture's version of `tiny-spring`'s wildcard import.
+It is easy to write an extractor that scores well by matching decorator names
+and pulling a `selector` out of whatever object follows; the fixture asserts
+that this one checks where the name was imported from first.
+
+One deliberate fragility worth knowing about: `@angular/core`, `@angular/router`
+and `rxjs` are **not** installed in this repository, so those imports resolve
+through the import statement rather than through the checker, and the golden
+records `"resolution": "import"` for them. Installing any of those as a
+dependency of `stratigraph` would change the golden. That is a failure worth
+having — it is the difference between the two resolution paths, and it should be
+noticed rather than absorbed.

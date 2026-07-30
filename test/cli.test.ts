@@ -254,7 +254,8 @@ describe('stratigraph doctor', () => {
       'node',
       'git',
       'java',
-      'extractor',
+      'java extractor',
+      'ts extractor',
       'config',
       'model',
       'history',
@@ -262,6 +263,8 @@ describe('stratigraph doctor', () => {
     ]);
     // A missing or old JDK limits one extractor; it is never a hard failure.
     expect(checks.every((c) => c.status !== 'ok' || c.detail.length > 0)).toBe(true);
+    // And it never touches the other one, which needs no JDK at all.
+    expect(checks.find((c) => c.name === 'ts extractor')?.status).toBe('ok');
     expect(checks.find((c) => c.name === 'database')?.status).toBe('missing');
   });
 });

@@ -13,6 +13,7 @@ import { currentVersion, openDatabase } from '../db/database.js';
 import { SCHEMA_VERSION } from '../db/migrations/index.js';
 import { countCommits, gitToplevel, isShallowClone } from '../history/git-log.js';
 import { findExtractorJar, JAR_ENV_VAR } from '../toolchain/extractor-jar.js';
+import { findTsExtractor } from '../toolchain/ts-extractor.js';
 import { resolveCredential, type Credential } from '../interpret/client.js';
 import { discoverJavaRuntimes, findJava, MIN_JAVA_MAJOR } from '../toolchain/java.js';
 import { TOOL_VERSION } from '../version.js';
@@ -83,7 +84,7 @@ export function runDoctor(overrides: ConfigOverrides): Check[] {
   checks.push(
     jar
       ? {
-          name: 'extractor',
+          name: 'java extractor',
           status: 'ok',
           // The build date is here because `mvn test` does not repackage, so a
           // developer can easily be running a jar older than their last change
@@ -91,9 +92,27 @@ export function runDoctor(overrides: ConfigOverrides): Check[] {
           detail: `${jar.path} (${jar.source}, built ${builtAt(jar.path)})`,
         }
       : {
-          name: 'extractor',
+          name: 'java extractor',
           status: 'warn',
-          detail: `Java extractor jar not found — build it with \`cd extractors/java && ./mvnw package\`, or set java.jar / ${JAR_ENV_VAR}`,
+          detail: `jar not found — build it with \`cd extractors/java && ./mvnw package\`, or set java.jar / ${JAR_ENV_VAR}`,
+        },
+  );
+
+  // Needs no JDK and no download: it ships inside this package and runs on the
+  // Node already executing. Reported anyway, because "why did my Angular code
+  // not appear" needs an answer that is not silence.
+  const ts = findTsExtractor();
+  checks.push(
+    ts
+      ? {
+          name: 'ts extractor',
+          status: 'ok',
+          detail: `${ts.entry} (${ts.source}, no JDK required)`,
+        }
+      : {
+          name: 'ts extractor',
+          status: 'warn',
+          detail: 'not found — build it with `npm run build`',
         },
   );
 

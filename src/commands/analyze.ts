@@ -14,6 +14,8 @@ import {
 } from '../analysis/coupling.js';
 import { detectPackageCycles, type CycleFinding } from '../analysis/cycles.js';
 import { recordHistoryFindings, type RecordedFindings } from '../analysis/history-findings.js';
+import { linkHttpCalls, summariseLinks, type LinkResult } from '../analysis/http-links.js';
+import { recordRxjsFindings, summariseRxjs, type RxjsFindings } from '../analysis/rxjs-findings.js';
 import { busFactorRisks, topHotspots, type Hotspot } from '../analysis/hotspots.js';
 import {
   detectIntentMismatches,
@@ -69,6 +71,13 @@ export interface AnalyzeResult {
   /** Model-authored ADR candidates for this run. Empty without interpretation. */
   adrCandidates: Array<{ title: string; detail: string }>;
   findings: RecordedFindings | null;
+  /**
+   * Cross-stack HTTP links, inferred (ADR-0018). Null when `analyze` did not
+   * reach the linking step.
+   */
+  links: LinkResult | null;
+  /** Layer 4: subscriptions with no way to unsubscribe. Null when none were looked for. */
+  rxjs: RxjsFindings | null;
   /**
    * Whether this run has any extracted dependency to have checked against.
    *
@@ -132,6 +141,8 @@ export async function runAnalyze(options: AnalyzeOptions): Promise<AnalyzeResult
       credentialSource: null,
       adrCandidates: [],
       findings: null,
+      links: null,
+      rxjs: null,
       staticGraph: countDependencyEdges(db, runId) > 0,
     };
 
@@ -141,6 +152,23 @@ export async function runAnalyze(options: AnalyzeOptions): Promise<AnalyzeResult
         `run ${runId}: ${graph.packages.size} packages, ${graph.dependencies.length} package dependencies`,
       );
     }
+
+    // Cross-stack links, before anything reads the edge table for structure.
+    // They cannot be drawn by an extractor — the TypeScript one has never seen
+    // a Spring endpoint — and they are the one kind of edge here that comes
+    // from comparing strings rather than from reading a declaration, so every
+    // one is written `confidence = 'inferred'` (ADR-0018). `buildPackageGraph`
+    // already filters those out, so no cycle can be assembled from a guess.
+    result.links = linkHttpCalls(db, runId);
+    const linkLine = summariseLinks(result.links);
+    if (linkLine !== null) info(`run ${runId}: ${linkLine}`);
+
+    // ADR-0008 again: the subscribe call site is a fact the extractor observed,
+    // and "nothing can unsubscribe from this" is a judgement over three pieces
+    // of syntax. Judgements are findings, with citations.
+    result.rxjs = recordRxjsFindings(db, runId);
+    const rxjsLine = summariseRxjs(result.rxjs);
+    if (rxjsLine !== null) info(`run ${runId}: ${rxjsLine}`);
 
     // Coupling is computed before clustering, not after, because clustering
     // *reads* `temporal_coupling` and this is the command that writes it. With
@@ -290,6 +318,8 @@ function report(
   couplingWeight: number,
 ): void {
   reportCycles(result.cycles, packages);
+  reportCrossStack(result, top);
+  reportRxjs(result, top);
   reportClusters(result.clusters, top, couplingWeight);
   reportInterpretation(result);
   reportMismatches(result.mismatches, top);
@@ -299,6 +329,79 @@ function report(
   if (commits === 0) {
     print('');
     print('No history mined for this run — run `stratigraph history` for churn and coupling.');
+  }
+}
+
+/**
+ * Subscriptions nothing can tear down.
+ *
+ * Prints the ratio, not only the count: "4 of 250" and "4 of 4" mean very
+ * different things about a codebase, and a bare number lets a reader assume
+ * whichever suits them.
+ */
+function reportRxjs(result: AnalyzeResult, top: number): void {
+  const rxjs = result.rxjs;
+  if (rxjs === null || rxjs.leaks === 0) return;
+
+  const rows = rxjs.reported.slice(0, top);
+  print('');
+  print(`${rxjs.leaks} of ${rxjs.sites} subscribe site(s) have no way to unsubscribe:`);
+  print('');
+  for (const row of rows) {
+    print(`  ${row.title}`);
+    print(`    ${row.file ?? '?'}:${row.line}`);
+  }
+  if (rxjs.leaks > rows.length) {
+    print('');
+    print(`  Showing ${rows.length} of ${rxjs.leaks} — raise --top for more.`);
+  }
+}
+
+/**
+ * Cross-stack links, labelled as inference everywhere they appear.
+ *
+ * The heading says "inferred" and every row prints both strings that were
+ * compared, because these are the only edges in the report that no parser ever
+ * saw (ADR-0018). A reader has to be able to disagree with one by opening the
+ * cited line, and that needs the evidence on the page rather than a footnote.
+ */
+function reportCrossStack(result: AnalyzeResult, top: number): void {
+  const links = result.links;
+  if (links === null || links.linked === 0) {
+    // Only worth a line when there was something to fail at.
+    if (links !== null && links.ambiguous > 0) {
+      print('');
+      print(
+        `No cross-stack links: all ${links.ambiguous} candidate call(s) were ambiguous. ` +
+          `See the diagnostic table.`,
+      );
+    }
+    return;
+  }
+
+  const rows = links.calls.slice(0, top);
+  print('');
+  print(`${links.linked} cross-stack HTTP call(s) — INFERRED, not observed:`);
+  print('');
+  for (const row of rows) {
+    print(`  ${row.observed}  ->  ${row.endpoint}`);
+    print(`    ${row.caller}`);
+    print(`      ${row.file}:${row.line}`);
+  }
+  if (links.linked > rows.length) {
+    print('');
+    print(`  Showing ${rows.length} of ${links.linked} — raise --top for more.`);
+  }
+  print('');
+  print(
+    '  Matched by URL pattern against a declared endpoint. Nothing in either file says ' +
+      'these are connected; check the cited lines before relying on one.',
+  );
+  if (links.ambiguous > 0 || links.unmatched > 0) {
+    print(
+      `  ${links.ambiguous} further call(s) matched more than one endpoint and ` +
+        `${links.unmatched} matched none; neither produced an edge.`,
+    );
   }
 }
 
