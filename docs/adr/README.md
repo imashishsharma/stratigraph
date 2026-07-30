@@ -23,6 +23,8 @@ the code when it is incidental. Either way, before the commit.
 | [0013](0013-the-grounding-contract.md) | Opaque evidence packs, and a citation check in code that rejects model output | accepted |
 | [0014](0014-intent-versus-structure.md) | Intent-vs-structure mismatch is algorithmic; the model only describes it | accepted |
 | [0015](0015-the-mcp-query-surface.md) | The MCP surface: one pinned run, read-only, and empty answers that say which kind of empty | accepted |
+| [0016](0016-angular-without-the-angular-compiler.md) | Parse the TypeScript source set; no `@angular/compiler-cli`, no install | accepted |
+| [0017](0017-typescript-fact-identity.md) | How a TypeScript node's `fqn` is formed, and where it departs from ADR-0007 | accepted |
 
 Format: context, decision, alternatives considered (with why each was rejected),
 consequences — including the costs, not only the benefits.
