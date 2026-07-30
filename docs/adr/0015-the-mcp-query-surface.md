@@ -145,6 +145,41 @@ caller *is* a model. A second one in the path would add an uncited paraphrase
 between the facts and the agent, which is the exact failure the citation
 contract (ADR-0013) was built to prevent.
 
+## The acceptance run
+
+PLAN.md's criterion for M4 is: *Claude Code, connected to the server, correctly
+answers five structural questions about a repo it has never had in context.*
+
+Run against [apache/dubbo](https://github.com/apache/dubbo) at `3a30432` — 4,053
+files, 47,350 nodes, 163,693 edges, 8,893 commits, 38 clusters, `--no-llm` — with
+a fresh headless Claude Code given the server and **no filesystem access to
+dubbo**. Every answer was then checked by hand against the repository.
+
+| # | Question | Answer | Verified against |
+| --- | --- | --- | --- |
+| 1 | What does this store describe, and what does it *not* contain? | dubbo at `3a30432`; no tables, no interpretation, Java only — and stated that empty results in those areas mean "not extracted", not "not present" | `source_file` holds 4,049 java + 4 unknown; `--no-llm` was used |
+| 2 | Is there a cycle between `org.apache.dubbo.qos` and `…qos.command.util`? | Yes, with both directions cited — and the observation that the return edge is test-only, so main-source is acyclic | `QosScopeModelInitializer.java:21` and `ServiceCheckUtilsTest.java:23` read exactly as cited |
+| 3 | What calls the QoS `Server`'s `start()`? | `QosProtocolWrapper#startQosServer` at `QosProtocolWrapper.java:134`, and it distinguished the QoS `Server` from the unrelated OpenAPI `Server` model | `Server.java:90` declares `start()`; that line is the only QoS `start()` call site in the repository |
+| 4 | Biggest hotspot, and a file owned by one person? | `GooglePB.java` tops the arithmetic but is generated, so it named `dubbo.xsd` as the meaningful one; `MetadataInfo.java`, 73 commits, 65.8% one author | `git log --follow` gives 73 commits with 48 of them (65.75%) by that address |
+| 5 | Describe `…cluster.router.condition` | 4 types, heaviest dependency `router.state` (160 references), one real consumer `ListenableStateRouter` | The directory holds exactly those 3 main types plus 1 test; `ConditionStateRouter.java:72` and `ListenableStateRouter.java:164,173` read as cited |
+
+Two things this exercise established beyond the criterion.
+
+**The coverage envelope changes the answers, not just the caveats.** In (1) and
+(4) the model volunteered what the store could not answer before drawing
+conclusions from it, and in (3) it noted that `describe_run` had been denied and
+therefore it could not rule out extraction gaps. That is the behaviour
+`describe_run` and the `found`/`covered` split were added for, and it is not
+behaviour a prompt asked for.
+
+**One number disagreed with `git log --follow`, and the tool was right.** Answer
+(4) reported 163 commits for `dubbo.xsd` where `--follow` reports 165. The sets
+differ by six commits in total: `--follow` attributes four commits to this file
+that actually touched a *different* file with the same basename
+(`META-INF/compat/dubbo.xsd`), and misses two that genuinely modified this one
+(e.g. `588214b`). That is exactly the heuristic weakness ADR-0009 rejected
+`--follow` over, now visible from the other end of the pipeline.
+
 ## Consequences
 
 - An agent can establish what is knowable (`describe_run`) before asking what is

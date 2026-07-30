@@ -10,8 +10,8 @@ reconstructs how the thing came to be shaped the way it is.
 Aimed at monoliths and multi-module builds of 100k+ LOC where nobody remembers
 why things are the way they are. Java/Spring Boot and Angular first.
 
-> **Status: M3.** The Java extractor, the package graph, history mining and the
-> interpretation layer all work. Pointed at
+> **Status: M4.** The Java extractor, the package graph, history mining, the
+> interpretation layer and the MCP server all work. Pointed at
 > [apache/dubbo](https://github.com/apache/dubbo) — 4,053 Java files, no Spring
 > Boot, `javax.*`, Spring XML wiring — it produces 47,350 nodes and 163,693
 > edges in 18 seconds and reports 17 package cycles across 652 packages, three
@@ -25,7 +25,11 @@ why things are the way they are. Java/Spring Boot and Angular first.
 > descriptions accepted and zero fabrications missed, and it is re-run against
 > five kinds of mutated identifier on every change to the rule.
 >
-> The MCP server (M4) and the Angular extractor (M5) are still ahead.
+> All of it is then served over MCP, and a fresh Claude Code with dubbo out of
+> context answered five structural questions from it correctly — every answer
+> checked by hand against the lines it cited.
+>
+> The Angular extractor (M5) and the report layer (M6) are still ahead.
 
 ## The rule that shapes everything
 
@@ -141,6 +145,7 @@ stratigraph init    --repo ../some-monolith   # create the fact store
 stratigraph extract --repo ../some-monolith   # run the Java extractor into it
 stratigraph history --repo ../some-monolith   # mine git: churn, complexity, authors
 stratigraph analyze --repo ../some-monolith   # cycles, clusters, coupling, hotspots, ownership
+stratigraph mcp     --repo ../some-monolith   # serve it all to an agent over MCP
 ```
 
 `analyze --no-llm` is the whole report minus the prose: clusters, mismatches,
@@ -293,6 +298,49 @@ that answered, and a report that says which lines are inference.
 Without a credential — or with `--no-llm` — `analyze` says so in one line and
 prints the structural report unchanged.
 
+### Ask it questions from an agent
+
+`stratigraph mcp` serves the fact store over MCP on stdio, so an agent working
+in the codebase can ask structural questions instead of grepping for them.
+
+```sh
+claude mcp add stratigraph -- stratigraph mcp --repo ../some-monolith
+```
+
+Nine tools, all read-only:
+
+| Tool | Answers |
+| --- | --- |
+| `describe_run` | What this store contains, and — the point of it — what it does not |
+| `find_node` | Resolve a name you have to the exact `fqn` the other tools take |
+| `query_dependencies` | What a package or type depends on, and what depends on it |
+| `find_callers` | Every observed call or injection into a method or type |
+| `describe_module` | One package in full: types, endpoints, tables, churn, cluster |
+| `list_endpoints` | The HTTP surface, with the method that serves each route |
+| `find_hotspots` | Churn × complexity, or files whose history is one person |
+| `trace_to_table` | The types mapped to a table, and what reaches them |
+| `check_cycle` | Whether two packages depend on each other, with the edges |
+
+**The server only reads.** It opens the database read-only and never starts an
+extractor: a stale store is reported as stale, not silently rebuilt, because a
+tool call is a bad place to start a JVM over 4,000 files. It also pins one run
+at startup, so two answers in a session cannot describe two different commits.
+
+Every result carries a file and line, an `fqn` or a sha. Anything a model wrote
+comes back labelled `authoredBy: "model"` and is never blended into the
+structural answer. And every tool that can return nothing says which kind of
+nothing it is — `found` for "that name is not in this run", `covered` for "this
+run could not have answered that" — because to an agent an empty array reads as
+"there is no such thing" either way
+([ADR-0015](docs/adr/0015-the-mcp-query-surface.md)).
+
+Pointed at dubbo, with the repository itself out of context, it answered five
+structural questions correctly — a cycle with both directions cited, the sole
+call site of a method, a bus-factor file, a package summary — and each answer
+was checked by hand against the lines it cited. One of its numbers disagreed
+with `git log --follow`, and the tool turned out to be right; the run is
+recorded in the ADR.
+
 ### The Java extractor
 
 Needs a JDK 17+ to *run in*; it parses source of any vintage, including Java 8.
@@ -401,9 +449,9 @@ presenters never call extractors.
 
 ```
 extractors ──NDJSON──▶ fact store ──▶ history miner ──▶ interpreters ──▶ presenters
- (Java: JVM)            (SQLite)        (git log)      (clustering + LLM)   (Mermaid,
- (TS: compiler API)                                                          C4, HTML,
-                                                                             MCP server)
+ (Java: JVM)            (SQLite)        (git log)      (clustering + LLM)   (MCP server,
+ (TS: compiler API)                                                          Mermaid,
+                                                                             C4, HTML)
 ```
 
 Extractors are separate processes that emit newline-delimited JSON on stdout.
