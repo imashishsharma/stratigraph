@@ -165,4 +165,62 @@ would make the tool useless on precisely the codebases it targets.
 
 ## The acceptance run
 
-<!-- Filled in when M5's acceptance criteria are checked. -->
+M5's criterion: *runs against a large public Angular app and the DI graph is
+correct on manual spot-check.*
+
+Run against [bitwarden/clients](https://github.com/bitwarden/clients) at
+`9dd8a7f` — 5,788 TypeScript sources and 738 templates across 56 projects in an
+Nx-style workspace, **with `node_modules` never installed**, which is the
+condition this ADR exists to make survivable.
+
+| | |
+| --- | --- |
+| wall clock | 5.6 s |
+| peak RSS | 1.0 GB |
+| nodes / edges | 42,016 / 76,179 |
+| `injects` edges | 7,024 — 5,672 constructor, 1,245 `inject()`, 107 `@Inject` |
+| resolution | 6,109 through the checker (87%), 915 through the import statement |
+| components / injectables | 1,001 / 215 |
+| routes | 165, of which 13 lazy |
+| template-derived edges | 4,013 |
+| diagnostics | 1,261 |
+
+**The spot-check.** One `injects` edge was opened at its cited line for each of
+the six combinations of injection shape and resolution path. All six were
+exactly what the edge claimed — `account-switcher.component.ts:66-71` for
+constructor injection through both paths,
+`default-password-manager-prompt.component.ts:64-66` for `inject()`, and
+`import.component.ts:312` for `@Inject(ImportCollectionServiceAbstraction)`.
+
+**The case this ADR chose the checker for.** `import.component.ts` imports
+`DialogService` and `ToastService` from the `@bitwarden/components` barrel. The
+extractor resolved them to `libs/components/src/dialog/dialog.service:DialogService`
+and `libs/components/src/toast/toast.service:ToastService` — where the classes
+are actually declared, five directories away. Following the import statement
+alone would have produced `libs/components/src/index:DialogService`, a node the
+class is not declared in, and every consumer of that service would have pointed
+at the barrel instead of at the service. On a workspace whose cross-project
+imports are almost all barrel imports, that is the difference between a DI graph
+that is right and one that merely looks right.
+
+**What it declined to say**, which is the other half of the check:
+
+| count | refusal |
+| --- | --- |
+| 1,054 | a symbol resolved to nothing — no edge (`import { dirname } from "path"` with no `@types/node` installed; `injected "Window"`, a global rather than a class) |
+| 69 | two route tables resolving to one path — merged, and said so |
+| 52 | a static and an instance member sharing a name — merged, and said so |
+| 32 | `inject(SOME_TOKEN)` naming an `InjectionToken` — no edge, because what it provides is decided at runtime |
+| 54 | a route `path` that is an enum member (`AuthRoute.SignUp`) rather than a literal — no route node |
+
+Every one of those is an absence rather than a wrong edge, which is the trade
+this ADR made. Nothing in the run required `node_modules`, a `tsconfig` that
+resolves, or a project that type-checks.
+
+**One bug this run found.** Routes came out as zero on the first pass. Angular's
+dominant idiom is a module-private `const routes: Routes = [...]` handed to
+`RouterModule.forChild(routes)` in the same file, and the extractor was only
+emitting *exported* module-level bindings. A large repository reporting zero of
+something it plainly has is the cheapest kind of acceptance failure to catch,
+and it is the reason the criterion says "a large public app" rather than "the
+fixture".

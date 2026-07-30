@@ -110,6 +110,52 @@ string matching with a deterministic answer; handing it to a model would convert
 a checkable rule into an unfalsifiable one, and the model would have no evidence
 to cite beyond the same two strings.
 
+## What this cost on a real full-stack repository
+
+Verified end to end on a repository composed from `fixtures/tiny-spring` and
+`fixtures/tiny-angular`: `OrderService#findOne`'s `GET /api/orders/{}` linked to
+the `@GetMapping("/{id}")` under `@RequestMapping("/api/orders")`, and
+`findBy`'s `this.base + path` linked to nothing, with the diagnostic saying why.
+
+Then run against [jhipster/jhipster-sample-app](https://github.com/jhipster/jhipster-sample-app),
+a genuine Spring Boot + Angular monolith — 136 Java sources and 275 TypeScript
+sources in one tree, extracted into one run. **It produced zero links**, and
+both halves of the reason are worth recording, because neither is a defect and
+neither should be fixed by relaxing a rule.
+
+**The Java half declined to produce endpoints.** JHipster's controllers open
+with `import org.springframework.web.bind.annotation.*;`, and ADR-0005 refuses
+to resolve an annotation reached through a wildcard import — the `fqn` is
+genuinely ambiguous from source alone. 21 `@GetMapping`, 12 `@PostMapping` and 9
+`@RequestMapping` diagnostics; 2 endpoints extracted out of a repository with
+dozens. `fixtures/tiny-spring/LegacyReportController.java` asserts exactly this
+behaviour, so the extractor did what it was built and tested to do. It is
+nonetheless the largest single gap in the tool's coverage of real Spring code,
+and it belongs to ADR-0005 and a future milestone, not here.
+
+**The Angular half declined to produce literal URLs.** Every observed call came
+out as `{}/{}`, because JHipster writes
+`resourceUrl = this.applicationConfigService.getEndpointFor('api/bank-accounts')`
+and then `this.http.post(this.resourceUrl, …)`. The URL is assembled by a method
+on an injected service.
+
+That second finding **settles the deferred alternative above rather than
+strengthening it**. Constant-folding a class's string-literal fields — the
+extension this ADR left open as "the most defensible" — would not have resolved
+a single one of these, because the value never passes through a literal field;
+it comes back from a call. Reading it would mean modelling what
+`getEndpointFor` does, which is the `API.orders.byId(id)` case this ADR already
+rejected as unreadable without inventing semantics. The deferral stands, and now
+stands on evidence instead of on caution.
+
+The six calls that did reach the matcher were reported ambiguous: `GET {}/{}`
+matches both `GET /api/test-cors` and `GET /test/test-cors` equally well, and
+refusing was correct — two wildcards genuinely cannot pick between them.
+
+So the honest summary of this feature after M5: it works, it is verified, and on
+a repository that builds its URLs the way most real Angular applications do it
+reports nothing at all and says so. That is the failure mode this ADR chose.
+
 ## Consequences
 
 - The most valuable edges in the store are the least trusted ones, by

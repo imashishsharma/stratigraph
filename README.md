@@ -29,7 +29,20 @@ why things are the way they are. Java/Spring Boot and Angular first.
 > context answered five structural questions from it correctly — every answer
 > checked by hand against the lines it cited.
 >
-> The Angular extractor (M5) and the report layer (M6) are still ahead.
+> **M5 adds the second stack.** The Angular extractor reads TypeScript with the
+> compiler API and templates with `@angular/compiler` — and deliberately not
+> with `@angular/compiler-cli`, so it works on a repository that has never been
+> installed. Pointed at [bitwarden/clients](https://github.com/bitwarden/clients)
+> with no `node_modules` present, it produces 42,016 nodes and 76,179 edges from
+> 5,788 sources in 5.6 seconds, including 7,024 DI edges, 165 routes and 4,013
+> component relationships read out of templates. 87% of the DI edges resolve
+> through the type checker, which is what follows a barrel re-export to the file
+> the class is actually declared in.
+>
+> Both extractors write into one run, so an Angular service and the Spring
+> endpoint it calls can be joined — as an **inference**, never as a fact.
+>
+> The report layer (M6) is still ahead.
 
 ## The rule that shapes everything
 
@@ -142,7 +155,7 @@ including per-project settings and `apiKeyFile`, is under
 
 ```sh
 stratigraph init    --repo ../some-monolith   # create the fact store
-stratigraph extract --repo ../some-monolith   # run the Java extractor into it
+stratigraph extract --repo ../some-monolith   # run every applicable extractor into it
 stratigraph history --repo ../some-monolith   # mine git: churn, complexity, authors
 stratigraph analyze --repo ../some-monolith   # cycles, clusters, coupling, hotspots, ownership
 stratigraph mcp     --repo ../some-monolith   # serve it all to an agent over MCP
@@ -172,8 +185,49 @@ is not worth reporting. Cycles are stored as findings with citations into the
 edges that produced them, never as facts — see
 [ADR-0008](docs/adr/0008-cycles-are-findings-not-facts.md).
 
+`extract` runs **every extractor the repository needs**, detected from what is
+on disk, and writes them all into **one run** — which is what lets an Angular
+service and the Spring endpoint it calls be joined at all, since nodes are
+scoped by `run_id`. `--lang java|ts|all` overrides the detection. A missing JDK
+skips the Java half and keeps going rather than failing the command.
+
 `stratigraph extract --emit` writes the raw NDJSON to stdout instead of storing
 it, and `stratigraph ingest --from facts.ndjson` replays a captured stream.
+
+### Angular, and the endpoint it might be calling
+
+The TypeScript extractor emits components, injectables, NgModules, DI edges,
+routes with their lazy-loaded boundaries, and the component-to-component edges
+that only exist inside a template. Directories become `package` nodes, so cycle
+detection, clustering and every MCP query work on Angular with no change — a
+package cycle in `app/admin/metrics` reads exactly like one in
+`com.example.web`, with the template line cited as evidence where a template is
+what created it.
+
+Then `analyze` matches Angular HTTP calls against Spring endpoints:
+
+```
+1 cross-stack HTTP call(s) — INFERRED, not observed:
+
+  GET /api/orders/{}  ->  GET /api/orders/{id}
+    web/src/app/core/order.service:OrderService#findOne()
+      web/src/app/core/order.service.ts:15
+
+  Matched by URL pattern against a declared endpoint. Nothing in either file
+  says these are connected; check the cited lines before relying on one.
+```
+
+Every one of those edges is stored with `confidence = 'inferred'` and is
+excluded from the package graph, so no cycle can be assembled out of a string
+match. Only literal and template-literal URLs are matched; a computed one gets
+a diagnostic and no edge, and a URL matching two endpoints equally well gets a
+diagnostic naming both rather than a coin toss
+([ADR-0018](docs/adr/0018-cross-stack-links-are-inferences.md), which also
+records what this cost on a real JHipster monolith: nothing at all, honestly).
+
+It also reports subscriptions nothing can end — no `takeUntil`, no retained
+`Subscription`, no `ngOnDestroy` on the class. All three have to hold, so a
+teardown it cannot see produces silence rather than an accusation.
 
 ### History, and the coupling nobody wrote down
 
@@ -363,6 +417,26 @@ meta-annotated custom stereotypes, members inherited from third-party
 supertypes, anything an annotation processor generates, and bean wiring defined
 in XML. Each of those produces a diagnostic and an absence, never a wrong edge.
 
+### The TypeScript extractor
+
+Needs no JDK and no download — it ships inside this package and runs on the Node
+already executing, as a separate process so that a parser exhausting memory on a
+huge workspace takes down one extractor rather than the analysis.
+
+It **parses the source set and never installs or type-checks your project**
+([ADR-0016](docs/adr/0016-angular-without-the-angular-compiler.md)), which is
+why it does not use `@angular/compiler-cli`: `NgtscProgram` needs installed
+`node_modules`, a resolvable `tsconfig.json` and a project that compiles, and
+the repositories this tool exists for routinely have none of the three.
+`tsconfig.json` is read as plain JSON for `compilerOptions.paths` and nothing
+else — those aliases matter, because in an Nx workspace they are the only way
+cross-project imports are ever written.
+
+What it cannot see is stated rather than guessed: anything declared in a package
+you have not installed (an `is_stub` node, named by the import that introduced
+it), template type-checking, and DI through a factory or an `InjectionToken`.
+Each produces a diagnostic and an absence, never a wrong edge.
+
 The fact store defaults to `.stratigraph/<repo-name>.db` **under your current
 directory**, never inside the repository being analysed.
 
@@ -458,7 +532,10 @@ Extractors are separate processes that emit newline-delimited JSON on stdout.
 The core never links against a parser, which is why a JVM-only Java parser and a
 Node-only Angular parser can coexist without either infecting the core
 ([ADR-0001](docs/adr/0001-language-split.md),
-[ADR-0003](docs/adr/0003-ndjson-fact-protocol.md)).
+[ADR-0003](docs/adr/0003-ndjson-fact-protocol.md)). The TypeScript extractor is
+Node like the core, so the boundary is enforced by the build rather than by
+convention: it compiles under its own `rootDir`, and an import from `src/` into
+it fails to compile.
 
 ## Development
 
