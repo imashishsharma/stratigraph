@@ -78,6 +78,30 @@ Rules the table alone does not settle:
   `src/analysis/package-graph.ts` and Louvain need no change to work on
   TypeScript.
 
+### Declarations outside the source set
+
+ADR-0016 says a type declared in a library becomes an `is_stub` node: we
+recorded that something depends on it, not what it contains. It still needs a
+name, and on an uninstalled repository the checker cannot supply one — but the
+import statement that introduced it can, and it is right there in the file.
+
+**An external declaration is `<module specifier>:<exported name>`**, exactly as
+the import wrote it: `@angular/common/http:HttpClient`, `rxjs:Subscription`,
+`@myorg/legacy-sdk:ApiClient`. A default import is `<specifier>:default`.
+
+Two consequences worth stating. The specifier is recorded as written, so a
+package imported through two entry points (`@angular/core` and
+`@angular/core/rxjs-interop`) yields two nodes — correct, since they are two
+modules, and collapsing them would require knowing an `exports` map we never
+read. And the stub's `kind` is `class`, because an uninstalled repository offers
+no way to tell a class from an interface and nothing downstream distinguishes
+one stub from another; inferring `interface` from a leading `I` or from the name
+of the position it appears in would be inventing a fact.
+
+Edges to these carry `attrs.resolution`, `"checker"` when the declaration was
+actually found and `"import"` when only the import statement was — the same
+provenance distinction ADR-0005 records on the Java side.
+
 ### Two things that can collide, and what happens
 
 ADR-0007 established the principle: a merge is acceptable, an *invisible* merge

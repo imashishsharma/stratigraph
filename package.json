@@ -15,7 +15,7 @@
     "stratigraph.config.example.json"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
+    "build": "tsc -p tsconfig.build.json && tsc -p extractors/typescript/tsconfig.json",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc -p tsconfig.json",
@@ -23,17 +23,18 @@
     "stratigraph": "tsx src/cli.ts"
   },
   "dependencies": {
+    "@angular/compiler": "^19.2.25",
     "@anthropic-ai/sdk": "^0.115.0",
     "@modelcontextprotocol/sdk": "^1.30.0",
     "better-sqlite3": "^11.10.0",
     "commander": "^12.1.0",
+    "typescript": "^5.9.3",
     "zod": "^3.25.76"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^20.19.0",
     "tsx": "^4.19.2",
-    "typescript": "^5.6.3",
     "vitest": "^3.2.7"
   },
   "keywords": [

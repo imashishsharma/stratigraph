@@ -16,5 +16,15 @@
     "noEmit": true,
     "types": ["node"]
   },
-  "include": ["src/**/*.ts", "test/**/*.ts", "vitest.config.ts"]
+  // The extractor is compiled separately (its own tsconfig, its own rootDir) so
+  // that `tsc -p tsconfig.build.json` physically cannot pull a parser into the
+  // core — ADR-0001's "the core never links against a parser", enforced by the
+  // build rather than by convention. It is listed here only so `typecheck`
+  // covers it.
+  "include": [
+    "src/**/*.ts",
+    "test/**/*.ts",
+    "extractors/typescript/src/**/*.ts",
+    "vitest.config.ts"
+  ]
 }
