@@ -31,7 +31,14 @@ let printed: string[];
 beforeEach(() => {
   cwd = mkdtempSync(join(tmpdir(), 'stratigraph-cfgcmd-'));
   userHome = join(mkdtempSync(join(tmpdir(), 'stratigraph-cfghome-')), 'stratigraph');
-  env = { STRATIGRAPH_CONFIG_HOME: userHome } as NodeJS.ProcessEnv;
+  // Every credential source must be pointed somewhere empty, not just the
+  // stratigraph one: `ant auth login` writes a profile under
+  // ANTHROPIC_CONFIG_DIR, and a developer who has run it would otherwise see
+  // these tests find a real credential and fail.
+  env = {
+    STRATIGRAPH_CONFIG_HOME: userHome,
+    ANTHROPIC_CONFIG_DIR: join(cwd, 'no-anthropic-profile'),
+  } as NodeJS.ProcessEnv;
 
   printed = [];
   vi.spyOn(process.stdout, 'write').mockImplementation((chunk) => {
@@ -225,7 +232,7 @@ describe('config set-key', () => {
 describe('.env', () => {
   it('supplies the key, and analyze can see it', () => {
     writeFileSync(join(cwd, '.env'), 'ANTHROPIC_API_KEY=sk-ant-from-dotenv\n');
-    const isolated = { STRATIGRAPH_CONFIG_HOME: userHome } as NodeJS.ProcessEnv;
+    const isolated = { ...env } as NodeJS.ProcessEnv;
 
     const config = loadConfig({ repo: FIXTURE, cwd, env: isolated });
 
@@ -235,10 +242,7 @@ describe('.env', () => {
 
   it('does not override a variable already exported', () => {
     writeFileSync(join(cwd, '.env'), 'ANTHROPIC_API_KEY=sk-ant-from-dotenv\n');
-    const isolated = {
-      STRATIGRAPH_CONFIG_HOME: userHome,
-      ANTHROPIC_API_KEY: 'sk-ant-from-ci',
-    } as NodeJS.ProcessEnv;
+    const isolated = { ...env, ANTHROPIC_API_KEY: 'sk-ant-from-ci' } as NodeJS.ProcessEnv;
 
     loadConfig({ repo: FIXTURE, cwd, env: isolated });
 
@@ -247,7 +251,7 @@ describe('.env', () => {
 
   it('is reported alongside the config files', () => {
     writeFileSync(join(cwd, '.env'), 'ANTHROPIC_API_KEY=sk-ant-x\n');
-    runConfigPaths({ repo: FIXTURE, cwd, env: { STRATIGRAPH_CONFIG_HOME: userHome } as NodeJS.ProcessEnv });
+    runConfigPaths({ repo: FIXTURE, cwd, env });
     expect(stdout()).toContain('found');
   });
 });
