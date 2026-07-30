@@ -13,6 +13,7 @@ function llm(overrides: Partial<LlmConfig> = {}): LlmConfig {
     enabled: true,
     model: 'claude-opus-5',
     apiKey: null,
+    apiKeySource: null,
     apiKeyFile: null,
     apiKeyEnv: DEFAULT_API_KEY_ENV,
     sendSource: false,
@@ -39,6 +40,14 @@ describe('resolveCredential', () => {
     const credential = resolveCredential(llm({ apiKey: 'sk-inline' }), bareEnv());
     expect(credential).toMatchObject({ source: 'config', apiKey: 'sk-inline' });
     expect(credential?.describe).toContain('local.json');
+
+    // When the config records which file it came from, that is what is named.
+    expect(
+      resolveCredential(
+        llm({ apiKey: 'sk-inline', apiKeySource: '/home/me/.config/stratigraph/config.json' }),
+        bareEnv(),
+      )?.describe,
+    ).toBe('/home/me/.config/stratigraph/config.json');
   });
 
   it('reads a key file, trimming the trailing newline an editor leaves', () => {

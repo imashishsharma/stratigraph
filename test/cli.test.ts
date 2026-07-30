@@ -40,6 +40,7 @@ function runCli(args: string[], cwd: string): { status: number; stdout: string; 
   const env: NodeJS.ProcessEnv = {
     ...process.env,
     ANTHROPIC_CONFIG_DIR: join(cwd, 'no-credentials'),
+    STRATIGRAPH_CONFIG_HOME: join(cwd, 'no-user-config'),
   };
   delete env['ANTHROPIC_API_KEY'];
   delete env['ANTHROPIC_AUTH_TOKEN'];

@@ -85,11 +85,15 @@ export interface Credential {
  * interpretation was skipped for want of a key they do not need.
  */
 export function resolveCredential(
-  llm: Pick<LlmConfig, 'apiKey' | 'apiKeyFile' | 'apiKeyEnv'>,
+  llm: Pick<LlmConfig, 'apiKey' | 'apiKeySource' | 'apiKeyFile' | 'apiKeyEnv'>,
   env: NodeJS.ProcessEnv = process.env,
 ): Credential | null {
   if (llm.apiKey) {
-    return { source: 'config', describe: LOCAL_CONFIG_FILENAME, apiKey: llm.apiKey };
+    return {
+      source: 'config',
+      describe: llm.apiKeySource ?? LOCAL_CONFIG_FILENAME,
+      apiKey: llm.apiKey,
+    };
   }
 
   if (llm.apiKeyFile) {

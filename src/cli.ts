@@ -5,12 +5,13 @@ import { pathToFileURL } from 'node:url';
 import { Command, Option } from 'commander';
 
 import { AnalysisError, DEFAULT_TOP, runAnalyze } from './commands/analyze.js';
+import { runConfigPaths, runConfigSetKey } from './commands/config.js';
 import { runDoctor } from './commands/doctor.js';
 import { ExtractError, runExtract } from './commands/extract.js';
 import { HistoryError, runHistory } from './commands/history.js';
 import { runIngest } from './commands/ingest.js';
 import { runInit } from './commands/init.js';
-import { ConfigError } from './config.js';
+import { CONFIG_FILENAME, ConfigError, userConfigPath } from './config.js';
 import { FactProtocolError } from './facts/ndjson.js';
 import { error, print, setQuiet } from './log.js';
 import { TOOL_VERSION } from './version.js';
@@ -62,9 +63,28 @@ export function buildProgram(): Command {
 
   program
     .command('init')
-    .description('create or migrate the fact store for a repository')
+    .description('create or migrate the fact store, and optionally a config file')
+    .option('--write-config', `also write ${CONFIG_FILENAME} if it does not exist`)
+    .action((options: { writeConfig?: boolean }) => {
+      runInit({ ...overrides(program), writeConfig: options.writeConfig });
+    });
+
+  const config = program
+    .command('config')
+    .description('show where settings come from, or set the model API key');
+
+  config
+    .command('paths', { isDefault: true })
+    .description('list every file that configures a run, and which credential is in use')
     .action(() => {
-      runInit(overrides(program));
+      runConfigPaths(overrides(program));
+    });
+
+  config
+    .command('set-key <key>')
+    .description(`write llm.apiKey into ${userConfigPath()}`)
+    .action((key: string) => {
+      runConfigSetKey(key, overrides(program));
     });
 
   program

@@ -61,12 +61,64 @@ warn java         1.8.0_432 from JAVA_HOME is below JDK 17; the Java extractor
 warn extractor    Java extractor jar not found — build it with
                   `cd extractors/java && ./mvnw package`
 ok   config       defaults (no stratigraph.config.json found)
+warn model        claude-opus-5, but no credential found
 --   database     .stratigraph/my-repo.db does not exist yet — run `stratigraph init`
 ```
 
 A Docker image is the second channel, for environments where you would rather
 not think about toolchains at all. See
 [ADR-0004](docs/adr/0004-distribution-and-runtime-independence.md).
+
+## Set your API key
+
+**Only if you want cluster names and ADR candidates.** Everything structural —
+the dependency graph, cycles, clusters, hotspots, coupling, the intent-vs-
+structure findings — runs with no key and no configuration at all. Skip this
+section entirely and use `analyze --no-llm`.
+
+Pick one. They are tried in this order:
+
+```sh
+stratigraph config set-key sk-ant-...     # writes ~/.config/stratigraph/config.json, chmod 600
+```
+```sh
+export ANTHROPIC_API_KEY=sk-ant-...       # this shell; put it in ~/.zshrc to keep it
+```
+```sh
+echo 'ANTHROPIC_API_KEY=sk-ant-...' >> .env   # this directory; gitignore it
+```
+```sh
+ant auth login                            # no key at all, if you use the Anthropic CLI
+```
+
+Then confirm — it prints where the key came from, never the key:
+
+```console
+$ stratigraph doctor
+ok   model        claude-opus-5, credential from ~/.config/stratigraph/config.json
+```
+
+Not sure what is picked up? `stratigraph config` lists every file that can
+affect a run, whether or not it exists, and which one won:
+
+```console
+$ stratigraph config
+Files that configure a run, weakest first. Later ones win.
+
+found   /home/me/.config/stratigraph/config.json    you, every repository
+absent  /home/me/work/stratigraph.config.json       this project, committed  (no key here)
+absent  /home/me/work/stratigraph.config.local.json this project, your machine
+absent  /home/me/work/.env                          environment, e.g. ANTHROPIC_API_KEY
+
+model        claude-opus-5
+credential   /home/me/.config/stratigraph/config.json
+```
+
+**A key never goes in `stratigraph.config.json`.** That file is meant to be
+committed, and the tool refuses to load one that contains a key — by the time
+anyone notices, it has to be rotated rather than deleted. The full reference,
+including per-project settings and `apiKeyFile`, is under
+[Configuration](#configuration).
 
 ## Use
 
@@ -254,74 +306,79 @@ directory**, never inside the repository being analysed.
 
 ### Configuration
 
-Two files, looked up in the working directory and then the repo. CLI flags win
-over the local file, the local file wins over the shared one, and that wins over
-defaults. Unknown keys are an error, not a shrug.
+No config file is required. `stratigraph analyze --no-llm` needs none at all,
+and every value below has a working default. You create a file to change
+something — see [Set your API key](#set-your-api-key) for the common case.
 
-**`stratigraph.config.json`** — the project. Commit this one.
-
-```json
-{
-  "repo": "../some-monolith",
-  "db": ".stratigraph/monolith.db",
-  "exclude": ["node_modules", "target", "generated"],
-  "java": { "home": "/opt/jdk21", "jar": "./stratigraph-java-extractor.jar" },
-  "history": { "since": "3 years ago", "maxFilesPerCommit": 50, "minShared": 5 },
-  "interpret": { "couplingWeight": 1, "minClusterSize": 2, "maxClusters": 25 },
-  "llm": { "enabled": true, "model": "claude-opus-5", "apiKeyEnv": "ANTHROPIC_API_KEY" }
-}
+```sh
+stratigraph config                      # what is in play right now
+stratigraph init --write-config         # scaffold stratigraph.config.json
 ```
 
-**`stratigraph.config.local.json`** — the machine. Add it to `.gitignore`.
+`init --write-config` writes the defaults spelled out, so the file is a menu of
+what can be changed rather than decisions made on your behalf. It never
+overwrites an existing one.
 
-```json
-{
-  "llm": { "model": "claude-sonnet-5", "apiKey": "sk-ant-..." }
-}
-```
+#### Where the files go
 
-Merged over the shared file key by key, so a team commits one config and each
-person overrides the model, the credential, or any threshold without touching
-it.
+Four places, none of which exists until you create it, merged weakest first:
 
-#### The credential
+| File | Scope | Committed? | Key allowed? |
+| --- | --- | --- | --- |
+| `~/.config/stratigraph/config.json` | you, every repo you analyse | no — outside every repo | yes |
+| `stratigraph.config.json` | one project, everyone on it | **yes** | **no** |
+| `stratigraph.config.local.json` | one project, your machine | no — `.gitignore` it | yes |
+| `.env` | environment variables | no — `.gitignore` it | yes |
 
-Four ways, in the order they are tried. `stratigraph doctor` prints which one
-answered — and never prints the key itself.
+The project files and `.env` are looked up **in the working directory first,
+then in the repository being analysed** — so `cd ~/work && stratigraph analyze
+--repo ../monolith` reads `~/work/stratigraph.config.json`, then falls back to
+`../monolith/stratigraph.config.json`. `--config <path>` overrides the lookup.
+
+On Windows the user file is `%APPDATA%\stratigraph\config.json`.
+`XDG_CONFIG_HOME` and `STRATIGRAPH_CONFIG_HOME` are both honoured.
+
+Precedence, highest first: **CLI flags → local → project → user → defaults.** A
+project pinning `"model": "claude-opus-5"` beats your personal default; your
+`.local.json` beats the project. A variable already exported always beats
+`.env`, so a committed `.env` cannot override a secret CI set.
+
+Unknown keys are an error, not a shrug. An explicit `null` means "use the
+default", which is why the scaffolded file can spell every option out.
+
+#### The credential, in full
 
 | Where | How |
 | --- | --- |
-| `llm.apiKey` | Inline, **only** in `stratigraph.config.local.json` |
-| `llm.apiKeyFile` | Path to a file holding the key; `~` expands, relative paths resolve against the config file |
-| `llm.apiKeyEnv` | Name of the environment variable to read (default `ANTHROPIC_API_KEY`) |
+| `llm.apiKey` | Inline. Allowed in the user file and `*.local.json`; **refused** in `stratigraph.config.json` |
+| `llm.apiKeyFile` | Path to a file holding the key. `~` expands; relative paths resolve against the config file |
+| `llm.apiKeyEnv` | Which environment variable to read — default `ANTHROPIC_API_KEY`, so a team can point at `WORK_ANTHROPIC_KEY` |
+| `.env` | Sets that variable, if it is not already exported |
 | — | `ANTHROPIC_AUTH_TOKEN`, or a profile from `ant auth login` |
 
-`llm.apiKey` in the **shared** `stratigraph.config.json` is refused outright,
-with an error naming the alternatives. That file is meant to be committed, and a
-key in it is a key in the repository's history — by the time anyone notices, it
-has to be rotated rather than deleted. A warning would scroll past.
-
-A configured `apiKeyFile` that cannot be read is an error too, rather than a
-quiet fall-through to whatever else is lying around: silently using a different
+A configured `apiKeyFile` that cannot be read is an error, rather than a quiet
+fall-through to whatever else is lying around: silently using a different
 credential than the one you asked for is how the wrong account gets billed.
 
-```console
-$ stratigraph doctor
-ok   config       stratigraph.config.json + stratigraph.config.local.json
-ok   model        claude-opus-5, credential from stratigraph.config.local.json
-```
+Without a credential, `analyze` prints one line saying so — with the three
+commands that would fix it — and the structural report is unchanged.
 
-#### The rest
+#### What you can set
+
+The full shape is in
+[`stratigraph.config.example.json`](stratigraph.config.example.json), which
+ships with the package. The three worth knowing:
+
+- **`llm.model`** — defaults to `claude-opus-5`. `--model <id>` overrides it per
+  run. Whichever model *answered* is recorded on every row it writes.
+- **`interpret.couplingWeight`** — decides the clustering, so `analyze` prints
+  the value it used. `0` clusters on structure alone.
+- **`interpret.maxClusters`** — caps how many clusters are sent to the model, so
+  a large repository cannot run away with your bill.
 
 `llm.sendSource` is off by default and loudly logged when on. Extraction and
 history mining are entirely local; only the interpretation layer talks to a
 model API, and only about structural metadata unless you opt in.
-
-`interpret.couplingWeight` is the knob that decides the clustering, so `analyze`
-prints the value it used. `maxClusters` caps how many clusters are sent to the
-model, so a large repository cannot run away with your bill. The model comes
-from `--model`, then `llm.model`, then the default; whichever *answered* is
-recorded on every row it writes.
 
 ## Architecture
 

@@ -11,7 +11,8 @@
     "stratigraph": "./dist/cli.js"
   },
   "files": [
-    "dist"
+    "dist",
+    "stratigraph.config.example.json"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",

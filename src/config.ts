@@ -2,6 +2,8 @@ import { existsSync, readFileSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, isAbsolute, join, resolve, sep } from 'node:path';
 
+import { loadDotenv } from './dotenv.js';
+
 export const CONFIG_FILENAME = 'stratigraph.config.json';
 
 /**
@@ -16,16 +18,36 @@ export const LOCAL_CONFIG_FILENAME = 'stratigraph.config.local.json';
 
 export const DEFAULT_API_KEY_ENV = 'ANTHROPIC_API_KEY';
 
+/**
+ * Settings for one person across every repository they analyse.
+ *
+ * Without this, someone who installed the package globally has to create a
+ * config in whatever directory they happen to run from, and re-paste their key
+ * each time. This is where a key and a preferred model live once. It sits
+ * outside every repository, so an inline key is safe here.
+ */
+export function userConfigPath(env: NodeJS.ProcessEnv = process.env): string {
+  const base =
+    env['STRATIGRAPH_CONFIG_HOME'] ??
+    (process.platform === 'win32'
+      ? join(env['APPDATA'] ?? homedir(), 'stratigraph')
+      : join(env['XDG_CONFIG_HOME'] ?? join(homedir(), '.config'), 'stratigraph'));
+  return join(base, 'config.json');
+}
+
 export interface LlmConfig {
   /** Interpretation layer. The whole pipeline must work with this off. */
   enabled: boolean;
   /** Model id for the interpretation layer. Recorded on every row it writes. */
   model: string;
   /**
-   * The key itself. Accepted only from `stratigraph.config.local.json`, never
-   * from the shared file — see `readConfigFile`.
+   * The key itself. Accepted from the two files that are never committed —
+   * `stratigraph.config.local.json` and the user config — and refused in the
+   * shared `stratigraph.config.json`. See `readConfigFile`.
    */
   apiKey: string | null;
+  /** Which file supplied `apiKey`, so `doctor` can name it rather than guess. */
+  apiKeySource: string | null;
   /** A file containing the key, so no secret is in any config file at all. */
   apiKeyFile: string | null;
   /** Which environment variable holds the key. */
@@ -114,8 +136,12 @@ export interface StratigraphConfig {
   interpret: InterpretConfig;
   /** The shared config file, if one was found. */
   source: string | null;
-  /** The per-person overrides file, if one was found. */
+  /** The per-project, per-machine overrides file, if one was found. */
   localSource: string | null;
+  /** The per-person file under the user config directory, if one was found. */
+  userSource: string | null;
+  /** `.env` files that were loaded into the environment, if any. */
+  dotenvFiles: string[];
 }
 
 export interface ConfigOverrides {
@@ -131,6 +157,8 @@ export interface ConfigOverrides {
   model?: string | undefined;
   couplingWeight?: number | undefined;
   cwd?: string | undefined;
+  /** Environment to resolve the user config directory from. Injected by tests. */
+  env?: NodeJS.ProcessEnv | undefined;
 }
 
 export class ConfigError extends Error {
@@ -173,13 +201,23 @@ const KNOWN_HISTORY_KEYS = new Set(['since', 'maxFilesPerCommit', 'minShared', '
 const KNOWN_INTERPRET_KEYS = new Set(['couplingWeight', 'minClusterSize', 'maxClusters']);
 
 /**
- * Precedence: CLI flags > config file > defaults.
+ * Precedence, highest first:
  *
- * The config file is looked up as `--config`, then `<cwd>/stratigraph.config.json`,
- * then `<repo>/stratigraph.config.json`.
+ *   CLI flags
+ *   stratigraph.config.local.json   this machine, this project  (gitignored)
+ *   stratigraph.config.json         this project, everyone      (committed)
+ *   ~/.config/stratigraph/config.json   this person, every project
+ *   defaults
+ *
+ * The two project files are looked up in the working directory first, then in
+ * the repository being analysed. The user file is where a globally installed
+ * copy keeps a credential, and is deliberately the weakest of the three: a
+ * project's committed choices should win over a personal default, and anything
+ * a person wants to override for one project goes in the local file.
  */
 export function loadConfig(overrides: ConfigOverrides = {}): StratigraphConfig {
   const cwd = overrides.cwd ?? process.cwd();
+  const env = overrides.env ?? process.env;
   const fromCli = overrides.repo;
 
   const explicitConfig = overrides.config ? absolute(overrides.config, cwd) : null;
@@ -202,11 +240,26 @@ export function loadConfig(overrides: ConfigOverrides = {}): StratigraphConfig {
   );
   const localPath = localCandidate === sharedPath ? null : localCandidate;
 
-  const configPath = sharedPath ?? localPath;
-  const file = mergeConfigFiles(
-    sharedPath ? readConfigFile(sharedPath) : {},
-    localPath ? readConfigFile(localPath) : {},
-  );
+  // Outside every repository, so an inline key is safe here. Skipped when
+  // `--config` names it, so it is never read twice.
+  const userPath = firstExisting([userConfigPath(env)]);
+  const userConfig = userPath === null || userPath === sharedPath ? null : userPath;
+
+  const configPath = sharedPath ?? localPath ?? userConfig;
+  const userFile = userConfig ? readConfigFile(userConfig, { allowInlineKey: true }) : {};
+  const sharedFile = sharedPath
+    ? readConfigFile(sharedPath, { allowInlineKey: isLocalConfig(sharedPath) })
+    : {};
+  const localFile = localPath ? readConfigFile(localPath, { allowInlineKey: true }) : {};
+  const file = mergeConfigFiles(userFile, sharedFile, localFile);
+
+  // Which file's key won, so `doctor` names the one to edit. Same precedence
+  // as the merge, so this cannot disagree with the value actually in use.
+  const apiKeySource =
+    (localFile.llm?.apiKey && localPath) ||
+    (sharedFile.llm?.apiKey && sharedPath) ||
+    (userFile.llm?.apiKey && userConfig) ||
+    null;
 
   const repoRaw = fromCli ?? file.repo ?? cwd;
   const repoBase = configPath && !fromCli ? dirOf(configPath) : cwd;
@@ -218,6 +271,13 @@ export function loadConfig(overrides: ConfigOverrides = {}): StratigraphConfig {
   if (!statSync(repoPath).isDirectory()) {
     throw new ConfigError(`repository path is not a directory: ${repoPath}`);
   }
+
+  // Loaded once the repository is known, and before anything reads a
+  // credential. This *mutates* `env` — which for the default `process.env` is
+  // the whole point, and is what every other .env reader does. A name already
+  // set in the real environment always wins, so a committed .env cannot
+  // override a secret CI exported.
+  const dotenv = loadDotenv([cwd, repoPath], env);
 
   const dbRaw = overrides.db ?? file.db ?? join('.stratigraph', `${basename(repoPath)}.db`);
   const dbBase = overrides.db ? cwd : configPath && file.db ? dirOf(configPath) : cwd;
@@ -231,6 +291,7 @@ export function loadConfig(overrides: ConfigOverrides = {}): StratigraphConfig {
       enabled: overrides.llm ?? file.llm?.enabled ?? true,
       model: overrides.model ?? file.llm?.model ?? DEFAULT_MODEL,
       apiKey: file.llm?.apiKey ?? null,
+      apiKeySource,
       apiKeyFile: file.llm?.apiKeyFile
         ? absolute(expandHome(file.llm.apiKeyFile), configPath ? dirOf(configPath) : cwd)
         : null,
@@ -260,25 +321,33 @@ export function loadConfig(overrides: ConfigOverrides = {}): StratigraphConfig {
     },
     source: sharedPath,
     localSource: localPath,
+    userSource: userConfig,
+    dotenvFiles: dotenv.files,
   };
 }
 
-/** Where the settings came from, for `init` and `doctor` to report. */
+/** Which files were read, weakest first, for `init` and `doctor` to report. */
 export function describeSource(config: StratigraphConfig): string {
-  const files = [config.source, config.localSource].filter((path) => path !== null);
-  return files.length > 0 ? files.join(' + ') : `defaults (no ${CONFIG_FILENAME} found)`;
+  const files = [config.userSource, config.source, config.localSource].filter(
+    (path) => path !== null,
+  );
+  const described =
+    files.length > 0 ? files.join(' + ') : `defaults (no ${CONFIG_FILENAME} found)`;
+  return config.dotenvFiles.length > 0
+    ? `${described} (+ ${config.dotenvFiles.join(', ')})`
+    : described;
 }
 
-/** Local settings win, key by key, over the shared ones. */
-function mergeConfigFiles(shared: ConfigFile, local: ConfigFile): ConfigFile {
-  return {
-    ...shared,
-    ...local,
-    llm: { ...shared.llm, ...local.llm },
-    java: { ...shared.java, ...local.java },
-    history: { ...shared.history, ...local.history },
-    interpret: { ...shared.interpret, ...local.interpret },
-  };
+/** Later files win, key by key, over earlier ones. */
+function mergeConfigFiles(...files: ConfigFile[]): ConfigFile {
+  return files.reduce((merged, file) => ({
+    ...merged,
+    ...file,
+    llm: { ...merged.llm, ...file.llm },
+    java: { ...merged.java, ...file.java },
+    history: { ...merged.history, ...file.history },
+    interpret: { ...merged.interpret, ...file.interpret },
+  }));
 }
 
 function expandHome(path: string): string {
@@ -315,7 +384,7 @@ interface ConfigFile {
   };
 }
 
-function readConfigFile(path: string): ConfigFile {
+function readConfigFile(path: string, options: { allowInlineKey: boolean }): ConfigFile {
   let parsed: unknown;
   try {
     parsed = JSON.parse(readFileSync(path, 'utf8'));
@@ -336,11 +405,11 @@ function readConfigFile(path: string): ConfigFile {
   }
 
   const out: ConfigFile = {};
-  if (obj['repo'] !== undefined) out.repo = expectString(path, 'repo', obj['repo']);
-  if (obj['db'] !== undefined) out.db = expectString(path, 'db', obj['db']);
-  if (obj['include'] !== undefined)
+  if (isSet(obj['repo'])) out.repo = expectString(path, 'repo', obj['repo']);
+  if (isSet(obj['db'])) out.db = expectString(path, 'db', obj['db']);
+  if (isSet(obj['include']))
     out.include = expectStringArray(path, 'include', obj['include']);
-  if (obj['exclude'] !== undefined)
+  if (isSet(obj['exclude']))
     out.exclude = expectStringArray(path, 'exclude', obj['exclude']);
 
   if (obj['llm'] !== undefined) {
@@ -355,30 +424,30 @@ function readConfigFile(path: string): ConfigFile {
       }
     }
     out.llm = {};
-    if (llmObj['enabled'] !== undefined)
+    if (isSet(llmObj['enabled']))
       out.llm.enabled = expectBoolean(path, 'llm.enabled', llmObj['enabled']);
-    if (llmObj['model'] !== undefined)
+    if (isSet(llmObj['model']))
       out.llm.model = expectString(path, 'llm.model', llmObj['model']);
-    if (llmObj['apiKey'] !== undefined) {
+    if (isSet(llmObj['apiKey'])) {
       // The shared config describes the project and belongs in version
       // control; a key in it is a key in the repository's history, and by the
       // time anyone notices it has to be rotated rather than deleted. Refused
       // rather than warned about, because a warning scrolls past.
-      if (!isLocalConfig(path)) {
+      if (!options.allowInlineKey) {
         throw new ConfigError(
           `${path}: "llm.apiKey" must not go in ${CONFIG_FILENAME} — that file is meant ` +
-            `to be committed. Put it in ${LOCAL_CONFIG_FILENAME} (add that to .gitignore), ` +
-            `or point "llm.apiKeyFile" at a file holding the key, or set the ` +
-            `${DEFAULT_API_KEY_ENV} environment variable.`,
+            `to be committed. Put it in ${LOCAL_CONFIG_FILENAME} next to it (and add ` +
+            `that to .gitignore), or in ${userConfigPath()}, or point "llm.apiKeyFile" ` +
+            `at a file holding the key, or set ${DEFAULT_API_KEY_ENV}.`,
         );
       }
       out.llm.apiKey = expectString(path, 'llm.apiKey', llmObj['apiKey']);
     }
-    if (llmObj['apiKeyFile'] !== undefined)
+    if (isSet(llmObj['apiKeyFile']))
       out.llm.apiKeyFile = expectString(path, 'llm.apiKeyFile', llmObj['apiKeyFile']);
-    if (llmObj['apiKeyEnv'] !== undefined)
+    if (isSet(llmObj['apiKeyEnv']))
       out.llm.apiKeyEnv = expectString(path, 'llm.apiKeyEnv', llmObj['apiKeyEnv']);
-    if (llmObj['sendSource'] !== undefined)
+    if (isSet(llmObj['sendSource']))
       out.llm.sendSource = expectBoolean(path, 'llm.sendSource', llmObj['sendSource']);
   }
 
@@ -394,9 +463,9 @@ function readConfigFile(path: string): ConfigFile {
       }
     }
     out.java = {};
-    if (javaObj['home'] !== undefined)
+    if (isSet(javaObj['home']))
       out.java.home = expectString(path, 'java.home', javaObj['home']);
-    if (javaObj['jar'] !== undefined)
+    if (isSet(javaObj['jar']))
       out.java.jar = expectString(path, 'java.jar', javaObj['jar']);
   }
 
@@ -412,21 +481,21 @@ function readConfigFile(path: string): ConfigFile {
       }
     }
     out.history = {};
-    if (historyObj['since'] !== undefined)
+    if (isSet(historyObj['since']))
       out.history.since = expectString(path, 'history.since', historyObj['since']);
-    if (historyObj['maxFilesPerCommit'] !== undefined)
+    if (isSet(historyObj['maxFilesPerCommit']))
       out.history.maxFilesPerCommit = expectPositiveInteger(
         path,
         'history.maxFilesPerCommit',
         historyObj['maxFilesPerCommit'],
       );
-    if (historyObj['minShared'] !== undefined)
+    if (isSet(historyObj['minShared']))
       out.history.minShared = expectPositiveInteger(
         path,
         'history.minShared',
         historyObj['minShared'],
       );
-    if (historyObj['minCommits'] !== undefined)
+    if (isSet(historyObj['minCommits']))
       out.history.minCommits = expectPositiveInteger(
         path,
         'history.minCommits',
@@ -446,19 +515,19 @@ function readConfigFile(path: string): ConfigFile {
       }
     }
     out.interpret = {};
-    if (interpretObj['couplingWeight'] !== undefined)
+    if (isSet(interpretObj['couplingWeight']))
       out.interpret.couplingWeight = expectNonNegativeNumber(
         path,
         'interpret.couplingWeight',
         interpretObj['couplingWeight'],
       );
-    if (interpretObj['minClusterSize'] !== undefined)
+    if (isSet(interpretObj['minClusterSize']))
       out.interpret.minClusterSize = expectPositiveInteger(
         path,
         'interpret.minClusterSize',
         interpretObj['minClusterSize'],
       );
-    if (interpretObj['maxClusters'] !== undefined)
+    if (isSet(interpretObj['maxClusters']))
       out.interpret.maxClusters = expectPositiveInteger(
         path,
         'interpret.maxClusters',
@@ -467,6 +536,18 @@ function readConfigFile(path: string): ConfigFile {
   }
 
   return out;
+}
+
+/**
+ * Whether a key carries a value.
+ *
+ * An explicit `null` means "use the default", so a config file can spell out
+ * every option — which is what `init --write-config` produces, and what makes
+ * that file readable as documentation. Without this the tool writes a config it
+ * then refuses to load.
+ */
+function isSet(value: unknown): boolean {
+  return value !== undefined && value !== null;
 }
 
 /** Zero is meaningful here: it turns the history term off entirely. */
@@ -509,7 +590,12 @@ function dirOf(filePath: string): string {
   return resolve(filePath, '..');
 }
 
-/** Whether a config path is the per-person file, which may hold a secret. */
+/**
+ * Whether a config path may hold a secret.
+ *
+ * Only reached for `--config`, which can name either project file directly.
+ * The user config is outside every repository and is always allowed.
+ */
 function isLocalConfig(path: string): boolean {
   return basename(path) === LOCAL_CONFIG_FILENAME;
 }

@@ -1,0 +1,27 @@
+{
+  "repo": "../some-monolith",
+  "db": ".stratigraph/monolith.db",
+  "exclude": ["node_modules", "target", "generated"],
+
+  "java": { "home": null, "jar": null },
+
+  "history": {
+    "since": null,
+    "maxFilesPerCommit": 50,
+    "minShared": 5,
+    "minCommits": 5
+  },
+
+  "interpret": {
+    "couplingWeight": 1,
+    "minClusterSize": 2,
+    "maxClusters": 25
+  },
+
+  "llm": {
+    "enabled": true,
+    "model": "claude-opus-5",
+    "apiKeyEnv": "ANTHROPIC_API_KEY",
+    "sendSource": false
+  }
+}

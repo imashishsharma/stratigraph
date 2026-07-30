@@ -1,4 +1,11 @@
-import { loadConfig, type ConfigOverrides, type StratigraphConfig } from '../config.js';
+import {
+  DEFAULT_API_KEY_ENV,
+  loadConfig,
+  LOCAL_CONFIG_FILENAME,
+  userConfigPath,
+  type ConfigOverrides,
+  type StratigraphConfig,
+} from '../config.js';
 import { detectClusters, loadClusters, type ClusterResult } from '../analysis/clusters.js';
 import {
   computeTemporalCoupling,
@@ -361,8 +368,12 @@ function reportInterpretation(result: AnalyzeResult): void {
     print(
       result.interpretationSkipped === 'disabled'
         ? '  Interpretation is off (--no-llm). Everything above is structural.'
-        : '  Interpretation skipped: no model credential found. Set ANTHROPIC_API_KEY ' +
-            'or run `ant auth login`. Everything above is structural.',
+        : `  Interpretation skipped: no model credential found. Everything above is\n` +
+          `  structural and complete. To add names and ADR candidates, do any one of:\n` +
+          `    export ${DEFAULT_API_KEY_ENV}=sk-ant-...\n` +
+          `    echo '{"llm":{"apiKey":"sk-ant-..."}}' > ${userConfigPath()}\n` +
+          `    echo '{"llm":{"apiKey":"sk-ant-..."}}' > ${LOCAL_CONFIG_FILENAME}\n` +
+          `  then re-run. \`stratigraph doctor\` confirms it without printing the key.`,
     );
     return;
   }

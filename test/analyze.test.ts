@@ -40,6 +40,7 @@ beforeEach(() => {
   delete process.env['ANTHROPIC_API_KEY'];
   delete process.env['ANTHROPIC_AUTH_TOKEN'];
   process.env['ANTHROPIC_CONFIG_DIR'] = join(cwd, 'no-credentials');
+  process.env['STRATIGRAPH_CONFIG_HOME'] = join(cwd, 'no-user-config');
   runInit({ repo: FIXTURE, cwd });
   dbPath = join(cwd, '.stratigraph', 'tiny-java.db');
   db = openDatabase(dbPath, { mustExist: true });

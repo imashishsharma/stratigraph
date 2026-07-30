@@ -5,6 +5,7 @@ import {
   describeSource,
   loadConfig,
   LOCAL_CONFIG_FILENAME,
+  userConfigPath,
   type ConfigOverrides,
   type StratigraphConfig,
 } from '../config.js';
@@ -155,10 +156,14 @@ function modelCheck(config: StratigraphConfig): Check {
     ? {
         name: 'model',
         status: 'warn',
+        // Names the exact file to create rather than the idea of one: this
+        // line is where someone finds out they need to do something.
         detail:
-          `${config.llm.model}, but no credential found — set $${config.llm.apiKeyEnv}, ` +
-          `put "llm.apiKey" in ${LOCAL_CONFIG_FILENAME}, point "llm.apiKeyFile" at a ` +
-          `file holding it, or run \`ant auth login\`. Structural output is unaffected.`,
+          `${config.llm.model}, but no credential found. Any one of: ` +
+          `create ${userConfigPath()} with {"llm":{"apiKey":"sk-ant-..."}}; ` +
+          `put the same in ${LOCAL_CONFIG_FILENAME} beside your project config; ` +
+          `export ${config.llm.apiKeyEnv}; or run \`ant auth login\`. ` +
+          `Structural output is unaffected.`,
       }
     : {
         name: 'model',
