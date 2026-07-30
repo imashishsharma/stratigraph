@@ -1,4 +1,4 @@
-import { execFileSync, spawnSync } from 'node:child_process';
+import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -125,4 +125,89 @@ describe('the installed package', () => {
     expect(status).toBe(2);
     expect(out).toMatch(/repository path does not exist/);
   });
+
+  /**
+   * The MCP server is the one command whose product is a protocol rather than
+   * text, so "it starts" proves nothing. This drives a real `initialize` and
+   * `tools/list` over the installed binary's stdio, which is exactly what an
+   * MCP client does — and it is the only test that would catch the SDK being
+   * missing from the published tarball's dependencies.
+   */
+  it('serves MCP over stdio from the installed binary', async () => {
+    const facts = join(installDir, 'facts.ndjson');
+    writeFileSync(
+      facts,
+      [
+        JSON.stringify({ v: 1, type: 'meta', extractor: 'test', extractorVersion: '0.0.0' }),
+        JSON.stringify({ v: 1, type: 'node', kind: 'package', fqn: 'shop.web', name: 'shop.web' }),
+      ].join('\n'),
+    );
+    expect(run(['ingest', '--repo', FIXTURE, '--from', facts]).status).toBe(0);
+
+    const child = spawn(WINDOWS ? `"${bin}"` : bin, quoted(['mcp', '--repo', FIXTURE]), {
+      cwd: installDir,
+      shell: WINDOWS,
+    });
+
+    try {
+      const initialize = await request(child, {
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'initialize',
+        params: {
+          protocolVersion: '2025-06-18',
+          capabilities: {},
+          clientInfo: { name: 'packaging-test', version: '0.0.0' },
+        },
+      });
+      expect(initialize.result?.serverInfo?.name).toBe('stratigraph');
+
+      child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' })}\n`);
+      const tools = await request(child, { jsonrpc: '2.0', id: 2, method: 'tools/list' });
+      expect(tools.result?.tools?.map((tool) => tool.name)).toContain('describe_run');
+    } finally {
+      child.stdin.end();
+      child.kill();
+    }
+  }, 60_000);
 });
+
+interface RpcResponse {
+  id?: number;
+  result?: {
+    serverInfo?: { name?: string };
+    tools?: Array<{ name: string }>;
+  };
+}
+
+/** One newline-delimited JSON-RPC round trip, which is all stdio transport is. */
+function request(
+  child: ReturnType<typeof spawn>,
+  message: { id?: number; [key: string]: unknown },
+): Promise<RpcResponse> {
+  return new Promise((resolve, reject) => {
+    let buffered = '';
+    const onData = (chunk: Buffer): void => {
+      buffered += chunk.toString('utf8');
+      for (const line of buffered.split('\n').slice(0, -1)) {
+        if (line.trim() === '') continue;
+        const parsed = JSON.parse(line) as RpcResponse;
+        if (parsed.id === message.id) {
+          child.stdout?.off('data', onData);
+          clearTimeout(timer);
+          resolve(parsed);
+          return;
+        }
+      }
+      buffered = buffered.slice(buffered.lastIndexOf('\n') + 1);
+    };
+
+    const timer = setTimeout(() => {
+      child.stdout?.off('data', onData);
+      reject(new Error(`no response to ${String(message['method'])} within 20s`));
+    }, 20_000);
+
+    child.stdout?.on('data', onData);
+    child.stdin?.write(`${JSON.stringify(message)}\n`);
+  });
+}

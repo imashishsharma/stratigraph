@@ -11,6 +11,7 @@ import { ExtractError, runExtract } from './commands/extract.js';
 import { HistoryError, runHistory } from './commands/history.js';
 import { runIngest } from './commands/ingest.js';
 import { runInit } from './commands/init.js';
+import { McpError, runMcp } from './commands/mcp.js';
 import { CONFIG_FILENAME, ConfigError, userConfigPath } from './config.js';
 import { FactProtocolError } from './facts/ndjson.js';
 import { error, print, setQuiet } from './log.js';
@@ -162,6 +163,20 @@ export function buildProgram(): Command {
     );
 
   program
+    .command('mcp')
+    .description('serve the fact store over MCP on stdio, for an agent to query')
+    .option('--run <id>', 'serve a specific run instead of the most recent')
+    .action(async (options: { run?: string }) => {
+      const serving = await runMcp({
+        ...overrides(program),
+        run: parsePositiveInt('--run', options.run),
+      });
+      // Stay up until the client closes the transport. Without this the
+      // process would exit as soon as the command's action resolved.
+      await serving.closed;
+    });
+
+  program
     .command('doctor')
     .description('report what this machine can run')
     .action(() => {
@@ -203,7 +218,8 @@ export async function main(argv: string[]): Promise<number> {
       err instanceof FactProtocolError ||
       err instanceof AnalysisError ||
       err instanceof ExtractError ||
-      err instanceof HistoryError
+      err instanceof HistoryError ||
+      err instanceof McpError
     ) {
       error(err.message);
       return 2;
