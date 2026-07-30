@@ -134,13 +134,28 @@ function claimSchema(description: string) {
 /**
  * Tokens that look like something from a codebase.
  *
- * Three shapes: a dotted identifier (`com.example.Order`), a path
- * (`src/main/Order.java`), and a commit sha. Between them they cover everything
- * a description could name that the pack would have to have shown it.
+ * Four shapes: a dotted identifier (`com.example.Order`), a path
+ * (`src/main/Order.java`), a commit sha, and a synthetic node name — the
+ * `<default>` package the Java extractor emits for types declared outside any
+ * package, with anything hanging off it.
+ *
+ * That fourth pattern exists because of a hole found by running the validator
+ * over 38 real dubbo evidence packs: `<default>.AbstractRegistryFactory` and
+ * `<default>s` matched none of the other three, so a fabrication built on the
+ * default package was never checked at all. Angle brackets are not word
+ * characters, and `\b` refuses to start a match on one.
+ *
+ * Exported because `evidence.ts` builds the vocabulary with the *same*
+ * function. Two copies of this list is two ways for the check and the
+ * vocabulary to disagree, and either direction is a defect: a hole, or a
+ * rejection of a name the pack really did contain.
  */
-const IDENTIFIER = /\b[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)+\b/g;
-const PATH = /\b[\w.$-]+(?:\/[\w.$-]+)+\b/g;
-const SHA = /\b[0-9a-f]{7,40}\b/g;
+const PATTERNS = [
+  /\b[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)+\b/g,
+  /\b[\w.$-]+(?:\/[\w.$-]+)+\b/g,
+  /\b[0-9a-f]{7,40}\b/g,
+  /<[A-Za-z_][\w$]*>[\w$.]*/g,
+];
 
 /**
  * English that happens to match the identifier pattern. Kept short on purpose:
@@ -240,7 +255,7 @@ function checkVocabulary(
 /** Identifier-shaped tokens in a string, deduplicated and stop-listed. */
 export function identifiersIn(text: string): string[] {
   const found = new Set<string>();
-  for (const pattern of [IDENTIFIER, PATH, SHA]) {
+  for (const pattern of PATTERNS) {
     for (const match of text.matchAll(pattern)) {
       const token = match[0].replace(/[.,;:]+$/, '');
       if (token.length === 0) continue;

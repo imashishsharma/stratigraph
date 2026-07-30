@@ -322,6 +322,56 @@ describe('validate — reporting', () => {
   });
 });
 
+describe('validate — the default package', () => {
+  /** A pack whose cluster holds the synthetic `<default>` package. */
+  function defaultPack(): EvidencePack {
+    return pack({
+      members: ['<default>'],
+      items: [
+        { id: 'n1', kind: 'node', text: 'package <default>', ref: { nodeId: 1 } },
+      ],
+      vocabulary: new Set(['<default>']),
+    });
+  }
+
+  it.each([
+    ['<default>s'],
+    ['<default>.internal'],
+    ['<default>.AbstractRegistryFactory'],
+  ])('rejects a fabrication built on it: %s', (invented) => {
+    // Found by running the validator over 38 real dubbo evidence packs. Angle
+    // brackets are not word characters and `\b` will not start a match on one,
+    // so none of the identifier patterns saw these at all — a fabrication on
+    // the default package went entirely unchecked.
+    const result = validate(
+      {
+        name: 'Some area',
+        responsibility: [{ text: `${invented} does the work.`, cites: ['n1'] }],
+        mismatch: null,
+        adrCandidates: [],
+      },
+      defaultPack(),
+    );
+
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error('unreachable');
+    expect(rules(result.violations)).toContain('invented-identifier');
+  });
+
+  it('still accepts naming the package it really was given', () => {
+    const result = validate(
+      {
+        name: 'Unpackaged types',
+        responsibility: [{ text: 'Holds types declared in <default>.', cites: ['n1'] }],
+        mismatch: null,
+        adrCandidates: [],
+      },
+      defaultPack(),
+    );
+    expect(result.ok).toBe(true);
+  });
+});
+
 describe('identifiersIn', () => {
   it.each([
     ['com.example.shop.Order', ['com.example.shop.Order']],
@@ -333,6 +383,8 @@ describe('identifiersIn', () => {
     ['Just plain prose about orders.', []],
     ['Orders, e.g. refunds, i.e. reversals.', []],
     ['Ends a sentence with com.example.shop.', ['com.example.shop']],
+    ['<default>', ['<default>']],
+    ['<default>.Order', ['<default>.Order']],
   ])('%s', (text, expected) => {
     expect(identifiersIn(text).sort()).toEqual([...expected].sort());
   });

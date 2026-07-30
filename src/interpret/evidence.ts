@@ -20,6 +20,7 @@ import type { ClusterSummary } from '../analysis/clusters.js';
 import type { IntentMismatch } from '../analysis/intent-mismatch.js';
 import { DEPENDENCY_EDGE_KINDS } from '../analysis/package-graph.js';
 import type { Db } from '../db/database.js';
+import { identifiersIn } from './contract.js';
 
 /** How much of each kind of evidence a pack carries. Enough to describe, few enough to read. */
 const LIMITS = { edges: 24, files: 12, commits: 8, sourceFiles: 3, sourceLines: 120 } as const;
@@ -179,30 +180,17 @@ function buildVocabulary(
   // Anything rendered into an item's text is by definition something the model
   // was shown, so it is nameable.
   for (const item of items) {
-    for (const token of tokensIn(item.text)) {
+    for (const token of identifiersIn(item.text)) {
       vocabulary.add(token);
       if (token.includes('.') && !token.includes('/')) addPrefixes(token);
     }
   }
   for (const file of source) {
     vocabulary.add(file.path);
-    for (const token of tokensIn(file.body)) vocabulary.add(token);
+    for (const token of identifiersIn(file.body)) vocabulary.add(token);
   }
 
   return vocabulary;
-}
-
-/** The same token shapes the contract's rule 3 looks for. */
-function tokensIn(text: string): string[] {
-  const found: string[] = [];
-  for (const pattern of [
-    /\b[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)+\b/g,
-    /\b[\w.$-]+(?:\/[\w.$-]+)+\b/g,
-    /\b[0-9a-f]{7,40}\b/g,
-  ]) {
-    for (const match of text.matchAll(pattern)) found.push(match[0]);
-  }
-  return found;
 }
 
 interface ClusterEdge {

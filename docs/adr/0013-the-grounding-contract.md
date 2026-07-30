@@ -183,3 +183,15 @@ table comes from not having to also check a flag someone might forget.
 - Rule 3 is the rule most likely to need tuning as real reports are read. It is
   a single function with a single stop-list, tuned by adding to the vocabulary
   rather than by loosening the check.
+- **The vocabulary and rule 3 share one tokeniser.** They began as two copies of
+  the same regex list, which is two ways for them to disagree — and either
+  direction is a defect: a hole, or a rejection of a name the pack really did
+  contain. `identifiersIn` is exported from `contract.ts` and used by both.
+- Running the validator over 38 real evidence packs from dubbo — mean 68
+  identifiers each — found the hole that synthetic fixtures could not. The Java
+  extractor names the unnamed package `<default>`, angle brackets are not word
+  characters, and `\b` will not start a match on one, so `<default>s` and
+  `<default>.AbstractRegistryFactory` matched no pattern and went entirely
+  unchecked. Fabrications built on any *named* package were caught; only that
+  one shape escaped. The lesson is about the exercise, not the pattern: rule 3
+  can only be trusted against a vocabulary as messy as a real repository's.

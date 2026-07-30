@@ -16,6 +16,7 @@ import { SqliteFactWriter } from '../src/facts/writer.js';
 import { InterpretError } from '../src/interpret/client.js';
 import type { CompletionRequest, ModelClient } from '../src/interpret/client.js';
 
+import { identifiersIn } from '../src/interpret/contract.js';
 import { buildEvidencePack } from '../src/interpret/evidence.js';
 import { ADR_RULE, READING_RULE, RESPONSIBILITY_RULE, runInterpretation } from '../src/interpret/run.js';
 import { setQuiet } from '../src/log.js';
@@ -541,6 +542,31 @@ describe('runInterpretation — the mismatch reading', () => {
     await runInterpretation(db, runId, clusters, mismatches, client, OPTIONS);
 
     expect(client.requests[0]?.prompt).toContain('No intent mismatch was found');
+  });
+});
+
+describe('the vocabulary and the check use one tokeniser', () => {
+  it('accepts every identifier the pack rendered, whatever its shape', () => {
+    // The vocabulary and rule 3 were built from two copies of the same regex
+    // list. Two copies is two ways to disagree, and either direction is a
+    // defect: a hole, or a rejection of a name the pack really did contain.
+    seedGroups(true);
+    const { clusters, mismatches } = analyse();
+
+    for (const cluster of clusters) {
+      const mismatch =
+        mismatches.find((m) => cluster.members.some((x) => x.fqn === m.fqn)) ?? null;
+      const pack = buildEvidencePack(db, runId, cluster, mismatch, {
+        sendSource: false,
+        repoPath: FIXTURE,
+      });
+
+      for (const item of pack.items) {
+        for (const token of identifiersIn(item.text)) {
+          expect(pack.vocabulary.has(token), `${token} from ${item.id}`).toBe(true);
+        }
+      }
+    }
   });
 });
 
