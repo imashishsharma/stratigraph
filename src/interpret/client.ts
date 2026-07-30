@@ -49,10 +49,53 @@ export interface ModelClient {
 const MAX_TOKENS = 16_000;
 
 export class InterpretError extends Error {
-  constructor(message: string) {
+  /**
+   * Whether retrying on a different cluster could possibly work.
+   *
+   * A bad key, no credit, or a revoked permission fails identically for every
+   * cluster in the run. Discovering that thirteen times, and burying it in
+   * thirteen identical diagnostics, is worse than useless: the report then says
+   * "got no usable answer", which reads like the model declining rather than
+   * like a two-minute billing fix.
+   */
+  readonly fatal: boolean;
+
+  constructor(message: string, options: { fatal?: boolean } = {}) {
     super(message);
     this.name = 'InterpretError';
+    this.fatal = options.fatal ?? false;
   }
+}
+
+/**
+ * Classify an SDK error into "this run is misconfigured" and "this one call
+ * went wrong".
+ *
+ * 401/403 are unambiguous. 400 is included because the two ways to get one here
+ * are a billing problem and a request this code built wrongly — and both repeat
+ * on every cluster. 429 and 5xx are deliberately *not* fatal: the SDK has
+ * already retried them, and a later cluster may well succeed.
+ */
+export function asInterpretError(error: unknown): InterpretError {
+  if (error instanceof Anthropic.APIError) {
+    const status = error.status ?? 0;
+    const fatal = status === 400 || status === 401 || status === 403;
+    return new InterpretError(`${status}: ${apiMessage(error)}`, { fatal });
+  }
+  return new InterpretError((error as Error).message);
+}
+
+/**
+ * The sentence a person can act on, rather than the JSON envelope around it.
+ *
+ * `APIError.message` is the whole body — `400 {"type":"error","error":{...}}` —
+ * which is exactly the wrong thing to put in a report, since the one useful
+ * part ("your credit balance is too low") is buried in the middle of it.
+ */
+function apiMessage(error: InstanceType<typeof Anthropic.APIError>): string {
+  const body = error.error as { error?: { message?: unknown } } | undefined;
+  const message = body?.error?.message;
+  return typeof message === 'string' && message.length > 0 ? message : error.message;
 }
 
 export type CredentialSource =
@@ -146,13 +189,18 @@ export function createModelClient(model: string, credential: Credential): ModelC
 
   return {
     async complete(request: CompletionRequest): Promise<Completion> {
-      const response = await anthropic.messages.create({
-        model,
-        max_tokens: MAX_TOKENS,
-        system: request.system,
-        messages: [{ role: 'user', content: request.prompt }],
-        output_config: { format: { type: 'json_schema', schema: request.schema } },
-      });
+      let response;
+      try {
+        response = await anthropic.messages.create({
+          model,
+          max_tokens: MAX_TOKENS,
+          system: request.system,
+          messages: [{ role: 'user', content: request.prompt }],
+          output_config: { format: { type: 'json_schema', schema: request.schema } },
+        });
+      } catch (error) {
+        throw asInterpretError(error);
+      }
 
       // Checked before `content` is read: on a refusal the content array is
       // empty or partial, and indexing into it would throw somewhere unhelpful.

@@ -378,8 +378,18 @@ function reportInterpretation(result: AnalyzeResult): void {
     return;
   }
 
-  const { described, attempted, considered, rejected, declined, models } =
+  const { described, attempted, considered, rejected, declined, models, fatalError } =
     result.interpretation;
+
+  // A misconfiguration reads nothing like a model declining, so it does not get
+  // the same line. This one is usually a two-minute fix.
+  if (fatalError !== null) {
+    print('');
+    print(`Interpretation stopped: ${fatalError}`);
+    print('  Nothing above this line is affected — it is all structural.');
+    print('  Check the credential with `stratigraph config`, then re-run.');
+    if (described === 0) return;
+  }
 
   print('');
   print(

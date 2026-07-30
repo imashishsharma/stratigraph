@@ -13,6 +13,7 @@ import { createRun } from '../src/db/run.js';
 import { parseFact } from '../src/facts/ndjson.js';
 import type { Fact } from '../src/facts/types.js';
 import { SqliteFactWriter } from '../src/facts/writer.js';
+import { InterpretError } from '../src/interpret/client.js';
 import type { CompletionRequest, ModelClient } from '../src/interpret/client.js';
 
 import { buildEvidencePack } from '../src/interpret/evidence.js';
@@ -368,6 +369,61 @@ describe('runInterpretation — declining and failing', () => {
     expect(result.declined).toBe(1);
     expect(result.described).toBe(1);
     expect(diagnostics()[0]?.message).toContain('connection reset');
+  });
+});
+
+describe('runInterpretation — a misconfigured run', () => {
+  /** Throws the way the SDK does for a billing or auth failure. */
+  function failing(status: number, message: string): ModelClient & { calls: number } {
+    const client = {
+      calls: 0,
+      async complete() {
+        client.calls += 1;
+        throw new InterpretError(`${status} ${message}`, {
+          fatal: status === 400 || status === 401 || status === 403,
+        });
+      },
+    };
+    return client;
+  }
+
+  it.each([
+    [400, 'Your credit balance is too low to access the Anthropic API'],
+    [401, 'invalid x-api-key'],
+    [403, 'permission denied'],
+  ])('stops after the first %i rather than repeating it per cluster', async (status, message) => {
+    // Found by running it: an empty balance made one doomed call per cluster
+    // and buried the cause in N identical diagnostics, while the report said
+    // "got no usable answer" — which reads like the model declining.
+    seedGroups(false);
+    const { clusters, mismatches } = analyse();
+    expect(clusters.length).toBeGreaterThan(1);
+    const client = failing(status, message);
+
+    const result = await runInterpretation(db, runId, clusters, mismatches, client, OPTIONS);
+
+    expect(client.calls).toBe(1);
+    expect(result.fatalError).toContain(message);
+    expect(result.declined).toBe(0);
+    expect(diagnostics()).toHaveLength(1);
+    expect(diagnostics()[0]?.message).toContain('interpretation stopped');
+  });
+
+  it.each([
+    [429, 'rate limited'],
+    [500, 'internal server error'],
+  ])('keeps going after a %i, which a later cluster may survive', async (status, message) => {
+    seedGroups(false);
+    const { clusters, mismatches } = analyse();
+    const client = failing(status, message);
+
+    const result = await runInterpretation(db, runId, clusters, mismatches, client, OPTIONS);
+
+    // One call per cluster: the single retry is for citation violations, not
+    // for a thrown error, which nothing about re-asking would fix.
+    expect(client.calls).toBe(clusters.length);
+    expect(result.fatalError).toBeNull();
+    expect(result.declined).toBe(clusters.length);
   });
 });
 

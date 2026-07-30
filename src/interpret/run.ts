@@ -13,7 +13,7 @@ import type { ClusterSummary } from '../analysis/clusters.js';
 import type { IntentMismatch } from '../analysis/intent-mismatch.js';
 import type { Db } from '../db/database.js';
 import { info, warn } from '../log.js';
-import type { ModelClient } from './client.js';
+import type { InterpretError, ModelClient } from './client.js';
 import {
   describeViolations,
   RESPONSE_SCHEMA,
@@ -52,6 +52,11 @@ export interface InterpretResult {
   adrCandidates: number;
   /** Model ids that actually answered. Usually one. */
   models: string[];
+  /**
+   * A misconfiguration that stopped the run: a bad key, no credit, a revoked
+   * permission. Set once, and the remaining clusters are not attempted.
+   */
+  fatalError: string | null;
 }
 
 const SYSTEM_PROMPT = `You are reading the output of a static analysis tool that has already
@@ -121,6 +126,7 @@ export async function runInterpretation(
     declined: 0,
     adrCandidates: 0,
     models: [],
+    fatalError: null,
   };
 
   for (const cluster of attempted) {
@@ -137,6 +143,13 @@ export async function runInterpretation(
       result.models.push(outcome.model);
     }
 
+    if (outcome.kind === 'fatal') {
+      // Every remaining cluster would fail the same way, so stop rather than
+      // spend the calls and bury the cause in N identical diagnostics.
+      result.fatalError = outcome.reason;
+      recordDiagnostic(db, runId, `interpretation stopped: ${outcome.reason}`);
+      break;
+    }
     if (outcome.kind === 'declined') {
       result.declined += 1;
       recordDiagnostic(db, runId, `cluster ${cluster.prefix}: ${outcome.reason}`);
@@ -158,6 +171,9 @@ export async function runInterpretation(
     result.adrCandidates += outcome.value.adrCandidates.length;
   }
 
+  if (result.fatalError !== null) {
+    warn(`interpretation stopped: ${result.fatalError}`);
+  }
   info(
     `run ${runId}: described ${result.described} of ${result.attempted} clusters, ` +
       `${result.rejected} rejected, ${result.declined} declined`,
@@ -168,7 +184,8 @@ export async function runInterpretation(
 type Outcome =
   | { kind: 'described'; value: Interpretation; model: string }
   | { kind: 'rejected'; violations: Violation[]; model: string | null }
-  | { kind: 'declined'; reason: string; model: string | null };
+  | { kind: 'declined'; reason: string; model: string | null }
+  | { kind: 'fatal'; reason: string; model: string | null };
 
 /**
  * Ask, check, and ask once more with the violations attached.
@@ -199,7 +216,12 @@ ${describeViolations(violations)}`;
         schema: RESPONSE_SCHEMA as unknown as Record<string, unknown>,
       });
     } catch (error) {
-      return { kind: 'declined', reason: (error as Error).message, model };
+      const failure = error as InterpretError;
+      return {
+        kind: failure.fatal === true ? 'fatal' : 'declined',
+        reason: failure.message,
+        model,
+      };
     }
 
     model = completion.model;
