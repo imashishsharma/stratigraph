@@ -15,6 +15,7 @@ import { McpError, runMcp } from './commands/mcp.js';
 import { CONFIG_FILENAME, ConfigError, userConfigPath } from './config.js';
 import { FactProtocolError } from './facts/ndjson.js';
 import { error, print, setQuiet } from './log.js';
+import { parseLanguages, type Language } from './toolchain/languages.js';
 import { TOOL_VERSION } from './version.js';
 
 interface GlobalOptions {
@@ -98,18 +99,30 @@ export function buildProgram(): Command {
 
   program
     .command('extract')
-    .description('run an extractor over the repository and store the facts it emits')
+    .description('run every applicable extractor over the repository and store the facts')
     .option('--extractor-jar <path>', 'Java extractor jar to run')
     .option('--emit', 'write raw NDJSON to stdout instead of storing it')
     .option('--java-opts <opts>', 'extra JVM arguments, e.g. "-Xmx8g"')
-    .action(async (options: { extractorJar?: string; emit?: boolean; javaOpts?: string }) => {
-      await runExtract({
-        ...overrides(program),
-        extractorJar: options.extractorJar,
-        emit: options.emit,
-        javaOpts: options.javaOpts ? options.javaOpts.split(/\s+/).filter(Boolean) : undefined,
-      });
-    });
+    .option(
+      '--lang <names>',
+      'extractors to run: java, ts, all, or a comma-separated list (default: detect)',
+    )
+    .action(
+      async (options: {
+        extractorJar?: string;
+        emit?: boolean;
+        javaOpts?: string;
+        lang?: string;
+      }) => {
+        await runExtract({
+          ...overrides(program),
+          extractorJar: options.extractorJar,
+          emit: options.emit,
+          javaOpts: options.javaOpts ? options.javaOpts.split(/\s+/).filter(Boolean) : undefined,
+          languages: parseLanguageFlag(options.lang),
+        });
+      },
+    );
 
   program
     .command('history')
@@ -229,6 +242,16 @@ export async function main(argv: string[]): Promise<number> {
     }
     error((err as Error).stack ?? String(err));
     return 1;
+  }
+}
+
+/** `--lang`. Undefined means "detect from what is on disk". */
+function parseLanguageFlag(value: string | undefined): Set<Language> | 'all' | undefined {
+  if (value === undefined) return undefined;
+  try {
+    return parseLanguages(value);
+  } catch (err) {
+    throw new ConfigError(`--lang: ${(err as Error).message}`);
   }
 }
 
