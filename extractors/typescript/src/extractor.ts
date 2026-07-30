@@ -318,9 +318,21 @@ export class TypeScriptExtractor {
     module: string,
     statement: ts.VariableStatement,
   ): void {
-    if (!hasModifier(statement, ts.SyntaxKind.ExportKeyword)) return;
+    const exported = hasModifier(statement, ts.SyntaxKind.ExportKeyword);
     for (const declaration of statement.declarationList.declarations) {
       if (!ts.isIdentifier(declaration.name)) continue;
+
+      // A route table earns a node whether or not it is exported. The dominant
+      // Angular idiom is a module-private `const routes: Routes = [...]` handed
+      // to `RouterModule.forChild(routes)` in the same file — requiring `export`
+      // finds nothing at all on a real application, which is how this was
+      // caught: bitwarden/clients reported zero routes while declaring dozens.
+      const routeTable =
+        declaration.initializer !== undefined &&
+        ts.isArrayLiteralExpression(declaration.initializer) &&
+        isRoutesType(declaration.type);
+      if (!exported && !routeTable) continue;
+
       const declared = declaration.name.text;
       const fqn = fieldFqn(module, declared);
       this.emitter.node({
@@ -333,15 +345,15 @@ export class TypeScriptExtractor {
         ...attrsOf(modifiersOf(statement), typeTextOf(declaration.type)),
       });
 
-      // `export const routes: Routes = [...]` — a standalone application's
-      // whole route table. Recognised by the annotated type rather than by the
-      // binding's name, so `appRoutes` and `ROUTES` are found too.
-      if (
-        declaration.initializer !== undefined &&
-        ts.isArrayLiteralExpression(declaration.initializer) &&
-        isRoutesType(declaration.type)
-      ) {
-        this.angular.emitRoutes(path, source, { kind: 'field', fqn }, declaration.initializer);
+      // Recognised by the annotated type rather than by the binding's name, so
+      // `appRoutes`, `ROUTES` and `routes` are all found.
+      if (routeTable) {
+        this.angular.emitRoutes(
+          path,
+          source,
+          { kind: 'field', fqn },
+          declaration.initializer as ts.ArrayLiteralExpression,
+        );
       }
     }
   }
