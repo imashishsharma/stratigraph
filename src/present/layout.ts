@@ -32,6 +32,15 @@ const MARGIN = 20;
 /** Longer labels are truncated. A box wide enough for any fqn is not a box. */
 const MAX_CHARS = 34;
 
+/**
+ * Edge labels are truncated harder than box labels, because every character
+ * widens the gutter they sit in — the whole diagram pays for one long one.
+ */
+const MAX_EDGE_CHARS = 22;
+
+/** Roughly the advance of the 10px type the edge labels are drawn in. */
+const EDGE_CHAR_WIDTH = 6;
+
 /** Barycentre passes. Fixed, because "until it stops improving" is not deterministic. */
 const ORDERING_PASSES = 4;
 
@@ -98,10 +107,6 @@ export function layout(diagram: C4Diagram): Layout {
     (relationship) => index.has(relationship.from) && index.has(relationship.to),
   );
 
-  const ranks = assignRanks(boxes, edges, index);
-  const orders = orderWithinRanks(boxes, edges, index, ranks);
-  place(boxes, ranks, orders);
-
   const notes: string[] = [];
   const withLabels = edges.length <= LABEL_LIMIT;
   if (!withLabels) {
@@ -111,6 +116,21 @@ export function layout(diagram: C4Diagram): Layout {
     );
   }
 
+  // The gutter has to fit the labels that sit in it. Boxes are drawn over the
+  // lines, so a label wider than the gap between two columns is not merely
+  // cramped — it disappears behind the box it overhangs.
+  const widestLabel = withLabels
+    ? Math.max(
+        0,
+        ...edges.map((edge) => truncateEdgeLabel(edge.label).length * EDGE_CHAR_WIDTH),
+      )
+    : 0;
+  const columnGap = Math.max(COLUMN_GAP, round(widestLabel) + 20);
+
+  const ranks = assignRanks(boxes, edges, index);
+  const orders = orderWithinRanks(boxes, edges, index, ranks);
+  place(boxes, ranks, orders, columnGap);
+
   const byId = new Map(boxes.map((box) => [box.id, box]));
   const contentBottom = Math.max(...boxes.map((box) => box.y + box.height));
   const routed: LayoutEdge[] = [];
@@ -119,7 +139,7 @@ export function layout(diagram: C4Diagram): Layout {
   for (const relationship of edges) {
     const from = byId.get(relationship.from) as LayoutBox;
     const to = byId.get(relationship.to) as LayoutBox;
-    const label = withLabels ? relationship.label : null;
+    const label = withLabels ? truncateEdgeLabel(relationship.label) : null;
 
     if (to.x > from.x + from.width) {
       routed.push(forwardEdge(from, to, label, relationship.confidence));
@@ -185,6 +205,16 @@ export function truncate(text: string): string {
   // Keep the tail: the distinguishing part of `com.example.shop.billing.tax`
   // is the end of it, not the company name every package shares.
   return `…${text.slice(text.length - (MAX_CHARS - 1))}`;
+}
+
+/**
+ * The head, not the tail — the opposite of {@link truncate}, and for the same
+ * reason. An edge label is a list of edge kinds, so `injects, calls, imports`
+ * loses least by dropping the end.
+ */
+export function truncateEdgeLabel(text: string): string {
+  if (text.length <= MAX_EDGE_CHARS) return text;
+  return `${text.slice(0, MAX_EDGE_CHARS - 1)}…`;
 }
 
 // ------------------------------------------------------------------- ranking
@@ -351,7 +381,12 @@ function orderWithinRanks(
 // ----------------------------------------------------------------- placement
 
 /** Grid placement: one column per rank, columns as wide as their widest box. */
-function place(boxes: LayoutBox[], ranks: Map<string, number>, orders: Map<string, number>): void {
+function place(
+  boxes: LayoutBox[],
+  ranks: Map<string, number>,
+  orders: Map<string, number>,
+  columnGap: number,
+): void {
   const byRank = new Map<number, LayoutBox[]>();
   for (const box of boxes) {
     const rank = ranks.get(box.id) as number;
@@ -389,7 +424,7 @@ function place(boxes: LayoutBox[], ranks: Map<string, number>, orders: Map<strin
       box.width = width;
       y += box.height + ROW_GAP;
     }
-    x += width + COLUMN_GAP;
+    x += width + columnGap;
   }
 }
 

@@ -510,9 +510,17 @@ function buildComponents(
   const shown = ranked.slice(0, options.top);
   const shownIds = new Set(shown.map((p) => p.id));
 
+  // A partition of one is not a partition. When every package on the diagram
+  // landed in the same cluster, the boundary box says nothing a reader can use,
+  // so it is not drawn — the clustering is still reported by `analyze`.
+  const distinctGroups = new Set(
+    shown.map((pkg) => clusters.get(pkg.id)?.label).filter((label) => label !== undefined),
+  );
+  const worthGrouping = distinctGroups.size > 1;
+
   const elements: C4Element[] = shown
     .map((pkg) => {
-      const cluster = clusters.get(pkg.id);
+      const cluster = worthGrouping ? clusters.get(pkg.id) : undefined;
       return {
         id: elementId('component', pkg.fqn),
         name: pkg.fqn,

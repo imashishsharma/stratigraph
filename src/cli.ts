@@ -12,6 +12,11 @@ import { HistoryError, runHistory } from './commands/history.js';
 import { runIngest } from './commands/ingest.js';
 import { runInit } from './commands/init.js';
 import { McpError, runMcp } from './commands/mcp.js';
+import {
+  DEFAULT_TOP as DEFAULT_REPORT_TOP,
+  ReportError,
+  runReport,
+} from './commands/report.js';
 import { CONFIG_FILENAME, ConfigError, userConfigPath } from './config.js';
 import { FactProtocolError } from './facts/ndjson.js';
 import { error, print, setQuiet } from './log.js';
@@ -176,6 +181,21 @@ export function buildProgram(): Command {
     );
 
   program
+    .command('report')
+    .description('write C4 diagrams, a ranked findings list and a static HTML report')
+    .requiredOption('--out <dir>', 'directory to write the report into')
+    .option('--run <id>', 'report a specific run instead of the most recent')
+    .option('--top <n>', `rows per section (default ${DEFAULT_REPORT_TOP})`)
+    .action((options: { out: string; run?: string; top?: string }) => {
+      runReport({
+        ...overrides(program),
+        out: options.out,
+        run: parsePositiveInt('--run', options.run),
+        top: parsePositiveInt('--top', options.top),
+      });
+    });
+
+  program
     .command('mcp')
     .description('serve the fact store over MCP on stdio, for an agent to query')
     .option('--run <id>', 'serve a specific run instead of the most recent')
@@ -232,7 +252,8 @@ export async function main(argv: string[]): Promise<number> {
       err instanceof AnalysisError ||
       err instanceof ExtractError ||
       err instanceof HistoryError ||
-      err instanceof McpError
+      err instanceof McpError ||
+      err instanceof ReportError
     ) {
       error(err.message);
       return 2;

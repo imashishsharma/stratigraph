@@ -221,6 +221,35 @@ describe('routing', () => {
     expect(result.edges[0]?.label).toBe('imports');
     expect(result.notes).toEqual([]);
   });
+
+  it('widens the gutter so a long label is not overdrawn by the boxes', () => {
+    // Boxes are painted over the lines, so a label wider than the gap between
+    // two columns disappears behind the box it overhangs.
+    const short = layout(diagram([element('a'), element('b')], [relationship('a', 'b')]));
+    const long = layout(
+      diagram([element('a'), element('b')], [
+        relationship('a', 'b', { label: 'injects, calls, imports' }),
+      ]),
+    );
+
+    const gutter = (result: Layout): number => {
+      const [first, second] = result.boxes;
+      return (second?.x as number) - ((first?.x as number) + (first?.width as number));
+    };
+    expect(gutter(long)).toBeGreaterThan(gutter(short));
+
+    const label = long.edges[0]?.label as string;
+    expect(gutter(long)).toBeGreaterThanOrEqual(label.length * 6);
+  });
+
+  it('truncates an edge label from the end, where it loses least', () => {
+    const result = layout(
+      diagram([element('a'), element('b')], [
+        relationship('a', 'b', { label: 'injects, calls, imports, extends, implements' }),
+      ]),
+    );
+    expect(result.edges[0]?.label).toBe('injects, calls, impor…');
+  });
 });
 
 describe('truncate', () => {

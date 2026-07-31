@@ -420,54 +420,81 @@ describe('the component diagrams', () => {
     expect(diagram?.notes.join('\n')).toContain('Showing 2 of 5 packages');
   });
 
-  it('marks a model-authored cluster name as inference, and an algorithmic one not', () => {
-    seedFullStack();
-    const packageId = (
-      db.prepare(`SELECT id FROM node WHERE run_id = ? AND fqn = 'shop'`).get(runId) as {
-        id: number;
-      }
-    ).id;
+  /** Two packages in one module, so a diagram can hold two clusters. */
+  function seedTwoPackages(): void {
+    seed([
+      JAVA_META,
+      { v: 1, type: 'node', kind: 'module', fqn: 'server', name: 'server' },
+      {
+        v: 1,
+        type: 'node',
+        kind: 'package',
+        fqn: 'shop',
+        name: 'shop',
+        parent: { kind: 'module', fqn: 'server' },
+      },
+      {
+        v: 1,
+        type: 'node',
+        kind: 'package',
+        fqn: 'admin',
+        name: 'admin',
+        parent: { kind: 'module', fqn: 'server' },
+      },
+    ]);
+  }
+
+  /** One cluster row holding every named package. */
+  function cluster(
+    label: number,
+    packageFqns: string[],
+    name: string | null,
+    authoredBy: 'algorithm' | 'model',
+  ): void {
     const clusterId = Number(
       db
         .prepare(
           `INSERT INTO cluster (run_id, algorithm, label, name, authored_by, model)
-           VALUES (?, 'louvain', 0, 'Ordering', 'model', 'claude-opus-5')`,
+           VALUES (?, 'louvain', ?, ?, ?, ?)`,
         )
-        .run(runId).lastInsertRowid,
+        .run(runId, label, name, authoredBy, authoredBy === 'model' ? 'claude-opus-5' : null)
+        .lastInsertRowid,
     );
-    db.prepare(`INSERT INTO cluster_member (cluster_id, node_id) VALUES (?, ?)`).run(
-      clusterId,
-      packageId,
-    );
+    for (const fqn of packageFqns) {
+      const packageId = (
+        db.prepare(`SELECT id FROM node WHERE run_id = ? AND fqn = ?`).get(runId, fqn) as {
+          id: number;
+        }
+      ).id;
+      db.prepare(`INSERT INTO cluster_member (cluster_id, node_id) VALUES (?, ?)`).run(
+        clusterId,
+        packageId,
+      );
+    }
+  }
+
+  it('marks a model-authored cluster name as inference, and an algorithmic one not', () => {
+    seedTwoPackages();
+    cluster(0, ['shop'], 'Ordering', 'model');
+    cluster(1, ['admin'], null, 'algorithm');
 
     const [diagram] = diagramFor().components;
-    expect(diagram?.elements[0]?.group).toBe('Ordering');
-    expect(diagram?.elements[0]?.groupInference).toBe(true);
+    const byName = new Map(diagram?.elements.map((e) => [e.name, e]));
+    expect(byName.get('shop')).toMatchObject({ group: 'Ordering', groupInference: true });
+    // No model named this one, so it falls back to the algorithm's own label
+    // and is not dressed up as inference.
+    expect(byName.get('admin')).toMatchObject({ group: 'cluster 1', groupInference: false });
     expect(diagram?.notes.join('\n')).toContain('written by a model');
   });
 
-  it('falls back to the algorithm’s own label when no model named the cluster', () => {
-    seedFullStack();
-    const packageId = (
-      db.prepare(`SELECT id FROM node WHERE run_id = ? AND fqn = 'shop'`).get(runId) as {
-        id: number;
-      }
-    ).id;
-    const clusterId = Number(
-      db
-        .prepare(
-          `INSERT INTO cluster (run_id, algorithm, label, authored_by) VALUES (?, 'louvain', 7, 'algorithm')`,
-        )
-        .run(runId).lastInsertRowid,
-    );
-    db.prepare(`INSERT INTO cluster_member (cluster_id, node_id) VALUES (?, ?)`).run(
-      clusterId,
-      packageId,
-    );
+  it('draws no boundary when every package landed in one cluster', () => {
+    // A partition of one is not a partition, and a box round everything on the
+    // diagram tells a reader nothing.
+    seedTwoPackages();
+    cluster(0, ['shop', 'admin'], 'Everything', 'model');
 
     const [diagram] = diagramFor().components;
-    expect(diagram?.elements[0]?.group).toBe('cluster 7');
-    expect(diagram?.elements[0]?.groupInference).toBe(false);
+    expect(diagram?.elements.every((element) => element.group === null)).toBe(true);
   });
 });
 
