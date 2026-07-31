@@ -42,7 +42,13 @@ why things are the way they are. Java/Spring Boot and Angular first.
 > Both extractors write into one run, so an Angular service and the Spring
 > endpoint it calls can be joined — as an **inference**, never as a fact.
 >
-> The report layer (M6) is still ahead.
+> **M6 adds the report.** `stratigraph report` writes C4 diagrams for levels
+> 1–3 as Structurizr DSL, as Mermaid, and as a single self-contained HTML page
+> — no script, no network, rendered by a layout engine small enough that its
+> SVG is asserted byte-for-byte in a fixture test. Every relationship it draws
+> is followed by the edges behind it with file and line, the findings are
+> ranked by an arithmetic key you can check, and the page ends with what the
+> run did not see.
 
 ## The rule that shapes everything
 
@@ -158,6 +164,7 @@ stratigraph init    --repo ../some-monolith   # create the fact store
 stratigraph extract --repo ../some-monolith   # run every applicable extractor into it
 stratigraph history --repo ../some-monolith   # mine git: churn, complexity, authors
 stratigraph analyze --repo ../some-monolith   # cycles, clusters, coupling, hotspots, ownership
+stratigraph report  --repo ../some-monolith --out ./arch   # C4 diagrams, HTML, ranked findings
 stratigraph mcp     --repo ../some-monolith   # serve it all to an agent over MCP
 ```
 
@@ -352,6 +359,61 @@ that answered, and a report that says which lines are inference.
 Without a credential — or with `--no-llm` — `analyze` says so in one line and
 prints the structural report unchanged.
 
+### The report you would actually show someone
+
+```sh
+stratigraph report --repo ../some-monolith --out ./arch
+```
+
+```
+arch/index.html                 self-contained: no script, no network, no CDN
+arch/workspace.dsl              Structurizr, all three views, with provenance
+arch/c4-context.mmd             Mermaid, level 1
+arch/c4-container.mmd           level 2
+arch/c4-component-<module>.mmd  level 3, one per container
+arch/findings.md                the ranked list, for pasting into an issue
+```
+
+**C4 is a projection of the fact graph, not a new model.** A container is a
+`module` node from a build file; a component is a package; a data store exists
+because a `@Table` mapping was read; an external system exists because an
+extractor read an absolute URL out of a literal. Where C4 asks for something no
+fact supplies, the diagram omits the box and says so on the page:
+
+> No fact in this run identifies a person, a role or a user, so no actor is
+> drawn. C4 normally puts one here; this diagram shows only what a parser read.
+
+Every C4 diagram you have seen has a stick figure in the top left. Drawing one
+here would take four lines of code and nobody would question it — and it would
+be a box in an architecture map that no parser ever produced
+([ADR-0019](docs/adr/0019-c4-is-a-projection-of-the-fact-graph.md)).
+
+The HTML renders its own SVG rather than bundling a renderer or shelling out to
+a headless browser, so a 40 KB page opens from a file share, survives being
+emailed, and works with scripting disabled. The layout is deterministic to the
+pixel — the same run produces the same bytes, which is what lets a fixture test
+assert the whole SVG rather than that it contains a `<rect>`
+([ADR-0020](docs/adr/0020-the-report-renders-its-own-svg.md)).
+
+Findings are ranked by severity, then observation before inference, then how
+much evidence there is, then rule name, then id — arithmetic over stored
+columns, total, and reproducible. No weighted score, because a constant
+invented in the report layer is a judgement nobody can argue with. And this is
+where the promise the schema has carried since M0 is finally kept: **a finding
+with no citation is not published**, it is excluded from every count, and the
+number excluded is printed
+([ADR-0021](docs/adr/0021-finding-rank-and-publishability.md)).
+
+Run against [spring-petclinic](https://github.com/spring-projects/spring-petclinic)
+— 49 Java sources, 1,040 commits — it produces 44 findings, every one carrying
+either a `file:line` or a commit sha, and each one states its own limits inline:
+
+> `mvnw` and `mvnw.cmd` change together — 11 of the 11 commits touching either
+> file touch both, 65.1× what independent files would share. *No extractor
+> parses `mvnw` or `mvnw.cmd`, so no dependency could have been observed
+> between them either way. This is co-change without a checkable explanation,
+> not a demonstrated absence of coupling in the code.*
+
 ### Ask it questions from an agent
 
 `stratigraph mcp` serves the fact store over MCP on stdio, so an agent working
@@ -524,9 +586,16 @@ presenters never call extractors.
 ```
 extractors ──NDJSON──▶ fact store ──▶ history miner ──▶ interpreters ──▶ presenters
  (Java: JVM)            (SQLite)        (git log)      (clustering + LLM)   (MCP server,
- (TS: compiler API)                                                          Mermaid,
-                                                                             C4, HTML)
+ (TS: compiler API)                                                          Structurizr,
+                                                                             Mermaid, SVG,
+                                                                             HTML, Markdown)
 ```
+
+Presenters read the store and derive nothing. `stratigraph report` opens the
+database read-only, and every diagram it draws is a projection of rows that
+`extract`, `history` and `analyze` already wrote — so a report cannot disagree
+with the `analyze` run that produced it, and two reports of one run are
+byte-identical.
 
 Extractors are separate processes that emit newline-delimited JSON on stdout.
 The core never links against a parser, which is why a JVM-only Java parser and a

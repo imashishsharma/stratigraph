@@ -151,12 +151,49 @@ export function layout(diagram: C4Diagram): Layout {
     );
   }
 
+  // Widening the gutter kept labels off the boxes; it does nothing about two
+  // labels landing on each other, which happens whenever several edges cross
+  // the same gap at similar heights. Detect it and drop them all, rather than
+  // guess at an edge count that is safe — density, not quantity, is what makes
+  // a label illegible, and the relationship table beneath the diagram carries
+  // every one of them anyway.
+  if (withLabels && anyLabelsOverlap(routed)) {
+    for (const edge of routed) {
+      edge.label = null;
+      edge.labelAt = null;
+    }
+    notes.push(
+      'Line labels are omitted: they would overlap each other at this density. ' +
+        'The relationship table below lists every one.',
+    );
+  }
+
   const width =
     Math.max(...boxes.map((box) => box.x + box.width), ...routed.flatMap(xsOf)) + MARGIN;
   const height =
     Math.max(...boxes.map((box) => box.y + box.height), ...routed.flatMap(ysOf)) + MARGIN;
 
   return { width: round(width), height: round(height), boxes, edges: routed, notes };
+}
+
+/** The rectangle {@link toSvg} will paint a label into. */
+function labelBox(edge: LayoutEdge): [number, number, number, number] | null {
+  if (edge.label === null || edge.labelAt === null) return null;
+  const [x, y] = edge.labelAt;
+  const width = edge.label.length * EDGE_CHAR_WIDTH + 8;
+  return [x - width / 2, y - 11, x + width / 2, y + 3];
+}
+
+function anyLabelsOverlap(edges: LayoutEdge[]): boolean {
+  const boxes = edges.map(labelBox).filter((box): box is [number, number, number, number] => box !== null);
+  for (let i = 0; i < boxes.length; i += 1) {
+    for (let j = i + 1; j < boxes.length; j += 1) {
+      const [ax0, ay0, ax1, ay1] = boxes[i] as [number, number, number, number];
+      const [bx0, by0, bx1, by1] = boxes[j] as [number, number, number, number];
+      if (ax0 < bx1 && bx0 < ax1 && ay0 < by1 && by0 < ay1) return true;
+    }
+  }
+  return false;
 }
 
 function xsOf(edge: LayoutEdge): number[] {

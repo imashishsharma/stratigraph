@@ -242,6 +242,43 @@ describe('routing', () => {
     expect(gutter(long)).toBeGreaterThanOrEqual(label.length * 6);
   });
 
+  it('drops every label when two would land on each other', () => {
+    // Density, not edge count, is what makes a label illegible: four edges
+    // crossing one gutter at similar heights collide even though four is well
+    // under the count limit.
+    const elements = [
+      element('a'),
+      element('b'),
+      element('c'),
+      element('d'),
+      element('e'),
+    ];
+    const result = layout(
+      diagram(elements, [
+        relationship('a', 'c', { label: 'injects, calls' }),
+        relationship('a', 'd', { label: 'injects, calls' }),
+        relationship('b', 'c', { label: 'imports, calls' }),
+        relationship('b', 'd', { label: 'extends, calls' }),
+        relationship('b', 'e', { label: 'imports' }),
+      ]),
+    );
+
+    expect(result.edges.every((edge) => edge.label === null)).toBe(true);
+    expect(result.edges.every((edge) => edge.labelAt === null)).toBe(true);
+    expect(result.notes.join('\n')).toContain('they would overlap each other');
+  });
+
+  it('keeps labels when nothing collides', () => {
+    const result = layout(
+      diagram([element('a'), element('b'), element('c')], [
+        relationship('a', 'b', { label: 'imports' }),
+        relationship('b', 'c', { label: 'calls' }),
+      ]),
+    );
+    expect(result.edges.map((edge) => edge.label)).toEqual(['imports', 'calls']);
+    expect(result.notes).toEqual([]);
+  });
+
   it('truncates an edge label from the end, where it loses least', () => {
     const result = layout(
       diagram([element('a'), element('b')], [

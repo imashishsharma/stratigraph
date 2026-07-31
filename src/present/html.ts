@@ -346,7 +346,7 @@ body {
   margin: 0; background: var(--bg); color: var(--text);
   font: 15px/1.6 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
-main { max-width: 1100px; margin: 0 auto; padding: 32px 20px 64px; }
+main { max-width: 1180px; margin: 0 auto; padding: 32px 20px 64px; }
 h1 { font-size: 24px; margin: 0 0 16px; word-break: break-all; }
 h2 { font-size: 19px; margin: 40px 0 8px; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
 h3 { font-size: 15px; margin: 0 0 8px; word-break: break-word; }
@@ -376,10 +376,20 @@ svg.diagram { display: block; max-width: 100%; height: auto; }
 .notes { color: var(--muted); font-size: 13.5px; padding-left: 20px; }
 .notes li { margin: 6px 0; }
 
-table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13px; display: block; overflow-x: auto; }
+/* Fixed layout, because the browser's own column sizing gives the three fqn
+   columns everything and crushes the evidence into a two-word-wide ribbon —
+   and the evidence is the half of this table that justifies the other half. */
+table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13px; table-layout: fixed; }
 caption { text-align: left; color: var(--muted); font-size: 13px; padding-bottom: 8px; }
-th, td { text-align: left; vertical-align: top; padding: 8px 10px; border-bottom: 1px solid var(--line); }
-th { color: var(--muted); font-weight: 600; white-space: nowrap; }
+th, td { text-align: left; vertical-align: top; padding: 8px 10px; border-bottom: 1px solid var(--line);
+         overflow-wrap: anywhere; }
+th { color: var(--muted); font-weight: 600; }
+th:nth-child(1), td:nth-child(1) { width: 16%; }
+th:nth-child(2), td:nth-child(2) { width: 16%; }
+th:nth-child(3), td:nth-child(3) { width: 9%; }
+th:nth-child(4), td:nth-child(4) { width: 5%; }
+th:nth-child(5), td:nth-child(5) { width: 9%; }
+th:nth-child(6), td:nth-child(6) { width: 45%; }
 td.num, th.num { text-align: right; }
 tr.inferred td { background: rgba(227, 179, 65, 0.07); }
 
