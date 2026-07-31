@@ -13,10 +13,13 @@
 
 import type { RunSummary } from '../mcp/queries.js';
 import type { C4Diagram, C4Model } from './c4.js';
+import { classLayoutInput, type ClassDiagram } from './classes.js';
+import { CARDINALITY_LABEL, erLayoutInput, type ErModel } from './erd.js';
 import type { RankedFindings } from './findings.js';
-import { layout } from './layout.js';
-import { toMermaid } from './mermaid.js';
+import { layout, layoutGraph } from './layout.js';
+import { toClassMermaid, toErMermaid, toMermaid } from './mermaid.js';
 import { escapeAttr, escapeText, toSvg } from './svg.js';
+import type { DependencyMatrix, HotspotChart, HttpSurface } from './surface.js';
 
 export interface ReportContext {
   run: RunSummary;
@@ -26,13 +29,60 @@ export interface ReportContext {
   rejectedByCitationCheck: number;
 }
 
-export function toHtml(
-  model: C4Model,
-  ranked: RankedFindings,
-  context: ReportContext,
-): string {
+/** Everything the page renders. Assembled by the command; nothing derived here. */
+export interface ReportData {
+  model: C4Model;
+  classes: ClassDiagram[];
+  /** Package diagrams past the cap, counted rather than dropped. */
+  classDiagramsSkipped: number;
+  er: ErModel;
+  surface: HttpSurface;
+  matrix: DependencyMatrix;
+  hotspots: HotspotChart;
+  ranked: RankedFindings;
+}
+
+interface Section {
+  id: string;
+  title: string;
+  html: string;
+}
+
+export function toHtml(data: ReportData, context: ReportContext): string {
   const { run } = context;
   const title = `${run.repoPath.split(/[\\/]/).filter(Boolean).pop() ?? 'repository'} — structure`;
+
+  // Built as a list so the contents and the page cannot disagree about what is
+  // on it — a table of contents maintained separately is a table of contents
+  // that goes stale.
+  const sections: Section[] = [
+    section('findings', 'Findings, ranked', findingsSection(data.ranked)),
+    section(
+      'context',
+      'Level 1 — system context',
+      diagramSection(data.model.context, 'context'),
+    ),
+    section('container', 'Level 2 — containers', diagramSection(data.model.container, 'container')),
+    ...data.model.components.map((diagram, n) =>
+      section(
+        `component-${n}`,
+        `Level 3 — components of ${diagram.scope ?? ''}`,
+        diagramSection(diagram, `component-${n}`),
+      ),
+    ),
+    ...data.classes.map((diagram, n) =>
+      section(
+        `code-${n}`,
+        `Level 4 — code in ${diagram.packageFqn}`,
+        classSection(diagram, `code-${n}`),
+      ),
+    ),
+    section('er', 'Data model', erSection(data.er)),
+    section('api', 'HTTP surface', apiSection(data.surface)),
+    section('matrix', 'Dependency matrix', matrixSection(data.matrix)),
+    section('hotspots', 'Hotspots', hotspotSection(data.hotspots)),
+    section('limits', 'What this report did not see', limitsSection(context, data)),
+  ].filter((entry) => entry.html !== '');
 
   return [
     '<!doctype html>',
@@ -45,15 +95,13 @@ export function toHtml(
     '</head>',
     '<body>',
     '<main>',
-    header(context),
+    header(context, data),
+    contents(sections),
     legend(),
-    diagramSection(model.context, 'context', 'Level 1 — system context'),
-    diagramSection(model.container, 'container', 'Level 2 — containers'),
-    ...model.components.map((diagram, n) =>
-      diagramSection(diagram, `component-${n}`, `Level 3 — components of ${diagram.scope ?? ''}`),
+    ...sections.map(
+      (entry) =>
+        `<section id="${escapeAttr(entry.id)}">\n<h2>${escapeText(entry.title)}</h2>\n${entry.html}\n</section>`,
     ),
-    findingsSection(ranked),
-    limitsSection(context),
     footer(run),
     '</main>',
     '</body>',
@@ -62,9 +110,29 @@ export function toHtml(
   ].join('\n');
 }
 
-function header(context: ReportContext): string {
+function section(id: string, title: string, html: string): Section {
+  return { id, title, html };
+}
+
+function contents(sections: Section[]): string {
+  return [
+    '<nav class="contents">',
+    '<h2>Contents</h2>',
+    '<ol>',
+    ...sections.map(
+      (entry) => `<li><a href="#${escapeAttr(entry.id)}">${escapeText(entry.title)}</a></li>`,
+    ),
+    '</ol>',
+    '</nav>',
+  ].join('\n');
+}
+
+function header(context: ReportContext, data: ReportData): string {
   const { run } = context;
   const counts = run.counts;
+  const publishable = data.ranked.total - data.ranked.uncited;
+  const high = data.ranked.bySeverity.find((row) => row.severity === 'high')?.count ?? 0;
+
   return [
     '<header>',
     `<h1>${escapeText(run.repoPath)}</h1>`,
@@ -74,17 +142,29 @@ function header(context: ReportContext): string {
     row('Tool', `stratigraph ${run.toolVersion}`),
     row('Extractors', run.extractors.join(', ') || 'none'),
     row('Languages', run.languages.join(', ') || 'none'),
-    row(
-      'Facts',
-      `${counts.files} files, ${counts.nodes} nodes, ${counts.edges} edges, ` +
-        `${counts.packages} packages, ${counts.endpoints} endpoints, ${counts.tables} tables`,
-    ),
-    row('History', counts.commits === 0 ? 'not mined' : `${counts.commits} commits`),
     '</dl>',
+    // The numbers a reader wants before they decide whether to read the rest.
+    '<ul class="tiles">',
+    tile(counts.packages, 'packages'),
+    tile(counts.types, 'types'),
+    tile(counts.endpoints, 'endpoints'),
+    tile(counts.tables, 'tables'),
+    tile(counts.commits, 'commits'),
+    tile(publishable, 'findings', high > 0 ? `${high} high` : null),
+    '</ul>',
     '<p class="lead">Everything below was read from the source at the commit above, ' +
       'or from that commit&rsquo;s history. Anything a model wrote is marked.</p>',
     '</header>',
   ].join('\n');
+}
+
+function tile(value: number, label: string, detail: string | null = null): string {
+  return (
+    `<li><span class="tile-value">${value}</span>` +
+    `<span class="tile-label">${escapeText(label)}</span>` +
+    (detail === null ? '' : `<span class="tile-detail">${escapeText(detail)}</span>`) +
+    '</li>'
+  );
 }
 
 function row(label: string, value: string): string {
@@ -115,13 +195,9 @@ function legend(): string {
   ].join('\n');
 }
 
-function diagramSection(diagram: C4Diagram, id: string, heading: string): string {
+function diagramSection(diagram: C4Diagram, id: string): string {
   const placed = layout(diagram);
-  const parts = [
-    `<section id="${escapeAttr(id)}">`,
-    `<h2>${escapeText(heading)}</h2>`,
-    `<p class="caption">${escapeText(diagram.title)}</p>`,
-  ];
+  const parts = [`<p class="caption">${escapeText(diagram.title)}</p>`];
 
   if (placed.boxes.length === 0) {
     parts.push('<p class="empty">Nothing to draw at this level for this run.</p>');
@@ -129,25 +205,288 @@ function diagramSection(diagram: C4Diagram, id: string, heading: string): string
     parts.push('<figure>', toSvg(placed, id), '</figure>');
   }
 
-  const notes = [...diagram.notes, ...placed.notes];
-  if (notes.length > 0) {
-    parts.push('<ul class="notes">');
-    for (const note of notes) parts.push(`<li>${escapeText(note)}</li>`);
-    parts.push('</ul>');
-  }
+  parts.push(notes([...diagram.notes, ...placed.notes]));
 
   if (diagram.relationships.length > 0) {
     parts.push(relationshipTable(diagram));
   }
 
-  parts.push(
+  parts.push(mermaidDetails(toMermaid(diagram)));
+  return parts.join('\n');
+}
+
+function notes(lines: string[]): string {
+  if (lines.length === 0) return '';
+  return [
+    '<ul class="notes">',
+    ...lines.map((note) => `<li>${escapeText(note)}</li>`),
+    '</ul>',
+  ].join('\n');
+}
+
+function mermaidDetails(source: string): string {
+  return [
     '<details>',
     '<summary>Mermaid source</summary>',
-    `<pre><code>${escapeText(toMermaid(diagram))}</code></pre>`,
+    `<pre><code>${escapeText(source)}</code></pre>`,
     '</details>',
-    '</section>',
-  );
+  ].join('\n');
+}
+
+// ------------------------------------------------------------ level 4: code
+
+function classSection(diagram: ClassDiagram, id: string): string {
+  const { nodes, links } = classLayoutInput(diagram);
+  const placed = layoutGraph(nodes, links);
+  const parts = [
+    `<p class="caption">${escapeText(
+      `${diagram.classes.length} type(s) declared in ${diagram.packageFqn}, with their members ` +
+        `as the source declares them.`,
+    )}</p>`,
+    '<figure>',
+    toSvg(placed, id),
+    '</figure>',
+    notes([...diagram.notes, ...placed.notes]),
+  ];
+
+  if (diagram.links.length > 0) {
+    const names = new Map(diagram.classes.map((box) => [box.id, box.name]));
+    parts.push(
+      '<table>',
+      '<caption>Every relationship between these types, and where it was declared.</caption>',
+      '<thead><tr><th>Type</th><th>Relationship</th><th>Target</th><th>Via</th>' +
+        '<th>Declared at</th></tr></thead>',
+      '<tbody>',
+      ...diagram.links.map((link) =>
+        [
+          '<tr>',
+          `<td>${escapeText(names.get(link.from) ?? link.from)}</td>`,
+          `<td>${escapeText(link.kind)}</td>`,
+          `<td>${escapeText(names.get(link.to) ?? link.toFqn)}` +
+            `${link.external ? ' <span class="tag">outside this package</span>' : ''}</td>`,
+          `<td>${escapeText(link.via ?? '—')}</td>`,
+          `<td>${location(link.path, link.line)}</td>`,
+          '</tr>',
+        ].join(''),
+      ),
+      '</tbody>',
+      '</table>',
+    );
+  }
+
+  parts.push(mermaidDetails(toClassMermaid(diagram)));
   return parts.join('\n');
+}
+
+// ------------------------------------------------------------- data model
+
+function erSection(model: ErModel): string {
+  if (model.entities.length === 0) {
+    return `<p class="empty">No O/R mapping was read in this run.</p>\n${notes(model.notes)}`;
+  }
+
+  const { nodes, links } = erLayoutInput(model);
+  const placed = layoutGraph(nodes, links);
+  const parts = [
+    `<p class="caption">${escapeText(
+      `${model.entities.length} table(s) declared by an O/R mapping, and the ` +
+        `${model.relationships.length} relationship(s) between them that could be read.`,
+    )}</p>`,
+    '<figure>',
+    toSvg(placed, 'er'),
+    '</figure>',
+    notes([...model.notes, ...placed.notes]),
+  ];
+
+  parts.push(
+    '<table>',
+    '<caption>Every column, and the field it was read from.</caption>',
+    '<thead><tr><th>Table</th><th>Column</th><th>Type</th><th>Key</th><th>From</th>' +
+      '<th>Declared at</th></tr></thead>',
+    '<tbody>',
+    ...model.entities.flatMap((entity) =>
+      entity.columns.map((column) =>
+        [
+          '<tr>',
+          `<td>${escapeText(entity.table)}</td>`,
+          `<td>${escapeText(column.name)}</td>`,
+          `<td>${escapeText(column.type)}</td>`,
+          `<td>${column.primaryKey ? '<span class="tag">PK</span>' : ''}</td>`,
+          `<td>${escapeText(column.field)}` +
+            `${column.inherited ? ' <span class="tag">inherited</span>' : ''}</td>`,
+          `<td>${location(column.path, column.line)}</td>`,
+          '</tr>',
+        ].join(''),
+      ),
+    ),
+    '</tbody>',
+    '</table>',
+  );
+
+  if (model.relationships.length > 0) {
+    parts.push(
+      '<table>',
+      '<caption>Relationships, with the field that declares each one.</caption>',
+      '<thead><tr><th>From</th><th>To</th><th>Cardinality</th><th>Via</th>' +
+        '<th>Declared at</th></tr></thead>',
+      '<tbody>',
+      ...model.relationships.map((relationship) =>
+        [
+          '<tr>',
+          `<td>${escapeText(relationship.fromTable)}</td>`,
+          `<td>${escapeText(relationship.toTable)}</td>`,
+          `<td>${escapeText(CARDINALITY_LABEL[relationship.cardinality])}</td>`,
+          `<td>${escapeText(relationship.via)}</td>`,
+          `<td>${location(relationship.path, relationship.line)}</td>`,
+          '</tr>',
+        ].join(''),
+      ),
+      '</tbody>',
+      '</table>',
+    );
+  }
+
+  if (model.unreadable.length > 0) {
+    // The refusal, on the page rather than in a footnote: an ER diagram missing
+    // three of its four lines has to say so, or it reads as a schema that has
+    // three fewer relationships than it does.
+    parts.push(
+      '<table>',
+      '<caption>Associations that were declared but could not be drawn. Each one is a ' +
+        'real relationship in the schema whose target this run could not read.</caption>',
+      '<thead><tr><th>From</th><th>Via</th><th>Cardinality</th><th>Why not drawn</th>' +
+        '<th>Declared at</th></tr></thead>',
+      '<tbody>',
+      ...model.unreadable.map((association) =>
+        [
+          '<tr class="inferred">',
+          `<td>${escapeText(association.fromTable)}</td>`,
+          `<td>${escapeText(association.via)}</td>`,
+          `<td>${escapeText(CARDINALITY_LABEL[association.cardinality])}</td>`,
+          `<td>${escapeText(association.reason)}</td>`,
+          `<td>${location(association.path, association.line)}</td>`,
+          '</tr>',
+        ].join(''),
+      ),
+      '</tbody>',
+      '</table>',
+    );
+  }
+
+  parts.push(mermaidDetails(toErMermaid(model)));
+  return parts.join('\n');
+}
+
+// ------------------------------------------------------------ HTTP surface
+
+function apiSection(surface: HttpSurface): string {
+  if (surface.endpoints.length === 0) {
+    return `<p class="empty">No HTTP endpoint was read in this run.</p>\n${notes(surface.notes)}`;
+  }
+
+  return [
+    `<p class="caption">${escapeText(
+      `${surface.endpoints.length} endpoint(s), each with the method recorded as serving it.`,
+    )}</p>`,
+    '<table class="api">',
+    '<thead><tr><th>Method</th><th>Path</th><th>Handled by</th><th>Declared at</th></tr></thead>',
+    '<tbody>',
+    ...surface.endpoints.map((endpoint) =>
+      [
+        '<tr>',
+        `<td><span class="verb verb-${escapeAttr(endpoint.method.toLowerCase())}">` +
+          `${escapeText(endpoint.method)}</span></td>`,
+        `<td><code>${escapeText(endpoint.path)}</code></td>`,
+        `<td>${
+          endpoint.handler === null
+            ? '<span class="empty">nothing recorded</span>'
+            : escapeText(endpoint.handler)
+        }</td>`,
+        `<td>${location(endpoint.file, endpoint.line)}</td>`,
+        '</tr>',
+      ].join(''),
+    ),
+    '</tbody>',
+    '</table>',
+    notes(surface.notes),
+  ].join('\n');
+}
+
+// ------------------------------------------------------- dependency matrix
+
+function matrixSection(matrix: DependencyMatrix): string {
+  if (matrix.packages.length < 2) return '';
+
+  const header = matrix.packages
+    .map(
+      (_, n) => `<th class="num" title="${escapeAttr(matrix.packages[n] as string)}">${n + 1}</th>`,
+    )
+    .join('');
+
+  const rows = matrix.packages.map((name, row) => {
+    const cells = (matrix.cells[row] as number[])
+      .map((value, column) => {
+        if (row === column) return '<td class="diagonal"></td>';
+        if (value === 0) return '<td class="num zero">·</td>';
+        const mutual = (matrix.cells[column] as number[])[row] !== 0;
+        return `<td class="num${mutual ? ' mutual' : ''}">${value}</td>`;
+      })
+      .join('');
+    return `<tr><th class="rowhead">${row + 1} ${escapeText(name)}</th>${cells}</tr>`;
+  });
+
+  return [
+    '<div class="scroller">',
+    '<table class="matrix">',
+    '<caption>Rows depend on columns. A cell shaded on both sides of the diagonal is a cycle.</caption>',
+    `<thead><tr><th></th>${header}</tr></thead>`,
+    '<tbody>',
+    ...rows,
+    '</tbody>',
+    '</table>',
+    '</div>',
+    notes(matrix.notes),
+  ].join('\n');
+}
+
+// ---------------------------------------------------------------- hotspots
+
+function hotspotSection(chart: HotspotChart): string {
+  if (chart.bars.length === 0) return '';
+
+  return [
+    `<p class="caption">${escapeText(
+      `The ${chart.bars.length} files with the highest churn x complexity, of ${chart.total} with history.`,
+    )}</p>`,
+    '<table class="hotspots">',
+    '<thead><tr><th>File</th><th class="num">Commits</th><th class="num">Churn</th>' +
+      '<th>Score</th><th class="num">Authors</th><th class="num">Top author</th></tr></thead>',
+    '<tbody>',
+    ...chart.bars.map((bar) =>
+      [
+        '<tr>',
+        `<td><code>${escapeText(bar.path)}</code></td>`,
+        `<td class="num">${bar.commits}</td>`,
+        `<td class="num">${bar.churn}</td>`,
+        // A bar rather than a number: the ratio between the first row and the
+        // tenth is the thing a list of integers hides.
+        `<td class="bar-cell"><span class="bar" style="width:${(bar.relative * 100).toFixed(1)}%">` +
+          `</span><span class="bar-value">${Math.round(bar.score).toLocaleString('en-US')}</span></td>`,
+        `<td class="num">${bar.authors}</td>`,
+        `<td class="num">${Math.round(bar.topAuthorShare * 100)}%</td>`,
+        '</tr>',
+      ].join(''),
+    ),
+    '</tbody>',
+    '</table>',
+    notes(chart.notes),
+  ].join('\n');
+}
+
+/** `path:line` as a code span, or an honest dash. */
+function location(path: string | null, line: number | null): string {
+  if (path === null) return '<span class="empty">—</span>';
+  return `<code>${escapeText(path)}${line === null ? '' : `:${line}`}</code>`;
 }
 
 /** Every line on the diagram, with the rows behind it. This is the citation half. */
@@ -168,7 +507,7 @@ function relationshipTable(diagram: C4Diagram): string {
   });
 
   return [
-    '<table>',
+    '<table class="wide">',
     '<caption>Every relationship on this diagram, and the rows it came from.</caption>',
     '<thead><tr><th>From</th><th>To</th><th>Via</th><th class="num">Refs</th>' +
       '<th>Confidence</th><th>Evidence</th></tr></thead>',
@@ -202,16 +541,14 @@ function evidenceList(
 }
 
 function findingsSection(ranked: RankedFindings): string {
-  const parts = ['<section id="findings">', '<h2>Findings, ranked</h2>'];
+  const parts: string[] = [];
 
   if (ranked.total === 0) {
-    parts.push(
+    return (
       '<p class="empty">No findings for this run. That means every rule that ran found ' +
-        'nothing &mdash; not that nothing was looked at; the limits below say which ' +
-        'rules could run.</p>',
-      '</section>',
+      'nothing &mdash; not that nothing was looked at; the limits below say which ' +
+      'rules could run.</p>'
     );
-    return parts.join('\n');
   }
 
   const publishable = ranked.total - ranked.uncited;
@@ -267,7 +604,6 @@ function findingsSection(ranked: RankedFindings): string {
     );
   }
 
-  parts.push('</section>');
   return parts.join('\n');
 }
 
@@ -277,14 +613,29 @@ function findingsSection(ranked: RankedFindings): string {
  * On the page, not in a footnote. A report a reader is expected to act on has
  * to state its own blind spots, or its silences read as absences.
  */
-function limitsSection(context: ReportContext): string {
-  const parts = [
-    '<section id="limits">',
-    '<h2>What this report did not see</h2>',
-    '<ul class="notes">',
-  ];
+function limitsSection(context: ReportContext, data: ReportData): string {
+  const parts = ['<ul class="notes">'];
 
   for (const gap of context.run.gaps) parts.push(`<li>${escapeText(gap)}</li>`);
+
+  if (data.classDiagramsSkipped > 0) {
+    parts.push(
+      `<li>${data.classDiagramsSkipped} package(s) have no class diagram here — the ` +
+        'ones declaring the fewest types. Raise <code>--top</code> to include them.</li>',
+    );
+  }
+  if (data.er.unreadable.length > 0) {
+    parts.push(
+      `<li>${data.er.unreadable.length} declared entity association(s) have a target ` +
+        'this run could not read, and are listed in the data model rather than drawn.</li>',
+    );
+  }
+  if (data.surface.unhandled > 0) {
+    parts.push(
+      `<li>${data.surface.unhandled} endpoint(s) have no handler recorded — the route was ` +
+        'readable, the method serving it was not.</li>',
+    );
+  }
 
   for (const diagnostic of context.diagnostics) {
     parts.push(
@@ -313,7 +664,6 @@ function limitsSection(context: ReportContext): string {
       'infrastructure, runtime wiring and anything resolved by reflection are ' +
       'invisible to a parser and absent from every diagram above.</li>',
     '</ul>',
-    '</section>',
   );
   return parts.join('\n');
 }
@@ -359,6 +709,19 @@ a { color: var(--accent); }
 .meta dd { margin: 0; word-break: break-word; }
 .lead { color: var(--muted); }
 
+/* The numbers a reader wants before deciding whether to read the rest. */
+.tiles { list-style: none; display: flex; flex-wrap: wrap; gap: 10px; padding: 0; margin: 20px 0; }
+.tiles li { flex: 1 1 110px; background: var(--panel); border: 1px solid var(--line);
+            border-radius: 8px; padding: 12px 14px; display: flex; flex-direction: column; }
+.tile-value { font-size: 22px; font-weight: 650; line-height: 1.2; }
+.tile-label { color: var(--muted); font-size: 12.5px; }
+.tile-detail { color: var(--warn); font-size: 12px; margin-top: 2px; }
+
+.contents { background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+            padding: 4px 20px 16px; margin: 20px 0; }
+.contents ol { columns: 2; column-gap: 32px; padding-left: 20px; margin: 0; }
+.contents li { margin: 4px 0; break-inside: avoid; }
+
 .legend { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 4px 20px 16px; }
 .legend ul { list-style: none; padding: 0; }
 .legend li { margin: 10px 0; }
@@ -376,22 +739,30 @@ svg.diagram { display: block; max-width: 100%; height: auto; }
 .notes { color: var(--muted); font-size: 13.5px; padding-left: 20px; }
 .notes li { margin: 6px 0; }
 
-/* Fixed layout, because the browser's own column sizing gives the three fqn
-   columns everything and crushes the evidence into a two-word-wide ribbon —
-   and the evidence is the half of this table that justifies the other half. */
-table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13px; table-layout: fixed; }
+table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13px; }
 caption { text-align: left; color: var(--muted); font-size: 13px; padding-bottom: 8px; }
 th, td { text-align: left; vertical-align: top; padding: 8px 10px; border-bottom: 1px solid var(--line);
          overflow-wrap: anywhere; }
 th { color: var(--muted); font-weight: 600; }
-th:nth-child(1), td:nth-child(1) { width: 16%; }
-th:nth-child(2), td:nth-child(2) { width: 16%; }
-th:nth-child(3), td:nth-child(3) { width: 9%; }
-th:nth-child(4), td:nth-child(4) { width: 5%; }
-th:nth-child(5), td:nth-child(5) { width: 9%; }
-th:nth-child(6), td:nth-child(6) { width: 45%; }
+/* A numeric column is narrow, and left to itself the browser breaks "Commits"
+   across two lines rather than widening it by six pixels. */
 td.num, th.num { text-align: right; }
+th.num { white-space: nowrap; }
 tr.inferred td { background: rgba(227, 179, 65, 0.07); }
+
+/* The relationship tables only. Left to the browser, its column sizing gives
+   the three fqn columns everything and crushes the evidence into a
+   two-word-wide ribbon — and the evidence is the half of that table that
+   justifies the other half. Every other table is better off with auto. */
+table.wide { table-layout: fixed; }
+table.wide th:nth-child(1), table.wide td:nth-child(1) { width: 16%; }
+table.wide th:nth-child(2), table.wide td:nth-child(2) { width: 16%; }
+table.wide th:nth-child(3), table.wide td:nth-child(3) { width: 9%; }
+table.wide th:nth-child(4), table.wide td:nth-child(4) { width: 5%; }
+table.wide th:nth-child(5), table.wide td:nth-child(5) { width: 9%; }
+table.wide th:nth-child(6), table.wide td:nth-child(6) { width: 45%; }
+/* A path is one long token; let it wrap rather than widen its column. */
+td code { overflow-wrap: anywhere; }
 
 .evidence { list-style: none; margin: 0; padding: 0; }
 .evidence li { margin: 2px 0; color: var(--muted); word-break: break-word; }
@@ -414,6 +785,32 @@ tr.inferred td { background: rgba(227, 179, 65, 0.07); }
 .finding.sev-info { border-left-color: var(--line); }
 .finding.model h3 { font-style: italic; color: var(--inferred); }
 .detail { white-space: pre-wrap; color: var(--muted); margin: 8px 0; overflow-x: auto; }
+
+/* The API surface, the matrix and the hotspots each want their own column
+   proportions, so they opt out of the six-column grid the relationship tables
+   are sized for. */
+.verb { display: inline-block; min-width: 52px; text-align: center; padding: 1px 6px;
+        border-radius: 4px; font-family: var(--mono); font-size: 11.5px; font-weight: 600;
+        background: #30363d; color: var(--text); }
+.verb-get { background: #1f6feb; }
+.verb-post { background: #238636; }
+.verb-put, .verb-patch { background: #9e6a03; }
+.verb-delete { background: #b62324; }
+
+.scroller { overflow-x: auto; }
+table.matrix { font-size: 12px; width: auto; }
+table.matrix th.rowhead { font-family: var(--mono); font-weight: 500; white-space: nowrap;
+                          text-align: left; color: var(--text); }
+table.matrix td { text-align: right; padding: 4px 8px; }
+table.matrix td.zero { color: #484f58; }
+table.matrix td.diagonal { background: var(--line); }
+/* A cell shaded on both sides of the diagonal is a cycle, findable by eye. */
+table.matrix td.mutual { background: rgba(248, 81, 73, 0.22); font-weight: 650; }
+
+td.bar-cell { min-width: 220px; white-space: nowrap; }
+.bar { display: inline-block; height: 10px; background: var(--accent); border-radius: 2px;
+       vertical-align: middle; margin-right: 8px; min-width: 2px; max-width: 60%; }
+.bar-value { font-family: var(--mono); font-size: 11.5px; color: var(--muted); }
 
 details { margin: 12px 0; }
 summary { cursor: pointer; color: var(--muted); font-size: 13px; }

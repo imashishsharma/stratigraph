@@ -42,13 +42,14 @@ why things are the way they are. Java/Spring Boot and Angular first.
 > Both extractors write into one run, so an Angular service and the Spring
 > endpoint it calls can be joined — as an **inference**, never as a fact.
 >
-> **M6 adds the report.** `stratigraph report` writes C4 diagrams for levels
-> 1–3 as Structurizr DSL, as Mermaid, and as a single self-contained HTML page
-> — no script, no network, rendered by a layout engine small enough that its
-> SVG is asserted byte-for-byte in a fixture test. Every relationship it draws
-> is followed by the edges behind it with file and line, the findings are
-> ranked by an arithmetic key you can check, and the page ends with what the
-> run did not see.
+> **M6 adds the report.** `stratigraph report` writes C4 diagrams for all four
+> levels — including class diagrams — an ER model read out of the O/R mappings,
+> the HTTP surface, a dependency matrix and ranked hotspots, as Structurizr
+> DSL, as Mermaid, and as a single self-contained HTML page. No script, no
+> network, rendered by a layout engine small enough that its SVG is asserted
+> byte-for-byte in a fixture test. Every relationship it draws is followed by
+> the edges behind it with file and line, and the page ends with what the run
+> did not see.
 
 ## The rule that shapes everything
 
@@ -371,8 +372,14 @@ arch/workspace.dsl              Structurizr, all three views, with provenance
 arch/c4-context.mmd             Mermaid, level 1
 arch/c4-container.mmd           level 2
 arch/c4-component-<module>.mmd  level 3, one per container
+arch/c4-code-<package>.mmd      level 4, one class diagram per package
+arch/data-model.mmd             the ER model, from the declared O/R mappings
 arch/findings.md                the ranked list, for pasting into an issue
 ```
+
+The HTML page carries all of that plus the HTTP surface, a package dependency
+matrix and ranked hotspots — with a contents list, and a panel of the numbers
+worth knowing before you read the rest.
 
 **C4 is a projection of the fact graph, not a new model.** A container is a
 `module` node from a build file; a component is a package; a data store exists
@@ -404,9 +411,34 @@ with no citation is not published**, it is excluded from every count, and the
 number excluded is printed
 ([ADR-0021](docs/adr/0021-finding-rank-and-publishability.md)).
 
+**Level 4 is one class diagram per package** — a package is something the
+source states, where a cluster is something an algorithm decided, and the level
+where a reader is closest to the code is the wrong place to introduce a
+grouping that is not in the code. Boxes carry stereotypes, fields and methods
+as declared; generalisation, realisation and association are drawn as UML draws
+them.
+
+**The data model is read out of the O/R mappings.** The entity is the table,
+its columns are the mapped class's fields *including the ones it inherits* —
+JPA maps a mapped-superclass chain into the subclass's table, so without that
+`owners` would have no primary key — and cardinality comes from the JPA
+annotation rather than from a field being plural.
+
+That last part cost an extractor change worth recording. `List<Pet>` erases to
+`java.util.List` for the fqn, and has to, or two overloads differing only by
+type argument become two nodes. It also destroys the only thing that says what
+the collection holds: on petclinic, **three of four entity associations had a
+readable cardinality and an unreadable target.** The extractor now records the
+type arguments beside the erased type — no fqn changes — and all four
+relationships come out
+([ADR-0022](docs/adr/0022-code-level-and-the-data-model.md)). An association
+whose target still cannot be read gets a row in its own table saying why, never
+a line to a plausible one.
+
 Run against [spring-petclinic](https://github.com/spring-projects/spring-petclinic)
-— 49 Java sources, 1,040 commits — it produces 44 findings, every one carrying
-either a `file:line` or a commit sha, and each one states its own limits inline:
+— 49 Java sources, 1,040 commits — it produces 6 tables with 4 relationships,
+6 class diagrams, 17 endpoints, and 44 findings, every one carrying either a
+`file:line` or a commit sha, and each one states its own limits inline:
 
 > `mvnw` and `mvnw.cmd` change together — 11 of the 11 commits touching either
 > file touch both, 65.1× what independent files would share. *No extractor

@@ -45,17 +45,68 @@ const EDGE_CHAR_WIDTH = 6;
 const ORDERING_PASSES = 4;
 
 /**
+ * How tall a single column may get before it wraps into a second one.
+ *
+ * Roughly a screen. A diagram taller than this is scrolled rather than seen,
+ * and the boxes at the bottom might as well not be drawn.
+ */
+const MAX_COLUMN_HEIGHT = 900;
+
+/**
  * Above this many relationships, edge labels are dropped — they overlap into
  * illegibility long before the diagram itself does. The layout says so in
  * `notes` rather than dropping them quietly.
  */
 const LABEL_LIMIT = 15;
 
-export type LineEmphasis = 'name' | 'detail' | 'group' | 'inference';
+export type LineEmphasis =
+  | 'name'
+  | 'detail'
+  | 'group'
+  | 'inference'
+  /** A field, a column or a method: left-aligned inside a compartment box. */
+  | 'member'
+  /** `«entity»`, `«service»` — a role a parser read off an annotation. */
+  | 'stereotype';
 
 export interface LayoutLine {
   text: string;
   emphasis: LineEmphasis;
+}
+
+/** What kind of box this is. The C4 kinds, plus the two the code level adds. */
+export type BoxKind = C4ElementKind | 'entity' | 'type';
+
+/**
+ * How an edge is drawn.
+ *
+ * UML's own vocabulary, because a class diagram that draws inheritance the same
+ * as an association is not a class diagram. `plain` is everything else.
+ */
+export type EdgeStyle = 'plain' | 'extends' | 'implements' | 'association';
+
+/** What a caller hands to {@link layoutGraph}. */
+export interface LayoutNodeSpec {
+  id: string;
+  kind: BoxKind;
+  lines: LayoutLine[];
+  inference: boolean;
+  /**
+   * Draw as a compartment box: lines left-aligned, with a rule under the
+   * header. This is what makes a class or a table read as one, rather than as
+   * a centred paragraph in a rounded rectangle.
+   */
+  compartment?: boolean;
+  /** How many leading lines are the header. Only meaningful for a compartment. */
+  dividerAfter?: number;
+}
+
+export interface LayoutLinkSpec {
+  from: string;
+  to: string;
+  label: string;
+  confidence: Confidence;
+  style?: EdgeStyle;
 }
 
 export interface LayoutBox {
@@ -64,9 +115,11 @@ export interface LayoutBox {
   y: number;
   width: number;
   height: number;
-  kind: C4ElementKind;
+  kind: BoxKind;
   inference: boolean;
   lines: LayoutLine[];
+  compartment: boolean;
+  dividerAfter: number;
 }
 
 export interface LayoutEdge {
@@ -78,6 +131,7 @@ export interface LayoutEdge {
   /** Where to put the label, when there is one. */
   labelAt: [number, number] | null;
   confidence: Confidence;
+  style: EdgeStyle;
   /**
    * True when the edge runs backwards or within a rank, and had to be routed
    * through the channel below the diagram. Always a cycle or a sibling
@@ -95,15 +149,27 @@ export interface Layout {
   notes: string[];
 }
 
-/** Lay out one diagram. */
+/**
+ * Lay out one C4 diagram.
+ *
+ * A thin conversion over {@link layoutGraph}: the code level and the ER model
+ * are the same shape of problem — boxes with dependencies between them — and
+ * splitting the layout in two would give this project two engines to keep
+ * deterministic instead of one.
+ */
 export function layout(diagram: C4Diagram): Layout {
-  const boxes = diagram.elements.map(toBox);
+  return layoutGraph(diagram.elements.map(toNodeSpec), diagram.relationships);
+}
+
+/** Lay out an arbitrary graph of boxes. */
+export function layoutGraph(nodes: LayoutNodeSpec[], links: LayoutLinkSpec[]): Layout {
+  const boxes = nodes.map(toBox);
   if (boxes.length === 0) {
     return { width: 0, height: 0, boxes: [], edges: [], notes: [] };
   }
 
   const index = new Map(boxes.map((box, n) => [box.id, n]));
-  const edges = diagram.relationships.filter(
+  const edges = links.filter(
     (relationship) => index.has(relationship.from) && index.has(relationship.to),
   );
 
@@ -140,14 +206,15 @@ export function layout(diagram: C4Diagram): Layout {
     const from = byId.get(relationship.from) as LayoutBox;
     const to = byId.get(relationship.to) as LayoutBox;
     const label = withLabels ? truncateEdgeLabel(relationship.label) : null;
+    const style = relationship.style ?? 'plain';
 
     if (to.x > from.x + from.width) {
-      routed.push(forwardEdge(from, to, label, relationship.confidence));
+      routed.push(forwardEdge(from, to, label, relationship.confidence, style));
       continue;
     }
     channel += 1;
     routed.push(
-      channelEdge(from, to, label, relationship.confidence, contentBottom + channel * 14),
+      channelEdge(from, to, label, relationship.confidence, style, contentBottom + channel * 14),
     );
   }
 
@@ -206,7 +273,8 @@ function ysOf(edge: LayoutEdge): number[] {
 
 // ------------------------------------------------------------------- content
 
-function toBox(element: C4Diagram['elements'][number]): LayoutBox {
+/** A C4 element as a plain centred box. */
+function toNodeSpec(element: C4Diagram['elements'][number]): LayoutNodeSpec {
   const lines: LayoutLine[] = [{ text: truncate(element.name), emphasis: 'name' }];
   if (element.technology !== null) {
     lines.push({ text: truncate(`[${element.technology}]`), emphasis: 'detail' });
@@ -223,17 +291,24 @@ function toBox(element: C4Diagram['elements'][number]): LayoutBox {
   if (element.inference) {
     lines.push({ text: 'name is inference', emphasis: 'inference' });
   }
+  return { id: element.id, kind: element.kind, lines, inference: element.inference };
+}
 
-  const widest = Math.max(...lines.map((line) => line.text.length));
+function toBox(spec: LayoutNodeSpec): LayoutBox {
+  const lines = spec.lines;
+  const widest = Math.max(0, ...lines.map((line) => line.text.length));
+  const compartment = spec.compartment ?? false;
   return {
-    id: element.id,
+    id: spec.id,
     x: 0,
     y: 0,
     width: Math.max(MIN_BOX_WIDTH, round(widest * CHAR_WIDTH + PAD_X * 2)),
     height: lines.length * LINE_HEIGHT + PAD_Y * 2,
-    kind: element.kind,
-    inference: element.inference,
+    kind: spec.kind,
+    inference: spec.inference,
     lines,
+    compartment,
+    dividerAfter: compartment ? (spec.dividerAfter ?? 1) : 0,
   };
 }
 
@@ -417,7 +492,14 @@ function orderWithinRanks(
 
 // ----------------------------------------------------------------- placement
 
-/** Grid placement: one column per rank, columns as wide as their widest box. */
+/**
+ * Grid placement: one column per rank, columns as wide as their widest box.
+ *
+ * A rank taller than {@link MAX_COLUMN_HEIGHT} wraps into side-by-side
+ * sub-columns. Without that, a class diagram — where most types reference
+ * nothing and so share rank 0 — becomes one column four thousand pixels tall,
+ * which is a list with borders on it rather than a diagram.
+ */
 function place(
   boxes: LayoutBox[],
   ranks: Map<string, number>,
@@ -436,26 +518,16 @@ function place(
   }
 
   const rankNumbers = [...byRank.keys()].sort((a, b) => a - b);
-  const columnWidth = new Map<number, number>();
-  const columnHeight = new Map<number, number>();
-  for (const rank of rankNumbers) {
-    const group = byRank.get(rank) as LayoutBox[];
-    columnWidth.set(rank, Math.max(...group.map((box) => box.width)));
-    columnHeight.set(
-      rank,
-      group.reduce((sum, box) => sum + box.height, 0) + ROW_GAP * (group.length - 1),
-    );
-  }
-  const tallest = Math.max(...columnHeight.values());
+  const columns = rankNumbers.flatMap((rank) => wrap(byRank.get(rank) as LayoutBox[]));
+  const tallest = Math.max(...columns.map(heightOf));
 
   let x = MARGIN;
-  for (const rank of rankNumbers) {
-    const group = byRank.get(rank) as LayoutBox[];
-    const width = columnWidth.get(rank) as number;
+  for (const column of columns) {
+    const width = Math.max(...column.map((box) => box.width));
     // Centre each column against the tallest, so a two-box column beside a
     // ten-box one reads as connected rather than as an afterthought.
-    let y = MARGIN + round((tallest - (columnHeight.get(rank) as number)) / 2);
-    for (const box of group) {
+    let y = MARGIN + round((tallest - heightOf(column)) / 2);
+    for (const box of column) {
       box.x = x;
       box.y = y;
       box.width = width;
@@ -463,6 +535,35 @@ function place(
     }
     x += width + columnGap;
   }
+}
+
+/**
+ * Split one rank into columns no taller than the limit.
+ *
+ * Order is preserved across the split, so the barycentre ordering still means
+ * something: reading down the first sub-column and on to the second is reading
+ * the rank in order.
+ */
+function wrap(group: LayoutBox[]): LayoutBox[][] {
+  const columns: LayoutBox[][] = [];
+  let current: LayoutBox[] = [];
+  let height = 0;
+
+  for (const box of group) {
+    if (current.length > 0 && height + box.height > MAX_COLUMN_HEIGHT) {
+      columns.push(current);
+      current = [];
+      height = 0;
+    }
+    current.push(box);
+    height += box.height + ROW_GAP;
+  }
+  if (current.length > 0) columns.push(current);
+  return columns;
+}
+
+function heightOf(column: LayoutBox[]): number {
+  return column.reduce((sum, box) => sum + box.height, 0) + ROW_GAP * (column.length - 1);
 }
 
 // ------------------------------------------------------------------- routing
@@ -473,6 +574,7 @@ function forwardEdge(
   to: LayoutBox,
   label: string | null,
   confidence: Confidence,
+  style: EdgeStyle,
 ): LayoutEdge {
   const x1 = from.x + from.width;
   const y1 = round(from.y + from.height / 2);
@@ -500,6 +602,7 @@ function forwardEdge(
     label,
     labelAt: label === null ? null : [mid, round(Math.min(y1, y2) + Math.abs(y2 - y1) / 2) - 4],
     confidence,
+    style,
     routed: false,
   };
 }
@@ -516,6 +619,7 @@ function channelEdge(
   to: LayoutBox,
   label: string | null,
   confidence: Confidence,
+  style: EdgeStyle,
   channelY: number,
 ): LayoutEdge {
   const x1 = round(from.x + from.width / 2);
@@ -535,6 +639,7 @@ function channelEdge(
     label,
     labelAt: label === null ? null : [round((x1 + x2) / 2), channelY - 4],
     confidence,
+    style,
     routed: true,
   };
 }

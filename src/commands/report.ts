@@ -17,15 +17,34 @@ import { assertSchemaCurrent, openDatabase, type Db } from '../db/database.js';
 import { findRun, latestRun } from '../db/run.js';
 import { info, print } from '../log.js';
 import { describeRun } from '../mcp/queries.js';
-import { buildC4Model, type C4Model } from '../present/c4.js';
+import { buildC4Model } from '../present/c4.js';
+import { buildClassDiagrams } from '../present/classes.js';
+import { buildErModel } from '../present/erd.js';
 import { rankFindings } from '../present/findings.js';
-import { toHtml, type ReportContext } from '../present/html.js';
+import { toHtml, type ReportContext, type ReportData } from '../present/html.js';
 import { toMarkdown } from '../present/markdown.js';
-import { toMermaid } from '../present/mermaid.js';
+import { toClassMermaid, toErMermaid, toMermaid } from '../present/mermaid.js';
 import { toStructurizr } from '../present/structurizr.js';
+import {
+  buildDependencyMatrix,
+  buildHotspotChart,
+  buildHttpSurface,
+} from '../present/surface.js';
 
 /** Rows per section, and elements per component diagram. */
 export const DEFAULT_TOP = 20;
+
+/**
+ * Class diagrams produced, at most.
+ *
+ * A large repository has hundreds of packages and a level-4 diagram of each is
+ * not a report, it is a directory listing. The packages declaring the most
+ * types come first and the rest are counted in the limits section.
+ */
+const MAX_CLASS_DIAGRAMS = 12;
+
+/** Types drawn per class diagram before it says how many it left out. */
+const CLASSES_PER_DIAGRAM = 12;
 
 export class ReportError extends Error {
   constructor(message: string) {
@@ -71,8 +90,20 @@ export function runReport(options: ReportOptions): ReportResult {
       throw new ReportError(`run ${runId} is not in ${config.dbPath}`);
     }
 
-    const model = buildC4Model(db, runId, { top });
-    const ranked = rankFindings(db, runId, { top });
+    const { diagrams: classes, skipped: classDiagramsSkipped } = buildClassDiagrams(db, runId, {
+      top: CLASSES_PER_DIAGRAM,
+      maxDiagrams: MAX_CLASS_DIAGRAMS,
+    });
+    const data: ReportData = {
+      model: buildC4Model(db, runId, { top }),
+      classes,
+      classDiagramsSkipped,
+      er: buildErModel(db, runId),
+      surface: buildHttpSurface(db, runId),
+      matrix: buildDependencyMatrix(db, runId, top),
+      hotspots: buildHotspotChart(db, runId, top),
+      ranked: rankFindings(db, runId, { top }),
+    };
     const context: ReportContext = {
       run: summary,
       diagnostics: loadDiagnostics(db, runId),
@@ -82,8 +113,8 @@ export function runReport(options: ReportOptions): ReportResult {
     const outDir = resolve(options.cwd ?? process.cwd(), options.out);
     mkdirSync(outDir, { recursive: true });
 
-    const files = write(outDir, model, () => toHtml(model, ranked, context), () =>
-      toMarkdown(ranked, {
+    const files = write(outDir, data, () => toHtml(data, context), () =>
+      toMarkdown(data.ranked, {
         repoName: basename(summary.repoPath) || summary.repoPath,
         repoHead: summary.repoHead,
         runId: summary.runId,
@@ -92,13 +123,15 @@ export function runReport(options: ReportOptions): ReportResult {
       }),
     );
 
-    const containers = model.container.elements.filter(
+    const containers = data.model.container.elements.filter(
       (element) => element.kind === 'container',
     ).length;
     info(
       `run ${runId}: ${containers} container(s), ` +
-        `${model.components.length} component diagram(s), ` +
-        `${ranked.total - ranked.uncited} publishable finding(s)`,
+        `${data.model.components.length} component diagram(s), ` +
+        `${classes.length} class diagram(s), ${data.er.entities.length} table(s), ` +
+        `${data.surface.endpoints.length} endpoint(s), ` +
+        `${data.ranked.total - data.ranked.uncited} publishable finding(s)`,
     );
     // The paths are what the user asked for, so they go to stdout.
     print(`Report written to ${outDir}`);
@@ -122,21 +155,30 @@ export function runReport(options: ReportOptions): ReportResult {
  */
 function write(
   outDir: string,
-  model: C4Model,
+  data: ReportData,
   html: () => string,
   markdown: () => string,
 ): string[] {
   const outputs: Array<[string, string]> = [
     ['index.html', html()],
-    ['workspace.dsl', toStructurizr(model)],
-    ['c4-context.mmd', toMermaid(model.context)],
-    ['c4-container.mmd', toMermaid(model.container)],
-    ...model.components.map(
+    ['workspace.dsl', toStructurizr(data.model)],
+    ['c4-context.mmd', toMermaid(data.model.context)],
+    ['c4-container.mmd', toMermaid(data.model.container)],
+    ...data.model.components.map(
       (diagram): [string, string] => [
         `c4-component-${slug(diagram.scope)}.mmd`,
         toMermaid(diagram),
       ],
     ),
+    ...data.classes.map(
+      (diagram): [string, string] => [
+        `c4-code-${slug(diagram.packageFqn)}.mmd`,
+        toClassMermaid(diagram),
+      ],
+    ),
+    ...(data.er.entities.length > 0
+      ? ([['data-model.mmd', toErMermaid(data.er)]] as Array<[string, string]>)
+      : []),
     ['findings.md', markdown()],
   ];
 

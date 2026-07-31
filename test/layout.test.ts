@@ -141,6 +141,22 @@ describe('placement', () => {
     expect(detailed.boxes[0]?.height).toBeGreaterThan(plain.boxes[0]?.height as number);
   });
 
+  it('wraps a tall rank into side-by-side columns', () => {
+    // Most types in a package reference nothing, so they all share rank 0. In
+    // one column that is a four-thousand-pixel list with borders on it.
+    const many = Array.from({ length: 40 }, (_, n) => element(`n${String(n).padStart(2, '0')}`));
+    const result = layout(diagram(many));
+
+    const columns = new Set(result.boxes.map((box) => box.x));
+    expect(columns.size).toBeGreaterThan(1);
+    expect(result.height).toBeLessThan(1000);
+  });
+
+  it('keeps a short rank in one column', () => {
+    const result = layout(diagram([element('a'), element('b'), element('c')]));
+    expect(new Set(result.boxes.map((box) => box.x)).size).toBe(1);
+  });
+
   it('lays out nothing for an empty diagram', () => {
     expect(layout(diagram([]))).toEqual({
       width: 0,
@@ -311,6 +327,7 @@ describe('SVG output', () => {
         '<defs>',
         '<marker id="d1-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#8b949e"/></marker>',
         '<marker id="d1-arrow-inferred" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#e3b341"/></marker>',
+        '<marker id="d1-arrow-hollow" viewBox="0 0 12 12" refX="11" refY="6" markerWidth="10" markerHeight="10" orient="auto-start-reverse"><path d="M 1 1 L 11 6 L 1 11 z" fill="#0d1117" stroke="#8b949e" stroke-width="1.5"/></marker>',
         '</defs>',
         '<polyline points="140,38 212,38" fill="none" stroke="#8b949e" stroke-width="1.5" marker-end="url(#d1-arrow)"/>',
         '<rect x="151" y="23" width="50" height="14" rx="3" fill="#161b22" opacity="0.9"/>',

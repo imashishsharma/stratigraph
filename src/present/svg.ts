@@ -22,6 +22,8 @@ const FILL: Record<string, string> = {
   component: '#2d333b',
   datastore: '#495057',
   external: '#57606a',
+  entity: '#22272e',
+  type: '#22272e',
 };
 
 const STROKE: Record<string, string> = {
@@ -30,6 +32,14 @@ const STROKE: Record<string, string> = {
   component: '#57606a',
   datastore: '#8b949e',
   external: '#8b949e',
+  entity: '#6e7681',
+  type: '#6e7681',
+};
+
+/** The header strip of a compartment box, so the title reads as a title. */
+const HEADER_FILL: Record<string, string> = {
+  entity: '#316dca',
+  type: '#39414a',
 };
 
 const TEXT = '#f0f6fc';
@@ -58,6 +68,7 @@ export function toSvg(layout: Layout, idPrefix: string): string {
     '<defs>',
     marker(arrow, LINE),
     marker(arrowInferred, INFERRED),
+    hollowMarker(`${arrow}-hollow`, LINE),
     '</defs>',
   ];
 
@@ -81,19 +92,43 @@ function marker(id: string, colour: string): string {
   );
 }
 
+/** UML generalisation: a hollow triangle, unfilled so it reads as inheritance. */
+function hollowMarker(id: string, colour: string): string {
+  return (
+    `<marker id="${id}" viewBox="0 0 12 12" refX="11" refY="6" markerWidth="10" ` +
+    `markerHeight="10" orient="auto-start-reverse">` +
+    `<path d="M 1 1 L 11 6 L 1 11 z" fill="#0d1117" stroke="${colour}" stroke-width="1.5"/></marker>`
+  );
+}
+
 function renderBox(box: LayoutBox): string[] {
   const fill = FILL[box.kind] ?? FILL['component'];
   const stroke = box.inference ? INFERRED : (STROKE[box.kind] ?? LINE);
   const dashed = box.inference ? ' stroke-dasharray="5 3"' : '';
   // A store is drawn as a cylinder and an external system with a rounder
-  // corner, because those are the shapes a C4 reader already knows.
-  const radius = box.kind === 'external' ? 14 : box.kind === 'datastore' ? 4 : 6;
+  // corner, because those are the shapes a C4 reader already knows. A
+  // compartment box is square, because that is what a class and a table are.
+  const radius = box.compartment ? 3 : box.kind === 'external' ? 14 : box.kind === 'datastore' ? 4 : 6;
 
   const parts = [
     `<g>`,
     `<rect x="${box.x}" y="${box.y}" width="${box.width}" height="${box.height}" ` +
       `rx="${radius}" fill="${fill}" stroke="${stroke}" stroke-width="1.5"${dashed}/>`,
   ];
+
+  if (box.compartment && box.dividerAfter > 0) {
+    // A filled header strip and a rule under it: the two marks that make a
+    // stack of text read as a class or a table rather than as a paragraph.
+    const headerHeight = box.dividerAfter * 16 + 8;
+    const headerFill = HEADER_FILL[box.kind] ?? '#39414a';
+    parts.push(
+      `<path d="M ${box.x} ${box.y + radius} a ${radius} ${radius} 0 0 1 ${radius} ${-radius} ` +
+        `h ${box.width - radius * 2} a ${radius} ${radius} 0 0 1 ${radius} ${radius} ` +
+        `v ${headerHeight - radius} h ${-box.width} z" fill="${headerFill}"/>`,
+      `<line x1="${box.x}" y1="${box.y + headerHeight}" x2="${box.x + box.width}" ` +
+        `y2="${box.y + headerHeight}" stroke="${stroke}" stroke-width="1"/>`,
+    );
+  }
 
   let y = box.y + 10 + FONT_SIZE;
   for (const line of box.lines) {
@@ -104,11 +139,19 @@ function renderBox(box: LayoutBox): string[] {
   return parts;
 }
 
+/**
+ * One line of text.
+ *
+ * Compartment rows are left-aligned and header lines are centred, which is the
+ * UML convention and also the only way a column list reads as a list.
+ */
 function renderLine(box: LayoutBox, line: LayoutLine, y: number): string {
-  const x = box.x + box.width / 2;
   const attributes = styleFor(line);
+  const leftAligned = box.compartment && line.emphasis === 'member';
+  const x = leftAligned ? box.x + 10 : box.x + box.width / 2;
+  const anchor = leftAligned ? 'start' : 'middle';
   return (
-    `<text x="${x}" y="${y}" text-anchor="middle" font-size="${attributes.size}" ` +
+    `<text x="${x}" y="${y}" text-anchor="${anchor}" font-size="${attributes.size}" ` +
     `fill="${attributes.fill}"${attributes.style}>${escapeText(line.text)}</text>`
   );
 }
@@ -121,6 +164,10 @@ function styleFor(line: LayoutLine): { size: number; fill: string; style: string
       return { size: FONT_SIZE - 2, fill: INFERRED, style: ' font-style="italic"' };
     case 'group':
       return { size: FONT_SIZE - 2, fill: MUTED, style: ' font-style="italic"' };
+    case 'stereotype':
+      return { size: FONT_SIZE - 2, fill: '#a5d6ff', style: ' font-style="italic"' };
+    case 'member':
+      return { size: FONT_SIZE - 1, fill: TEXT, style: '' };
     default:
       return { size: FONT_SIZE - 2, fill: MUTED, style: '' };
   }
@@ -129,8 +176,21 @@ function styleFor(line: LayoutLine): { size: number; fill: string; style: string
 function renderEdge(edge: LayoutEdge, arrow: string, arrowInferred: string): string[] {
   const inferred = edge.confidence === 'inferred';
   const colour = inferred ? INFERRED : LINE;
-  const marker = inferred ? arrowInferred : arrow;
-  const dash = inferred ? ' stroke-dasharray="6 4"' : edge.routed ? ' stroke-dasharray="2 3"' : '';
+  // UML: a hollow triangle for generalisation, dashed for realisation. Drawing
+  // inheritance the same as a call is what makes a class diagram unreadable.
+  const marker =
+    edge.style === 'extends' || edge.style === 'implements'
+      ? `${arrow}-hollow`
+      : inferred
+        ? arrowInferred
+        : arrow;
+  const dash = inferred
+    ? ' stroke-dasharray="6 4"'
+    : edge.style === 'implements'
+      ? ' stroke-dasharray="7 4"'
+      : edge.routed
+        ? ' stroke-dasharray="2 3"'
+        : '';
   const points = edge.points.map(([x, y]) => `${x},${y}`).join(' ');
 
   const parts = [

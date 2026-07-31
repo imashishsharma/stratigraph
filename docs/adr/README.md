@@ -29,6 +29,7 @@ the code when it is incidental. Either way, before the commit.
 | [0019](0019-c4-is-a-projection-of-the-fact-graph.md) | C4 levels project the fact graph, and omit the boxes no fact supplies | accepted |
 | [0020](0020-the-report-renders-its-own-svg.md) | The HTML report lays out and renders its own SVG; no browser, no JavaScript | accepted |
 | [0021](0021-finding-rank-and-publishability.md) | Finding rank is arithmetic and total; an uncited finding is excluded and counted | accepted |
+| [0022](0022-code-level-and-the-data-model.md) | C4 level 4 per package, an ER model from declared mappings, and the cost of an erased type | accepted |
 
 Format: context, decision, alternatives considered (with why each was rejected),
 consequences — including the costs, not only the benefits.

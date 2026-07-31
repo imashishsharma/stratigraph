@@ -138,9 +138,14 @@ describe('stratigraph report', () => {
     const result = report();
 
     expect(readdirSync(result.outDir).sort()).toEqual([
+      // One class diagram per package that declares a type…
+      'c4-code-a.mmd',
+      'c4-code-b.mmd',
       'c4-component-server.mmd',
       'c4-container.mmd',
       'c4-context.mmd',
+      // …and a data model, because this fixture maps a class to a table.
+      'data-model.mmd',
       'findings.md',
       'index.html',
       'workspace.dsl',
