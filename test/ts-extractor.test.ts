@@ -37,7 +37,13 @@ async function extract(fixture: string): Promise<string[]> {
   // The repository path in the `meta` fact is absolute and therefore
   // machine-specific. Nothing else is normalised: line numbers, ordering and
   // fqns are all part of the contract.
-  return stdout.map((line) => line.replaceAll(repo, '<repo>'));
+  //
+  // It has to be redacted in its JSON-escaped form as well as its raw one.
+  // On Windows the path separator is a backslash, so `D:\a\...` reaches the
+  // NDJSON as `D:\\a\\...` and replacing the raw string matches nothing —
+  // which is exactly how this passed on two platforms and failed on the third.
+  const escaped = JSON.stringify(repo).slice(1, -1);
+  return stdout.map((line) => line.replaceAll(escaped, '<repo>').replaceAll(repo, '<repo>'));
 }
 
 function facts(lines: string[]): Fact[] {
