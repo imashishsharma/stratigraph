@@ -11,7 +11,7 @@ import type { Db } from '../db/database.js';
  */
 
 /** An HTTP call the TypeScript extractor observed, read back off a method node. */
-interface ObservedCall {
+export interface ObservedCall {
   nodeId: number;
   nodeFqn: string;
   fileId: number | null;
@@ -260,7 +260,16 @@ function loadEndpoints(db: Db, runId: number): EndpointPattern[] {
  * observation there was nothing to point an edge at — see the reasoning on
  * `AngularFacts.callSites`. The `LIKE` narrows the scan before the JSON is
  * parsed; on a large repository almost no method has this key.
+ *
+ * Exported because the report layer reads the same rows for a different
+ * purpose: an absolute URL names a host, and a host the extractor read out of a
+ * literal is an external system on the C4 context diagram (ADR-0019). One
+ * definition of "what calls did we observe" serves both.
  */
+export function observedHttpCalls(db: Db, runId: number): ObservedCall[] {
+  return loadCalls(db, runId);
+}
+
 function loadCalls(db: Db, runId: number): ObservedCall[] {
   const rows = db
     .prepare(

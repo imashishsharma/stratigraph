@@ -26,6 +26,8 @@ the code when it is incidental. Either way, before the commit.
 | [0016](0016-angular-without-the-angular-compiler.md) | Parse the TypeScript source set; no `@angular/compiler-cli`, no install | accepted |
 | [0017](0017-typescript-fact-identity.md) | How a TypeScript node's `fqn` is formed, and where it departs from ADR-0007 | accepted |
 | [0018](0018-cross-stack-links-are-inferences.md) | An Angular-to-Spring link is inferred, matched conservatively, and refused on a tie | accepted |
+| [0019](0019-c4-is-a-projection-of-the-fact-graph.md) | C4 levels project the fact graph, and omit the boxes no fact supplies | accepted |
+| [0020](0020-the-report-renders-its-own-svg.md) | The HTML report lays out and renders its own SVG; no browser, no JavaScript | accepted |
 
 Format: context, decision, alternatives considered (with why each was rejected),
 consequences — including the costs, not only the benefits.

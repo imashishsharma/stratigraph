@@ -46,26 +46,48 @@ export interface PackageGraph {
   adjacency: Map<number, number[]>;
 }
 
+/** Node kinds that own other nodes, and that an edge can therefore be lifted to. */
+export type AncestorKind = 'package' | 'module';
+
 /**
- * Resolve each node to its enclosing package by walking `parent_id` upwards.
+ * A CTE resolving each node on a matching edge to its enclosing node of `kind`,
+ * by walking `parent_id` upwards. Exposes one relation:
+ * `ancestor_of(node_id, ancestor_id)`.
  *
  * Recursive rather than a fixed number of joins because nesting has no fixed
  * depth: a method of a nested class of a nested class is four hops from its
- * package. Restricted to nodes that actually appear on a dependency edge, so
- * the walk is over the interesting nodes rather than every method in the repo.
+ * package, and one more from its module. Seeded from the nodes that actually
+ * appear on an edge, so the walk is over the interesting nodes rather than
+ * every method in the repository.
  *
  * Third-party targets fall out here for free. `SqliteFactWriter` creates stubs
  * with no parent, so a call into a jar we never parsed resolves to no package
  * and contributes nothing — which is correct. We do not know what is in that
  * jar, and deriving a package name from the string would be inventing structure
  * we did not observe.
+ *
+ * `confidence` is a parameter rather than a constant because the two callers
+ * want different things and both are right: the package graph takes facts only,
+ * so no cycle can be assembled out of a guess, while the container diagram
+ * (ADR-0019) draws inferred cross-stack calls too — dashed, and labelled as
+ * inference.
+ *
+ * The interpolated values are a closed set of literals from this file and from
+ * `EdgeKind`; nothing here is reachable from user input.
  */
-const PACKAGE_OF = /* sql */ `
+export function ancestorOfCte(
+  kind: AncestorKind,
+  edgeKinds: readonly EdgeKind[],
+  confidence: 'fact' | 'any',
+): string {
+  const kinds = edgeKinds.map((k) => `'${k}'`).join(', ');
+  const factsOnly = confidence === 'fact' ? `AND confidence = 'fact'` : '';
+  return /* sql */ `
   WITH RECURSIVE
     endpoint_node(id) AS (
-      SELECT src_id FROM edge WHERE run_id = @runId AND kind IN (KINDS) AND confidence = 'fact'
+      SELECT src_id FROM edge WHERE run_id = @runId AND kind IN (${kinds}) ${factsOnly}
       UNION
-      SELECT dst_id FROM edge WHERE run_id = @runId AND kind IN (KINDS) AND confidence = 'fact'
+      SELECT dst_id FROM edge WHERE run_id = @runId AND kind IN (${kinds}) ${factsOnly}
     ),
     ancestry(start_id, node_id, kind) AS (
         SELECT e.id, n.id, n.kind
@@ -75,14 +97,15 @@ const PACKAGE_OF = /* sql */ `
           FROM ancestry a
           JOIN node c ON c.id = a.node_id
           JOIN node p ON p.id = c.parent_id
-         WHERE a.kind <> 'package'
+         WHERE a.kind <> '${kind}'
     ),
-    package_of(node_id, package_id) AS (
+    ancestor_of(node_id, ancestor_id) AS (
       SELECT a.start_id, a.node_id
         FROM ancestry a JOIN node p ON p.id = a.node_id
-       WHERE a.kind = 'package' AND p.is_stub = 0
+       WHERE a.kind = '${kind}' AND p.is_stub = 0
     )
 `;
+}
 
 /**
  * Build the package graph for a run.
@@ -95,19 +118,19 @@ export function buildPackageGraph(db: Db, runId: number): PackageGraph {
   const kinds = DEPENDENCY_EDGE_KINDS.map((k) => `'${k}'`).join(', ');
   const rows = db
     .prepare(
-      PACKAGE_OF.replaceAll('KINDS', kinds) +
+      ancestorOfCte('package', DEPENDENCY_EDGE_KINDS, 'fact') +
         /* sql */ `
-        SELECT sp.package_id AS src,
-               dp.package_id AS dst,
+        SELECT sp.ancestor_id AS src,
+               dp.ancestor_id AS dst,
                SUM(e.weight)  AS weight
           FROM edge e
-          JOIN package_of sp ON sp.node_id = e.src_id
-          JOIN package_of dp ON dp.node_id = e.dst_id
+          JOIN ancestor_of sp ON sp.node_id = e.src_id
+          JOIN ancestor_of dp ON dp.node_id = e.dst_id
          WHERE e.run_id = @runId
            AND e.kind IN (${kinds})
            AND e.confidence = 'fact'
-           AND sp.package_id <> dp.package_id
-         GROUP BY sp.package_id, dp.package_id`,
+           AND sp.ancestor_id <> dp.ancestor_id
+         GROUP BY sp.ancestor_id, dp.ancestor_id`,
     )
     .all({ runId }) as Array<{ src: number; dst: number; weight: number }>;
 
@@ -156,7 +179,7 @@ export function supportingEdges(
   const kinds = DEPENDENCY_EDGE_KINDS.map((k) => `'${k}'`).join(', ');
   return db
     .prepare(
-      PACKAGE_OF.replaceAll('KINDS', kinds) +
+      ancestorOfCte('package', DEPENDENCY_EDGE_KINDS, 'fact') +
         /* sql */ `
         SELECT e.id      AS edgeId,
                e.kind    AS kind,
@@ -165,16 +188,16 @@ export function supportingEdges(
                f.path    AS path,
                e.line    AS line
           FROM edge e
-          JOIN package_of sp ON sp.node_id = e.src_id
-          JOIN package_of dp ON dp.node_id = e.dst_id
+          JOIN ancestor_of sp ON sp.node_id = e.src_id
+          JOIN ancestor_of dp ON dp.node_id = e.dst_id
           JOIN node sn ON sn.id = e.src_id
           JOIN node dn ON dn.id = e.dst_id
           LEFT JOIN source_file f ON f.id = e.file_id
          WHERE e.run_id = @runId
            AND e.kind IN (${kinds})
            AND e.confidence = 'fact'
-           AND sp.package_id = @srcPackage
-           AND dp.package_id = @dstPackage
+           AND sp.ancestor_id = @srcPackage
+           AND dp.ancestor_id = @dstPackage
          ORDER BY e.id
          LIMIT @limit`,
     )
