@@ -575,6 +575,15 @@ final class JavaFactExtractor {
                 if (!Fqn.UNKNOWN.equals(fieldType)) {
                     attrs.put("type", fieldType);
                 }
+                // `List<Pet>` erases to `java.util.List`, which is right for
+                // the fqn and useless to anything that wants to know what the
+                // collection holds — an ER relationship, most of all. The
+                // arguments are attributed facts, so they are kept beside the
+                // erased type rather than folded into it.
+                List<String> typeArguments = Fqn.typeArguments(declaration.getType());
+                if (!typeArguments.isEmpty()) {
+                    attrs.put("typeArguments", typeArguments);
+                }
                 List<String> modifiers = modifiers(declaration.getModifiers());
                 if (!modifiers.isEmpty()) {
                     attrs.put("modifiers", modifiers);

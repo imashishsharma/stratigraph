@@ -2,6 +2,8 @@ package dev.stratigraph.extractor.java;
 
 import org.openrewrite.java.tree.JavaType;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.StringJoiner;
 
 /**
@@ -104,6 +106,37 @@ final class Fqn {
             return ((JavaType.FullyQualified) type).getFullyQualifiedName();
         }
         return UNKNOWN;
+    }
+
+    /**
+     * The type arguments of a parameterised type, erased individually.
+     *
+     * {@link #erase} throws these away, and has to: an fqn appears in a method
+     * signature and must be stable, so {@code List<Pet>} and {@code List<Vet>}
+     * have to erase to the same string or one overload becomes two nodes.
+     *
+     * They are still facts — OpenRewrite attributed them from the source — and
+     * they are the difference between "this entity has a to-many relationship"
+     * and "this entity has a to-many relationship *with Pet*". Emitted
+     * alongside the erased type rather than inside it, so nothing about node
+     * identity changes.
+     *
+     * Empty for a type that is not parameterised, and for any argument that
+     * was never attributed — a partially readable argument list is reported as
+     * the part that was read, never padded with guesses.
+     */
+    static List<String> typeArguments(JavaType type) {
+        if (!(type instanceof JavaType.Parameterized)) {
+            return List.of();
+        }
+        List<String> arguments = new ArrayList<>();
+        for (JavaType argument : ((JavaType.Parameterized) type).getTypeParameters()) {
+            String erased = erase(argument);
+            if (!UNKNOWN.equals(erased)) {
+                arguments.add(erased);
+            }
+        }
+        return arguments;
     }
 
     /** True when a type is missing or was never attributed — never emit an edge to one. */
