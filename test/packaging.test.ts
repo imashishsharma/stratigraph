@@ -1,4 +1,5 @@
-import { execFileSync, spawn, spawnSync } from 'node:child_process';
+import { execFile, spawn, spawnSync } from 'node:child_process';
+import { promisify } from 'node:util';
 import { existsSync, mkdtempSync, readdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -37,15 +38,28 @@ let bin: string;
 const WINDOWS = process.platform === 'win32';
 const NPM = WINDOWS ? 'npm.cmd' : 'npm';
 
+const execFileAsync = promisify(execFile);
+
 function quoted(args: string[]): string[] {
   return WINDOWS ? args.map((arg) => `"${arg}"`) : args;
 }
 
-function npm(args: string[], cwd: string): void {
-  execFileSync(NPM, quoted(args), {
+/**
+ * Asynchronous on purpose, and it matters more than it looks.
+ *
+ * `npm pack` plus `npm install` takes over a minute on a loaded Windows
+ * runner. Run synchronously it blocks the worker thread for that whole time,
+ * so vitest's own RPC call back to the reporter cannot be serviced and trips
+ * birpc's 60-second timeout — every test passes and the job still fails with
+ * `Timeout calling "onTaskUpdate"`. Leaving the event loop free is the fix.
+ */
+async function npm(args: string[], cwd: string): Promise<void> {
+  await execFileAsync(NPM, quoted(args), {
     cwd,
     shell: WINDOWS,
-    stdio: ['ignore', 'pipe', 'pipe'],
+    // The output is only wanted when the command fails, and execFile puts it on
+    // the rejection.
+    maxBuffer: 32 * 1024 * 1024,
   });
 }
 
@@ -69,15 +83,15 @@ function run(
   return { status: result.status ?? 1, out: `${stdout}${stderr}`, stdout, stderr };
 }
 
-beforeAll(() => {
+beforeAll(async () => {
   const packDir = mkdtempSync(join(tmpdir(), 'stratigraph-pack-'));
-  npm(['pack', '--pack-destination', packDir], REPO_ROOT);
+  await npm(['pack', '--pack-destination', packDir], REPO_ROOT);
   const tarball = readdirSync(packDir).find((f) => f.endsWith('.tgz'));
   expect(tarball, 'npm pack produced no tarball').toBeDefined();
 
   installDir = mkdtempSync(join(tmpdir(), 'stratigraph-install-'));
   writeFileSync(join(installDir, 'package.json'), JSON.stringify({ name: 'consumer', private: true }));
-  npm(['install', '--no-audit', '--no-fund', join(packDir, tarball as string)], installDir);
+  await npm(['install', '--no-audit', '--no-fund', join(packDir, tarball as string)], installDir);
 
   // npm writes three shims on Windows — an extensionless sh script for Git
   // Bash, plus `.cmd` and `.ps1`. Only the `.cmd` is what a Windows shell
