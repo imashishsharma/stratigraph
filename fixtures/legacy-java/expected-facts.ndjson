@@ -1,4 +1,4 @@
-{"v":1,"type":"meta","extractor":"java","extractorVersion":"1.0.1","repoPath":"<repo>"}
+{"v":1,"type":"meta","extractor":"java","extractorVersion":"1.1.0","repoPath":"<repo>"}
 {"v":1,"type":"file","path":"src/com/example/legacy/domain/Report.java","language":"java","loc":33}
 {"v":1,"type":"file","path":"src/com/example/legacy/service/ReportDao.java","language":"java","loc":16}
 {"v":1,"type":"file","path":"src/com/example/legacy/service/ReportService.java","language":"java","loc":18}

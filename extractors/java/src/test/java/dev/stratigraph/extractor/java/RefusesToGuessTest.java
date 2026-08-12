@@ -102,6 +102,134 @@ class RefusesToGuessTest {
     }
 
     @Test
+    void earnsResolutionThroughASingleKnownWildcardImport(@TempDir Path repo) throws Exception {
+        // ADR-0023. The known-annotation table places GetMapping in the one
+        // wildcard-imported package, and this source set declares no type of
+        // that name — so the resolution is earned, not guessed, and its
+        // provenance says how it was reached.
+        write(repo, "src/ApiController.java", """
+                package app;
+                import org.springframework.web.bind.annotation.*;
+                @RestController
+                public class ApiController {
+                    @GetMapping("/things")
+                    public String things() { return "x"; }
+                }
+                """);
+
+        List<JsonNode> facts = extract(repo);
+
+        assertTrue(has(facts, "edge", node ->
+                        "annotated_with".equals(node.path("kind").asText())
+                                && "org.springframework.web.bind.annotation.GetMapping"
+                                        .equals(node.path("dst").path("fqn").asText())
+                                && "wildcard-import".equals(node.path("attrs").path("resolution").asText())),
+                "did not earn a resolution ADR-0023's three conditions allow");
+        assertTrue(has(facts, "node", node ->
+                        "endpoint".equals(node.path("kind").asText())
+                                && "GET /things".equals(node.path("fqn").asText())),
+                "resolved the annotation but did not record its endpoint");
+        assertFalse(has(facts, "diagnostic", node ->
+                        node.path("message").asText().contains("@GetMapping")),
+                "resolved the annotation and still complained about it");
+    }
+
+    @Test
+    void discountsAJdkWildcardImportWhenEarningResolution(@TempDir Path repo) throws Exception {
+        // ADR-0023's earned extension, reached for after the M7 acceptance run
+        // measured it: `import java.util.*;` cannot supply @GetMapping — the
+        // JLS reserves java.* packages and anything they do supply is
+        // type-attributed before resolution is ever attempted — so it does not
+        // compete with the Spring wildcard.
+        write(repo, "src/ApiController.java", """
+                package app;
+                import java.util.*;
+                import org.springframework.web.bind.annotation.*;
+                @RestController
+                public class ApiController {
+                    @GetMapping("/things")
+                    public List<String> things() { return new ArrayList<>(); }
+                }
+                """);
+
+        List<JsonNode> facts = extract(repo);
+
+        assertTrue(has(facts, "edge", node ->
+                        "annotated_with".equals(node.path("kind").asText())
+                                && "org.springframework.web.bind.annotation.GetMapping"
+                                        .equals(node.path("dst").path("fqn").asText())
+                                && "wildcard-import".equals(node.path("attrs").path("resolution").asText())),
+                "let a java.* wildcard import block a resolution it cannot compete for");
+        assertTrue(has(facts, "node", node ->
+                        "endpoint".equals(node.path("kind").asText())
+                                && "GET /things".equals(node.path("fqn").asText())),
+                "resolved the annotation but did not record its endpoint");
+    }
+
+    @Test
+    void refusesWhenTwoWildcardImportsCouldBothSupplyTheName(@TempDir Path repo) throws Exception {
+        // ADR-0023 condition 2. The table says Spring declares GetMapping; it
+        // cannot say com.other does not, so the ambiguity is real and must
+        // survive — and the diagnostic must name the competitors.
+        write(repo, "src/TwoWildcards.java", """
+                package app;
+                import org.springframework.web.bind.annotation.*;
+                import com.other.*;
+                public class TwoWildcards {
+                    @GetMapping("/things")
+                    public String things() { return "x"; }
+                }
+                """);
+
+        List<JsonNode> facts = extract(repo);
+
+        assertFalse(has(facts, "edge", node -> "annotated_with".equals(node.path("kind").asText())),
+                "guessed between two wildcard imports");
+        assertFalse(has(facts, "node", node -> "endpoint".equals(node.path("kind").asText())),
+                "invented an endpoint from an annotation it could not resolve");
+        assertTrue(has(facts, "diagnostic", node ->
+                        node.path("message").asText().contains("@GetMapping")
+                                && node.path("message").asText().contains("org.springframework.web.bind.annotation.*")
+                                && node.path("message").asText().contains("com.other.*")),
+                "did not name the competing wildcard imports");
+    }
+
+    @Test
+    void refusesWhenTheSourceSetDeclaresItsOwnTypeOfThatName(@TempDir Path repo) throws Exception {
+        // ADR-0023 condition 3. A repository that declares its own GetMapping
+        // is exactly the case the earned resolution must not mis-attribute —
+        // even when the declaration sits in another package.
+        write(repo, "src/ApiController.java", """
+                package app;
+                import org.springframework.web.bind.annotation.*;
+                public class ApiController {
+                    @GetMapping("/things")
+                    public String things() { return "x"; }
+                }
+                """);
+        write(repo, "src/homegrown/GetMapping.java", """
+                package homegrown;
+                public @interface GetMapping {
+                    String value() default "";
+                }
+                """);
+
+        List<JsonNode> facts = extract(repo);
+
+        assertFalse(has(facts, "edge", node ->
+                        "annotated_with".equals(node.path("kind").asText())
+                                && node.path("dst").path("fqn").asText().startsWith("org.springframework")),
+                "attributed a homegrown annotation to Spring");
+        assertFalse(has(facts, "node", node -> "endpoint".equals(node.path("kind").asText())),
+                "invented an endpoint from an annotation the repository redeclares");
+        assertTrue(has(facts, "diagnostic", node ->
+                        node.path("message").asText().contains("@GetMapping")
+                                && node.path("message").asText().contains("declares its own type")
+                                && node.path("message").asText().contains("GetMapping.java")),
+                "did not name the declaration that blocks the resolution");
+    }
+
+    @Test
     void aggregatesUnresolvedCallsPerFileRatherThanPerSite(@TempDir Path repo) throws Exception {
         write(repo, "src/Many.java", """
                 package app;

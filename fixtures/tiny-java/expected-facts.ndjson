@@ -1,4 +1,4 @@
-{"v":1,"type":"meta","extractor":"java","extractorVersion":"1.0.1","repoPath":"<repo>"}
+{"v":1,"type":"meta","extractor":"java","extractorVersion":"1.1.0","repoPath":"<repo>"}
 {"v":1,"type":"file","path":"src/main/java/com/example/tiny/domain/DefaultGreetingService.java","language":"java","loc":18}
 {"v":1,"type":"file","path":"src/main/java/com/example/tiny/domain/Greeting.java","language":"java","loc":14}
 {"v":1,"type":"file","path":"src/main/java/com/example/tiny/domain/GreetingService.java","language":"java","loc":6}

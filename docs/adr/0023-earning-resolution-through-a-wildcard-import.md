@@ -64,17 +64,21 @@ declaration (the declaring file named) — so the report can say "3 files could
 not be resolved, and here is what would resolve them" instead of one
 undifferentiated count.
 
-### What deliberately stays out
+### The `java.*` extension, earned at the acceptance run
 
-**Excluding `java.*` wildcard imports from condition 2.** There is a sound
-argument: the JLS reserves `java.*` packages, the parser always has the JDK on
-its classpath, and a name suppliable from a JDK package would have been
+**Excluding `java.*` wildcard imports from condition 2.** The argument: the
+JLS reserves `java.*` packages, the parser always has the JDK on its
+classpath, and a name suppliable from a JDK package would have been
 type-attributed and never reached this code — so `import java.util.*;`
-alongside the Spring wildcard provably cannot supply `@GetMapping`, and could
-be discounted. It is not implemented, because no measured repository has yet
-needed it. If the M7 acceptance run shows real controllers refused only because
-of a JDK wildcard import, this is the earned extension to reach for — with its
-own fixture — rather than any loosening of condition 2.
+alongside the Spring wildcard provably cannot supply `@GetMapping`, and can
+be discounted. This was deliberately left out of the first implementation
+because no measured repository had yet needed it; the M7 acceptance run then
+measured exactly the anticipated case — three of `jhipster-sample-app`'s
+controllers (`AccountResource`, `PublicUserResource`, `UserResource`) refused
+only because `import java.util.*;` sat beside the Spring wildcard — so the
+extension was implemented, with its own fixture, as this section said it
+should be. Condition 2 itself is unchanged: any non-`java.*` second wildcard
+still refuses.
 
 ## Alternatives considered
 
@@ -116,7 +120,16 @@ repositories this tool targets are the ones least likely to build.
   mis-resolve wildcard-imported names instead of only single-type-imported
   ones. It remains data in one file, and every earned fact's provenance says it
   came through this path.
-- Measured on `jhipster-sample-app` after implementation: recorded at the end
-  of the M7 acceptance run (endpoint count, remaining diagnostics, cross-stack
-  link count — the Angular half's URL-builder gap, ADR-0018, is expected to
-  keep the link count at zero and is out of M7's scope).
+- Measured on `jhipster-sample-app` after implementation (the M7 acceptance
+  run, 2026-08-13): **41 endpoints** where M5 measured 2, from 80 annotations
+  earning `wildcard-import` resolution. 8 mapping refusals remain, all in
+  `AccountResource`, where a first-party
+  `io.github.jhipster.sample.web.rest.errors.*` wildcard competes with the
+  Spring one — condition 2's genuine case, refused and named. The cross-stack
+  linker now has endpoints to match: 6 Angular calls matched ambiguously
+  (`GET {}/{}` — the URL is built dynamically, so the pattern matches 8
+  endpoints equally well; ADR-0018's URL-builder gap, out of M7's scope) and
+  11 matched nothing, so the published link count is zero, as this ADR
+  expected. `tiny-spring`'s `LegacyReportController` (now two wildcards)
+  still refuses, and `DailySummaryController` demonstrates the earned
+  resolution beside it — both asserted exactly in the golden.

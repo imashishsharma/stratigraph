@@ -85,6 +85,12 @@ final class JavaFactExtractor {
                 .parse(found.sources, repoRoot, ctx)
                 .toList();
 
+        // ADR-0023 condition 3 needs every declared type's simple name, nested
+        // types included, before any resolution happens. A file that failed to
+        // parse contributes nothing here; it reports its own error below, so
+        // the loss is visible rather than silent.
+        Map<String, String> declaredTypeNames = declaredTypeNames(parsed);
+
         for (SourceFile sourceFile : parsed) {
             String path = sourceFile.getSourcePath().toString().replace('\\', '/');
 
@@ -110,11 +116,31 @@ final class JavaFactExtractor {
 
             SourceDiscovery.ModuleId module =
                     discovery.moduleOf(found, repoRoot.resolve(sourceFile.getSourcePath()));
-            visit(cu, path, module);
+            visit(cu, path, module, declaredTypeNames);
         }
     }
 
-    private void visit(J.CompilationUnit cu, String path, SourceDiscovery.ModuleId module) {
+    /** Every type simple name the parsed source set declares, mapped to one file declaring it. */
+    private static Map<String, String> declaredTypeNames(List<SourceFile> parsed) {
+        Map<String, String> names = new LinkedHashMap<>();
+        for (SourceFile sourceFile : parsed) {
+            if (!(sourceFile instanceof J.CompilationUnit)) {
+                continue;
+            }
+            String path = sourceFile.getSourcePath().toString().replace('\\', '/');
+            new JavaIsoVisitor<Void>() {
+                @Override
+                public J.ClassDeclaration visitClassDeclaration(J.ClassDeclaration declaration, Void unused) {
+                    names.putIfAbsent(declaration.getSimpleName(), path);
+                    return super.visitClassDeclaration(declaration, unused);
+                }
+            }.visit((J.CompilationUnit) sourceFile, null);
+        }
+        return names;
+    }
+
+    private void visit(J.CompilationUnit cu, String path, SourceDiscovery.ModuleId module,
+                       Map<String, String> declaredTypeNames) {
         // Prefer the attributed package over the printed declaration: it is the
         // same string, but it comes from the type system rather than from
         // re-reading source text.
@@ -129,7 +155,8 @@ final class JavaFactExtractor {
         // anything points at it and the store never has to upgrade a stub for a
         // type this same file went on to declare.
         DeclarationVisitor declarations =
-                new DeclarationVisitor(path, packageName, new TypeResolver(cu, packageName));
+                new DeclarationVisitor(path, packageName,
+                        new TypeResolver(cu, packageName, declaredTypeNames));
         declarations.visit(cu, null);
         declarations.reportUnresolvedCalls();
 
@@ -299,9 +326,11 @@ final class JavaFactExtractor {
                     // ADR-0005 rule 4. Emitting no fact *and* no diagnostic
                     // would under-report endpoints as if the codebase had
                     // fewer, which reads the same as a clean bill of health.
+                    // ADR-0023: the refusal states which condition failed, so
+                    // the report can say what would resolve it.
                     emitter.diagnostic("warn",
-                            "@" + asWritten + " cannot be resolved to a fully qualified name: a "
-                                    + "wildcard import makes it ambiguous, so no stereotype, endpoint "
+                            "@" + asWritten + " cannot be resolved to a fully qualified name: "
+                                    + answer.whyAmbiguous() + ", so no stereotype, endpoint "
                                     + "or mapping facts are recorded for it",
                             path, line(annotation));
                     continue;
@@ -707,7 +736,7 @@ final class JavaFactExtractor {
             if (!answer.isResolved()) {
                 emitter.diagnostic("info",
                         "supertype " + asWritten + " of " + ownerFqn + " cannot be resolved to a "
-                                + "fully qualified name: a wildcard import makes it ambiguous",
+                                + "fully qualified name: " + answer.whyAmbiguous(),
                         path, line(supertype));
                 return;
             }

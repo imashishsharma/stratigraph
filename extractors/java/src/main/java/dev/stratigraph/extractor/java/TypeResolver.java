@@ -1,9 +1,12 @@
 package dev.stratigraph.extractor.java;
 
+import org.openrewrite.java.tree.Expression;
 import org.openrewrite.java.tree.J;
 import org.openrewrite.java.tree.JavaType;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -14,8 +17,8 @@ import java.util.Map;
  *
  * Every answer records *how* it was reached, so a fact can say whether it came
  * from type attribution or from reading an import. Both are facts. Neither is a
- * guess — and the one case where neither applies returns
- * {@link Resolution#AMBIGUOUS} rather than something plausible.
+ * guess — and where nothing applies the answer is {@link Resolution#AMBIGUOUS}
+ * with the reason spelled out, rather than something plausible.
  */
 final class TypeResolver {
 
@@ -28,7 +31,13 @@ final class TypeResolver {
         IMPORT("import"),
         /** Unqualified, no wildcard in scope, so it can only be this file's own package. */
         SAME_PACKAGE("same-package"),
-        /** A wildcard import makes the name unresolvable from source. Emit nothing. */
+        /**
+         * Earned through a wildcard import under ADR-0023's three conditions:
+         * the known-FQN table places the name in the one wildcard-imported
+         * package, and the parsed source set declares no type of that name.
+         */
+        WILDCARD_IMPORT("wildcard-import"),
+        /** Unresolvable from source. Emit nothing, and say why. */
         AMBIGUOUS("ambiguous");
 
         final String wireName;
@@ -41,37 +50,55 @@ final class TypeResolver {
     static final class Resolved {
         final String fqn;
         final Resolution resolution;
+        private final String reason;
 
-        private Resolved(String fqn, Resolution resolution) {
+        private Resolved(String fqn, Resolution resolution, String reason) {
             this.fqn = fqn;
             this.resolution = resolution;
+            this.reason = reason;
         }
 
         boolean isResolved() {
             return resolution != Resolution.AMBIGUOUS;
         }
 
-        static final Resolved AMBIGUOUS = new Resolved(null, Resolution.AMBIGUOUS);
+        /** Why the name stayed ambiguous, phrased for a diagnostic. */
+        String whyAmbiguous() {
+            return reason;
+        }
+
+        static final Resolved AMBIGUOUS =
+                new Resolved(null, Resolution.AMBIGUOUS, "a wildcard import makes it ambiguous");
+
+        private static Resolved ambiguous(String reason) {
+            return new Resolved(null, Resolution.AMBIGUOUS, reason);
+        }
     }
 
     private final Map<String, String> singleTypeImports = new HashMap<>();
-    private final boolean hasWildcardImport;
+    private final List<String> wildcardImports = new ArrayList<>();
     private final String packageName;
 
-    TypeResolver(J.CompilationUnit cu, String packageName) {
+    /**
+     * Every type simple name declared anywhere in the parsed source set, mapped
+     * to one file that declares it — ADR-0023 condition 3. Shared across the
+     * run; built once before any resolution happens.
+     */
+    private final Map<String, String> declaredTypeNames;
+
+    TypeResolver(J.CompilationUnit cu, String packageName, Map<String, String> declaredTypeNames) {
         this.packageName = packageName;
-        boolean wildcard = false;
+        this.declaredTypeNames = declaredTypeNames;
         for (J.Import anImport : cu.getImports()) {
             if (anImport.isStatic()) {
                 continue;
             }
             if ("*".equals(anImport.getClassName())) {
-                wildcard = true;
+                wildcardImports.add(dotted(anImport.getQualid().getTarget()));
             } else {
                 singleTypeImports.put(simpleName(anImport.getClassName()), anImport.getTypeName());
             }
         }
-        this.hasWildcardImport = wildcard;
     }
 
     /**
@@ -85,7 +112,7 @@ final class TypeResolver {
     Resolved resolve(JavaType attributed, String asWritten) {
         if (attributed instanceof JavaType.FullyQualified && !Fqn.unresolved(attributed)) {
             return new Resolved(((JavaType.FullyQualified) attributed).getFullyQualifiedName(),
-                    Resolution.CLASSPATH);
+                    Resolution.CLASSPATH, null);
         }
 
         // Strip any generic arguments and array brackets; identity is erased.
@@ -102,32 +129,90 @@ final class TypeResolver {
             // not a package, so the binary name uses `$`.
             if (imported != null) {
                 return new Resolved(imported + "$" + name.substring(name.indexOf('.') + 1),
-                        Resolution.IMPORT);
+                        Resolution.IMPORT, null);
             }
-            return new Resolved(name, Resolution.FQN);
+            return new Resolved(name, Resolution.FQN, null);
         }
 
         String imported = singleTypeImports.get(name);
         if (imported != null) {
-            return new Resolved(imported, Resolution.IMPORT);
+            return new Resolved(imported, Resolution.IMPORT, null);
         }
 
-        // ADR-0005 rule 4. `import org.springframework.web.bind.annotation.*`
-        // means an unqualified name could come from there or from this package,
-        // and nothing in the file says which. We do not guess.
-        if (hasWildcardImport) {
-            return Resolved.AMBIGUOUS;
+        // ADR-0005 rule 4: with a wildcard in scope, an unqualified name could
+        // come from there or from this package, and the file does not say
+        // which. ADR-0023 narrows the refusal — the resolution can be *earned*
+        // when exactly one candidate survives on facts alone.
+        if (!wildcardImports.isEmpty()) {
+            return earnThroughWildcard(name);
         }
 
         if (Fqn.DEFAULT_PACKAGE.equals(packageName)) {
-            return new Resolved(name, Resolution.SAME_PACKAGE);
+            return new Resolved(name, Resolution.SAME_PACKAGE, null);
         }
-        return new Resolved(packageName + "." + name, Resolution.SAME_PACKAGE);
+        return new Resolved(packageName + "." + name, Resolution.SAME_PACKAGE, null);
     }
 
-    /** True when this file's imports leave unqualified names undecidable. */
-    boolean hasWildcardImport() {
-        return hasWildcardImport;
+    /**
+     * ADR-0023: an unqualified name reached through a wildcard import resolves
+     * when three conditions hold together, and stays a diagnostic otherwise.
+     * Each refusal states which condition failed, so the report can say what
+     * would resolve it instead of one undifferentiated count.
+     */
+    private Resolved earnThroughWildcard(String name) {
+        // A java.* wildcard cannot compete: the JLS reserves java.* packages,
+        // the parser always has the JDK on its classpath, and a name one of
+        // them could supply would have been type-attributed and never reached
+        // this code. Measured at the M7 acceptance run — three of
+        // jhipster-sample-app's controllers were refused only because
+        // `import java.util.*;` sat beside the Spring wildcard (ADR-0023).
+        List<String> candidates = new ArrayList<>();
+        for (String pkg : wildcardImports) {
+            if (!"java".equals(pkg) && !pkg.startsWith("java.")) {
+                candidates.add(pkg);
+            }
+        }
+
+        if (candidates.isEmpty()) {
+            return Resolved.ambiguous("a wildcard import makes it ambiguous — no wildcard-imported "
+                    + "package could be shown to declare " + name);
+        }
+
+        // Condition 2: a second wildcard-imported package — known or unknown —
+        // could supply the same name, and nothing can prove it does not. The
+        // table lists what a package does declare, never what it does not.
+        if (candidates.size() > 1) {
+            List<String> spelled = new ArrayList<>();
+            for (String pkg : candidates) {
+                spelled.add(pkg + ".*");
+            }
+            return Resolved.ambiguous("competing wildcard imports ("
+                    + String.join(", ", spelled) + ") make it ambiguous — any of them could supply "
+                    + name);
+        }
+
+        String pkg = candidates.get(0);
+        String candidate = pkg + "." + name;
+
+        // Condition 1: the known-FQN table must place the name in the one
+        // wildcard-imported package. Both the table entry and the import are
+        // facts; their conjunction is not a guess.
+        if (!FrameworkAnnotations.isKnown(candidate)) {
+            return Resolved.ambiguous("a wildcard import makes it ambiguous — " + name
+                    + " is not in the known-annotation table under " + pkg
+                    + ", so no package in scope is known to declare it");
+        }
+
+        // Condition 3: a first-party type of the same name — in this package,
+        // where it would shadow the import, or anywhere a wildcard could
+        // reach — makes this repository one of the ones that declares its own.
+        String declaredIn = declaredTypeNames.get(name);
+        if (declaredIn != null) {
+            return Resolved.ambiguous("the source set declares its own type named " + name
+                    + " (in " + declaredIn + "), which makes the wildcard import ambiguous");
+        }
+
+        return new Resolved(candidate, Resolution.WILDCARD_IMPORT, null);
     }
 
     private static String erase(String written) {
@@ -146,7 +231,19 @@ final class TypeResolver {
 
     private static String simpleName(String className) {
         // OpenRewrite reports a nested import's class name as `Outer.Inner`.
-        int dot = className.lastIndexOf('.');
+        int dot = className.lastIndexOf(".");
         return dot == -1 ? className : className.substring(dot + 1);
+    }
+
+    /** The dotted name an import's qualifier spells, read off the tree. */
+    private static String dotted(Expression expression) {
+        if (expression instanceof J.Identifier) {
+            return ((J.Identifier) expression).getSimpleName();
+        }
+        if (expression instanceof J.FieldAccess) {
+            J.FieldAccess access = (J.FieldAccess) expression;
+            return dotted(access.getTarget()) + "." + access.getSimpleName();
+        }
+        return "";
     }
 }

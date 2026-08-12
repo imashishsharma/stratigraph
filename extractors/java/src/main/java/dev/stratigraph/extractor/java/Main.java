@@ -19,7 +19,7 @@ import java.util.Set;
 public final class Main {
 
     static final String EXTRACTOR = "java";
-    static final String VERSION = "1.0.1";
+    static final String VERSION = "1.1.0";
 
     /** Mirrors the core's default excludes, so both sides skip the same trees. */
     private static final List<String> DEFAULT_EXCLUDES =
