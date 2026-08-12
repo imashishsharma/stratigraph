@@ -325,20 +325,20 @@ describe('SVG output', () => {
       [
         '<svg class="diagram" role="img" aria-label="2 element(s), 1 relationship(s)" viewBox="0 0 352 76" width="352" height="76" xmlns="http://www.w3.org/2000/svg" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, &#39;DejaVu Sans Mono&#39;, monospace">',
         '<defs>',
-        '<marker id="d1-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#8b949e"/></marker>',
-        '<marker id="d1-arrow-inferred" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#e3b341"/></marker>',
-        '<marker id="d1-arrow-hollow" viewBox="0 0 12 12" refX="11" refY="6" markerWidth="10" markerHeight="10" orient="auto-start-reverse"><path d="M 1 1 L 11 6 L 1 11 z" fill="#0d1117" stroke="#8b949e" stroke-width="1.5"/></marker>',
+        '<marker id="d1-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#6b6a66"/></marker>',
+        '<marker id="d1-arrow-inferred" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#9a6700"/></marker>',
+        '<marker id="d1-arrow-hollow" viewBox="0 0 12 12" refX="11" refY="6" markerWidth="10" markerHeight="10" orient="auto-start-reverse"><path d="M 1 1 L 11 6 L 1 11 z" fill="#ffffff" stroke="#6b6a66" stroke-width="1.5"/></marker>',
         '</defs>',
-        '<polyline points="140,38 212,38" fill="none" stroke="#8b949e" stroke-width="1.5" marker-end="url(#d1-arrow)"/>',
-        '<rect x="151" y="23" width="50" height="14" rx="3" fill="#161b22" opacity="0.9"/>',
-        '<text x="176" y="34" text-anchor="middle" font-size="10" fill="#8b949e">imports</text>',
+        '<polyline points="140,38 212,38" fill="none" stroke="#6b6a66" stroke-width="1.5" marker-end="url(#d1-arrow)"/>',
+        '<rect x="151" y="23" width="50" height="14" rx="3" fill="#ffffff" opacity="0.9"/>',
+        '<text x="176" y="34" text-anchor="middle" font-size="10" fill="#6b6a66">imports</text>',
         '<g>',
-        '<rect x="20" y="20" width="120" height="36" rx="6" fill="#2d333b" stroke="#57606a" stroke-width="1.5"/>',
-        '<text x="80" y="42" text-anchor="middle" font-size="12" fill="#f0f6fc" font-weight="600">a</text>',
+        '<rect x="20" y="20" width="120" height="36" rx="6" fill="#fcfcfb" stroke="#86b6ef" stroke-width="1.5"/>',
+        '<text x="80" y="42" text-anchor="middle" font-size="12" fill="#0b0b0b" font-weight="600">a</text>',
         '</g>',
         '<g>',
-        '<rect x="212" y="20" width="120" height="36" rx="6" fill="#2d333b" stroke="#57606a" stroke-width="1.5"/>',
-        '<text x="272" y="42" text-anchor="middle" font-size="12" fill="#f0f6fc" font-weight="600">b</text>',
+        '<rect x="212" y="20" width="120" height="36" rx="6" fill="#fcfcfb" stroke="#86b6ef" stroke-width="1.5"/>',
+        '<text x="272" y="42" text-anchor="middle" font-size="12" fill="#0b0b0b" font-weight="600">b</text>',
         '</g>',
         '</svg>',
       ].join('\n'),
@@ -352,7 +352,7 @@ describe('SVG output', () => {
       ]),
     );
     const svg = toSvg(result, 'd');
-    expect(svg).toContain('stroke="#e3b341"');
+    expect(svg).toContain('stroke="#9a6700"');
     expect(svg).toContain('stroke-dasharray="6 4"');
     expect(svg).toContain('marker-end="url(#d-arrow-inferred)"');
   });
@@ -360,7 +360,7 @@ describe('SVG output', () => {
   it('draws a model-authored element with a dashed border', () => {
     const result = layout(diagram([element('a', { inference: true })]));
     const svg = toSvg(result, 'd');
-    expect(svg).toContain('stroke="#e3b341" stroke-width="1.5" stroke-dasharray="5 3"');
+    expect(svg).toContain('stroke="#9a6700" stroke-width="1.5" stroke-dasharray="5 3"');
     expect(svg).toContain('name is inference');
   });
 

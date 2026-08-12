@@ -15,38 +15,49 @@ import { FONT_SIZE } from './layout.js';
 
 const FONT = "ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace";
 
-/** One palette entry per element kind, plus the two line styles. */
+/**
+ * One palette entry per element kind, plus the two line styles.
+ *
+ * Tuned for a light surface (ADR-0024): tinted fills, a coloured border and
+ * dark ink, so a diagram reads like a document rather than a terminal. The
+ * report keeps every figure on a white card in both colour schemes, and an
+ * SVG copied out into a wiki or an email — light surfaces, all of them —
+ * carries colours that were chosen for exactly that.
+ */
 const FILL: Record<string, string> = {
-  system: '#1f6feb',
-  container: '#316dca',
-  component: '#2d333b',
-  datastore: '#495057',
-  external: '#57606a',
-  entity: '#22272e',
-  type: '#22272e',
+  system: '#b7d3f6',
+  container: '#cde2fb',
+  component: '#fcfcfb',
+  datastore: '#f0efec',
+  external: '#f0efec',
+  entity: '#fcfcfb',
+  type: '#fcfcfb',
 };
 
 const STROKE: Record<string, string> = {
-  system: '#79c0ff',
-  container: '#79c0ff',
-  component: '#57606a',
-  datastore: '#8b949e',
-  external: '#8b949e',
-  entity: '#6e7681',
-  type: '#6e7681',
+  system: '#1c5cab',
+  container: '#2a78d6',
+  component: '#86b6ef',
+  datastore: '#898781',
+  external: '#898781',
+  entity: '#c3c2b7',
+  type: '#c3c2b7',
 };
 
 /** The header strip of a compartment box, so the title reads as a title. */
 const HEADER_FILL: Record<string, string> = {
-  entity: '#316dca',
-  type: '#39414a',
+  entity: '#cde2fb',
+  type: '#e9e8e3',
 };
 
-const TEXT = '#f0f6fc';
-const MUTED = '#c9d1d9';
+const TEXT = '#0b0b0b';
+const MUTED = '#52514e';
 /** Inference gets its own colour, everywhere it appears. */
-const INFERRED = '#e3b341';
-const LINE = '#8b949e';
+const INFERRED = '#9a6700';
+const LINE = '#6b6a66';
+/** What an edge label sits on, and what a hollow arrowhead is hollow with. */
+const SURFACE = '#ffffff';
+const STEREOTYPE = '#1c5cab';
 
 /**
  * Render a fragment. `idPrefix` namespaces the marker ids, because several
@@ -97,7 +108,7 @@ function hollowMarker(id: string, colour: string): string {
   return (
     `<marker id="${id}" viewBox="0 0 12 12" refX="11" refY="6" markerWidth="10" ` +
     `markerHeight="10" orient="auto-start-reverse">` +
-    `<path d="M 1 1 L 11 6 L 1 11 z" fill="#0d1117" stroke="${colour}" stroke-width="1.5"/></marker>`
+    `<path d="M 1 1 L 11 6 L 1 11 z" fill="${SURFACE}" stroke="${colour}" stroke-width="1.5"/></marker>`
   );
 }
 
@@ -165,7 +176,7 @@ function styleFor(line: LayoutLine): { size: number; fill: string; style: string
     case 'group':
       return { size: FONT_SIZE - 2, fill: MUTED, style: ' font-style="italic"' };
     case 'stereotype':
-      return { size: FONT_SIZE - 2, fill: '#a5d6ff', style: ' font-style="italic"' };
+      return { size: FONT_SIZE - 2, fill: STEREOTYPE, style: ' font-style="italic"' };
     case 'member':
       return { size: FONT_SIZE - 1, fill: TEXT, style: '' };
     default:
@@ -205,7 +216,7 @@ function renderEdge(edge: LayoutEdge, arrow: string, arrowInferred: string): str
     const width = edge.label.length * 6 + 8;
     parts.push(
       `<rect x="${x - width / 2}" y="${y - 11}" width="${width}" height="14" rx="3" ` +
-        `fill="#161b22" opacity="0.9"/>`,
+        `fill="${SURFACE}" opacity="0.9"/>`,
       `<text x="${x}" y="${y}" text-anchor="middle" font-size="10" fill="${colour}">` +
         `${escapeText(edge.label)}</text>`,
     );

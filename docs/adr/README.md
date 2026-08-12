@@ -31,6 +31,7 @@ the code when it is incidental. Either way, before the commit.
 | [0021](0021-finding-rank-and-publishability.md) | Finding rank is arithmetic and total; an uncited finding is excluded and counted | accepted |
 | [0022](0022-code-level-and-the-data-model.md) | C4 level 4 per package, an ER model from declared mappings, and the cost of an erased type | accepted |
 | [0023](0023-earning-resolution-through-a-wildcard-import.md) | A wildcard-imported annotation resolves only when the source set proves it can | accepted |
+| [0024](0024-the-tabbed-report.md) | The report is tabbed in CSS alone, summary first, light by default; no guarantee moves | accepted |
 
 Format: context, decision, alternatives considered (with why each was rejected),
 consequences — including the costs, not only the benefits.

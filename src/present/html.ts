@@ -6,6 +6,12 @@
  * disabled (ADR-0020). Nothing in it is fetched when the reader opens it,
  * which matters for a tool whose pitch is that it never touches the network.
  *
+ * The page is tabbed — a summary a decision-maker reads in two minutes, then
+ * one tab per subject — and the tabs are CSS only: hidden radio inputs and
+ * label siblings, so every guarantee above survives (ADR-0024). Without CSS
+ * the panels render in order as one document, and that is also what printing
+ * produces.
+ *
  * Two rules govern the content. Every claim shows the row it came from, and
  * every piece of inference is visually distinct from every observation — in the
  * diagrams, in the prose, and in the legend that explains the difference.
@@ -42,46 +48,32 @@ export interface ReportData {
   ranked: RankedFindings;
 }
 
-interface Section {
+interface Panel {
   id: string;
+  /** The word on the tab. */
+  label: string;
+  /** The heading at the top of the panel, kept for printing and no-CSS readers. */
   title: string;
   html: string;
 }
 
 export function toHtml(data: ReportData, context: ReportContext): string {
   const { run } = context;
-  const title = `${run.repoPath.split(/[\\/]/).filter(Boolean).pop() ?? 'repository'} — structure`;
+  const repoName = run.repoPath.split(/[\\/]/).filter(Boolean).pop() ?? 'repository';
+  const title = `${repoName} — structure`;
 
-  // Built as a list so the contents and the page cannot disagree about what is
-  // on it — a table of contents maintained separately is a table of contents
-  // that goes stale.
-  const sections: Section[] = [
-    section('findings', 'Findings, ranked', findingsSection(data.ranked)),
-    section(
-      'context',
-      'Level 1 — system context',
-      diagramSection(data.model.context, 'context'),
-    ),
-    section('container', 'Level 2 — containers', diagramSection(data.model.container, 'container')),
-    ...data.model.components.map((diagram, n) =>
-      section(
-        `component-${n}`,
-        `Level 3 — components of ${diagram.scope ?? ''}`,
-        diagramSection(diagram, `component-${n}`),
-      ),
-    ),
-    ...data.classes.map((diagram, n) =>
-      section(
-        `code-${n}`,
-        `Level 4 — code in ${diagram.packageFqn}`,
-        classSection(diagram, `code-${n}`),
-      ),
-    ),
-    section('er', 'Data model', erSection(data.er)),
-    section('api', 'HTTP surface', apiSection(data.surface)),
-    section('matrix', 'Dependency matrix', matrixSection(data.matrix)),
-    section('hotspots', 'Hotspots', hotspotSection(data.hotspots)),
-    section('limits', 'What this report did not see', limitsSection(context, data)),
+  // Built as a list so the tab bar and the page cannot disagree about what is
+  // on it. A panel whose section has nothing to say is omitted along with its
+  // tab, rather than shipping an empty page.
+  const panels: Panel[] = [
+    panel('summary', 'Summary', 'Summary', summarySection(data, context)),
+    panel('findings', 'Findings', 'Findings, ranked', findingsSection(data.ranked)),
+    panel('architecture', 'Architecture', 'Architecture — C4 levels 1 to 3', architecturePanel(data)),
+    panel('code', 'Code', 'Code — one class diagram per package', codePanel(data)),
+    panel('data', 'Data model', 'Data model', erSection(data.er)),
+    panel('api', 'HTTP API', 'HTTP surface', apiSection(data.surface)),
+    panel('coupling', 'Coupling', 'Dependency matrix and hotspots', couplingPanel(data)),
+    panel('limits', 'Limits', 'What this report did not see', limitsSection(context, data)),
   ].filter((entry) => entry.html !== '');
 
   return [
@@ -91,55 +83,114 @@ export function toHtml(data: ReportData, context: ReportContext): string {
     '<meta charset="utf-8">',
     '<meta name="viewport" content="width=device-width, initial-scale=1">',
     `<title>${escapeText(title)}</title>`,
-    `<style>${STYLE}</style>`,
+    `<style>${STYLE}\n${tabStyle(panels)}</style>`,
     '</head>',
     '<body>',
+    // The tab machinery: one radio per panel, checked = visible. They sit
+    // before everything else so a sibling selector can reach both the tab bar
+    // and the panels. No script (ADR-0020, ADR-0024).
+    ...panels.map(
+      (entry, n) =>
+        `<input type="radio" name="panel" class="tab-input" id="tab-${escapeAttr(entry.id)}"${
+          n === 0 ? ' checked' : ''
+        }>`,
+    ),
+    '<div class="page">',
+    header(context),
+    tabBar(panels),
     '<main>',
-    header(context, data),
-    contents(sections),
-    legend(),
-    ...sections.map(
+    ...panels.map(
       (entry) =>
-        `<section id="${escapeAttr(entry.id)}">\n<h2>${escapeText(entry.title)}</h2>\n${entry.html}\n</section>`,
+        `<section class="panel" id="panel-${escapeAttr(entry.id)}">\n` +
+        `<h2 class="panel-title">${escapeText(entry.title)}</h2>\n${entry.html}\n</section>`,
     ),
     footer(run),
     '</main>',
+    '</div>',
     '</body>',
     '</html>',
     '',
   ].join('\n');
 }
 
-function section(id: string, title: string, html: string): Section {
-  return { id, title, html };
+function panel(id: string, label: string, title: string, html: string): Panel {
+  return { id, label, title, html };
 }
 
-function contents(sections: Section[]): string {
+function tabBar(panels: Panel[]): string {
   return [
-    '<nav class="contents">',
-    '<h2>Contents</h2>',
-    '<ol>',
-    ...sections.map(
-      (entry) => `<li><a href="#${escapeAttr(entry.id)}">${escapeText(entry.title)}</a></li>`,
+    '<nav class="tabs" aria-label="Report sections">',
+    ...panels.map(
+      (entry) => `<label for="tab-${escapeAttr(entry.id)}">${escapeText(entry.label)}</label>`,
     ),
-    '</ol>',
     '</nav>',
   ].join('\n');
 }
 
-function header(context: ReportContext, data: ReportData): string {
+/**
+ * The `:checked` wiring, generated from the same list as the markup so the two
+ * cannot drift. Static text in, static text out — determinism is untouched.
+ */
+function tabStyle(panels: Panel[]): string {
+  return panels
+    .map(
+      (entry) =>
+        `#tab-${entry.id}:checked ~ .page #panel-${entry.id} { display: block; }\n` +
+        `#tab-${entry.id}:checked ~ .page .tabs label[for="tab-${entry.id}"] { ` +
+        'color: var(--text); border-bottom-color: var(--accent); }',
+    )
+    .join('\n');
+}
+
+function header(context: ReportContext): string {
+  const { run } = context;
+  // The name, not the path: /home/ci/builds/acme-monolith is where the clone
+  // happened to sit, and it dominates the page if the h1 carries it. The full
+  // path stays on the summary, where provenance belongs — as does the full
+  // commit sha, which the header shows the first twelve characters of.
+  const repoName = run.repoPath.split(/[\\/]/).filter(Boolean).pop() ?? run.repoPath;
+  const head = run.repoHead;
+  return [
+    '<header>',
+    '<p class="brand">stratigraph</p>',
+    `<h1>${escapeText(repoName)}</h1>`,
+    '<p class="subtitle">Architecture &amp; structure report</p>',
+    '<p class="run-line">' +
+      (head === null
+        ? '<span class="meta-item">commit not recorded</span>'
+        : `<span class="meta-item">commit <code title="${escapeAttr(head)}">` +
+          `${escapeText(head.slice(0, 12))}</code></span>`) +
+      `<span class="meta-item">${escapeText(run.startedAt)}</span>` +
+      `<span class="meta-item">run ${run.runId}</span>` +
+      `<span class="meta-item">stratigraph v${escapeText(run.toolVersion)}</span>` +
+      '</p>',
+    '</header>',
+  ].join('\n');
+}
+
+// ----------------------------------------------------------------- summary
+
+/**
+ * The page a reader who will not read the rest still gets value from.
+ *
+ * Everything here is a projection of what the other panels already show —
+ * the first rows of lists other panels carry in full. Nothing is derived,
+ * nothing is exclusive to this panel, and every number agrees with the panel
+ * it points at because it is computed from the same object.
+ */
+function summarySection(data: ReportData, context: ReportContext): string {
   const { run } = context;
   const counts = run.counts;
   const publishable = data.ranked.total - data.ranked.uncited;
   const high = data.ranked.bySeverity.find((row) => row.severity === 'high')?.count ?? 0;
 
-  return [
-    '<header>',
-    `<h1>${escapeText(run.repoPath)}</h1>`,
+  const parts: string[] = [
+    '<p class="lead">Everything in this report was read from the source at the commit ' +
+      'above, or from that commit&rsquo;s history. Anything a model wrote is marked as ' +
+      'inference. Every claim carries the file and line, commit or fact row it came from.</p>',
     '<dl class="meta">',
+    row('Repository', run.repoPath),
     row('Commit', run.repoHead ?? 'not recorded'),
-    row('Run', `${run.runId}, started ${run.startedAt}`),
-    row('Tool', `stratigraph ${run.toolVersion}`),
     row('Extractors', run.extractors.join(', ') || 'none'),
     row('Languages', run.languages.join(', ') || 'none'),
     '</dl>',
@@ -152,10 +203,91 @@ function header(context: ReportContext, data: ReportData): string {
     tile(counts.commits, 'commits'),
     tile(publishable, 'findings', high > 0 ? `${high} high` : null),
     '</ul>',
-    '<p class="lead">Everything below was read from the source at the commit above, ' +
-      'or from that commit&rsquo;s history. Anything a model wrote is marked.</p>',
-    '</header>',
+  ];
+
+  if (data.ranked.findings.length > 0) {
+    parts.push(
+      '<h3>Leading findings</h3>',
+      `<p class="caption">The first ${Math.min(5, data.ranked.findings.length)} of ` +
+        `${publishable} — the Findings tab has all of them, each with its evidence.</p>`,
+      '<ol class="summary-findings">',
+      ...data.ranked.findings.slice(0, 5).map((finding) => {
+        const model = finding.authoredBy === 'model';
+        return (
+          `<li class="sev-${escapeAttr(finding.severity)}">` +
+          `<span class="tag sev">${escapeText(finding.severity)}</span>` +
+          `<span class="summary-finding-title${model ? ' model-text' : ''}">` +
+          `${escapeText(finding.title)}</span>` +
+          '</li>'
+        );
+      }),
+      '</ol>',
+    );
+  }
+
+  if (data.hotspots.bars.length > 0) {
+    parts.push(
+      '<h3>Hottest files</h3>',
+      `<p class="caption">Churn &times; complexity, the first ` +
+        `${Math.min(5, data.hotspots.bars.length)} of ${data.hotspots.total} with ` +
+        'history — the Coupling tab has the full table.</p>',
+      '<table class="hotspots">',
+      '<tbody>',
+      ...data.hotspots.bars.slice(0, 5).map((bar) =>
+        [
+          '<tr>',
+          `<td><code>${escapeText(bar.path)}</code></td>`,
+          `<td class="bar-cell"><span class="bar" style="width:${(bar.relative * 100).toFixed(1)}%">` +
+            `</span><span class="bar-value">${Math.round(bar.score).toLocaleString('en-US')}</span></td>`,
+          '</tr>',
+        ].join(''),
+      ),
+      '</tbody>',
+      '</table>',
+    );
+  }
+
+  parts.push(legend());
+  return parts.join('\n');
+}
+
+// ---------------------------------------------------- panels that aggregate
+
+function architecturePanel(data: ReportData): string {
+  return [
+    subheading('Level 1 — system context'),
+    diagramSection(data.model.context, 'context'),
+    subheading('Level 2 — containers'),
+    diagramSection(data.model.container, 'container'),
+    ...data.model.components.flatMap((diagram, n) => [
+      subheading(`Level 3 — components of ${diagram.scope ?? ''}`),
+      diagramSection(diagram, `component-${n}`),
+    ]),
   ].join('\n');
+}
+
+function codePanel(data: ReportData): string {
+  if (data.classes.length === 0) return '';
+  return data.classes
+    .flatMap((diagram, n) => [
+      subheading(`Level 4 — code in ${diagram.packageFqn}`),
+      classSection(diagram, `code-${n}`),
+    ])
+    .join('\n');
+}
+
+function couplingPanel(data: ReportData): string {
+  const matrix = matrixSection(data.matrix);
+  const hotspots = hotspotSection(data.hotspots);
+  if (matrix === '' && hotspots === '') return '';
+  const parts: string[] = [];
+  if (matrix !== '') parts.push(subheading('Dependency matrix'), matrix);
+  if (hotspots !== '') parts.push(subheading('Hotspots'), hotspots);
+  return parts.join('\n');
+}
+
+function subheading(title: string): string {
+  return `<h3 class="subheading">${escapeText(title)}</h3>`;
 }
 
 function tile(value: number, label: string, detail: string | null = null): string {
@@ -174,7 +306,7 @@ function row(label: string, value: string): string {
 function legend(): string {
   return [
     '<section class="legend">',
-    '<h2>How to read this</h2>',
+    '<h3>How to read this</h3>',
     '<ul>',
     '<li><span class="swatch observed"></span><strong>Solid line, solid border</strong> — ' +
       'observed. A parser read it out of the source, and the evidence names the file and line.</li>',
@@ -680,60 +812,115 @@ function footer(run: RunSummary): string {
 /**
  * The stylesheet.
  *
- * Dark by default with a light-scheme override, because the diagrams' colours
- * are chosen against a dark background and a report that inverts badly is worse
- * than one that commits. The monospace stack matches the metrics the layout
- * assumed, so the text inside a box is the width the box was sized for.
+ * Light by default — this page is read in meetings, attached to emails and
+ * printed, and those are light-surface contexts — with a dark override under
+ * `prefers-color-scheme`. The diagrams are the one exception: their colours
+ * are chosen against a dark surface (ADR-0020), so a figure keeps that
+ * surface in both schemes rather than inverting badly.
+ *
+ * The colour values are a validated palette: the categorical, status and ink
+ * steps pass a colour-vision-deficiency and contrast check as a set, in both
+ * modes, and severity is never carried by colour alone — every severity mark
+ * sits next to the word.
  */
 const STYLE = `
 :root {
-  --bg: #0d1117; --panel: #161b22; --line: #30363d; --text: #e6edf3;
-  --muted: #9198a1; --accent: #58a6ff; --inferred: #e3b341; --warn: #f85149;
+  --bg: #f9f9f7; --panel: #fcfcfb; --line: #e1e0d9; --text: #0b0b0b;
+  --muted: #52514e; --faint: #898781; --accent: #2a78d6;
+  --inferred: #9a6700; --warn: #d03b3b; --serious: #ec835a; --caution: #fab219;
+  --diagram-bg: #ffffff;
   --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #0d0d0d; --panel: #1a1a19; --line: #2c2c2a; --text: #ffffff;
+          --muted: #c3c2b7; --faint: #898781; --accent: #3987e5;
+          --inferred: #e3b341; }
 }
 * { box-sizing: border-box; }
 body {
   margin: 0; background: var(--bg); color: var(--text);
-  font: 15px/1.6 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font: 15px/1.6 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
 }
-main { max-width: 1180px; margin: 0 auto; padding: 32px 20px 64px; }
-h1 { font-size: 24px; margin: 0 0 16px; word-break: break-all; }
-h2 { font-size: 19px; margin: 40px 0 8px; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
-h3 { font-size: 15px; margin: 0 0 8px; word-break: break-word; }
+.page { max-width: 1180px; margin: 0 auto; padding: 28px 24px 64px; }
+h1 { font-size: 26px; font-weight: 650; margin: 2px 0 10px; word-break: break-all; letter-spacing: -0.01em; }
+h2.panel-title { font-size: 21px; font-weight: 650; margin: 4px 0 16px; letter-spacing: -0.01em; }
+h3 { font-size: 16px; font-weight: 650; margin: 28px 0 8px; word-break: break-word; }
+h3.subheading { font-size: 17px; margin: 36px 0 8px; padding-bottom: 6px;
+                border-bottom: 1px solid var(--line); }
 p { margin: 8px 0; }
 code, pre { font-family: var(--mono); font-size: 12.5px; }
 a { color: var(--accent); }
 
+/* ------------------------------------------------------------ header */
+header { padding: 18px 0 4px; }
+header .brand { margin: 0 0 14px; font-size: 12px; font-weight: 650; letter-spacing: 0.16em;
+                text-transform: uppercase; color: var(--accent);
+                border-top: 3px solid var(--accent); display: inline-block; padding-top: 8px; }
+header .subtitle { margin: -6px 0 10px; font-size: 15px; color: var(--muted); }
+.run-line { margin: 0 0 8px; color: var(--muted); font-size: 13px; }
+.meta-item { display: inline-block; margin: 2px 22px 2px 0; }
+.meta-item code { font-size: 12px; }
+
+/* -------------------------------------------------------------- tabs */
+/* Radio-input tabs: no script, printable, and without CSS the panels
+   simply render in order as one document (ADR-0024). The inputs stay
+   focusable so the keyboard can drive the tabs (arrow keys within the
+   radio group), parked off-viewport rather than display:none. */
+.tab-input { position: fixed; top: -100px; left: -100px; opacity: 0; pointer-events: none; }
+.tabs { position: sticky; top: 0; z-index: 10; display: flex; flex-wrap: wrap;
+        gap: 2px; margin: 14px 0 22px; background: var(--bg);
+        border-bottom: 1px solid var(--line); }
+.tabs label { padding: 9px 14px 7px; cursor: pointer; color: var(--muted);
+              font-size: 13.5px; font-weight: 600; border-bottom: 2px solid transparent;
+              margin-bottom: -1px; white-space: nowrap; }
+.tabs label:hover { color: var(--text); }
+.panel { display: none; }
+
 .meta { display: grid; grid-template-columns: max-content 1fr; gap: 4px 16px; margin: 0 0 16px; }
 .meta dt { color: var(--muted); }
 .meta dd { margin: 0; word-break: break-word; }
-.lead { color: var(--muted); }
+.lead { color: var(--muted); max-width: 72ch; }
 
 /* The numbers a reader wants before deciding whether to read the rest. */
-.tiles { list-style: none; display: flex; flex-wrap: wrap; gap: 10px; padding: 0; margin: 20px 0; }
-.tiles li { flex: 1 1 110px; background: var(--panel); border: 1px solid var(--line);
-            border-radius: 8px; padding: 12px 14px; display: flex; flex-direction: column; }
-.tile-value { font-size: 22px; font-weight: 650; line-height: 1.2; }
+.tiles { list-style: none; display: flex; flex-wrap: wrap; gap: 12px; padding: 0; margin: 20px 0 28px; }
+.tiles li { flex: 1 1 120px; background: var(--panel); border: 1px solid var(--line);
+            border-top: 3px solid var(--accent); border-radius: 10px; padding: 14px 16px;
+            display: flex; flex-direction: column;
+            box-shadow: 0 1px 2px rgba(11, 11, 11, 0.04); }
+.tile-value { font-size: 28px; font-weight: 650; line-height: 1.25; }
 .tile-label { color: var(--muted); font-size: 12.5px; }
-.tile-detail { color: var(--warn); font-size: 12px; margin-top: 2px; }
+.tile-detail { color: var(--warn); font-size: 12px; font-weight: 600; margin-top: 2px; }
 
-.contents { background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
-            padding: 4px 20px 16px; margin: 20px 0; }
-.contents ol { columns: 2; column-gap: 32px; padding-left: 20px; margin: 0; }
-.contents li { margin: 4px 0; break-inside: avoid; }
+/* ------------------------------------------------------------ summary */
+.summary-findings { list-style: none; padding: 0; margin: 8px 0; }
+.summary-findings li { display: flex; align-items: baseline; gap: 10px; padding: 9px 12px;
+                       border: 1px solid var(--line); border-left-width: 4px;
+                       border-radius: 8px; margin: 6px 0; background: var(--panel); }
+.summary-findings li.sev-high { border-left-color: var(--warn); }
+.summary-findings li.sev-medium { border-left-color: var(--serious); }
+.summary-findings li.sev-low { border-left-color: var(--caution); }
+.summary-findings li.sev-info { border-left-color: var(--line); }
+.summary-finding-title { overflow-wrap: anywhere; }
+.model-text { font-style: italic; color: var(--inferred); }
 
-.legend { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 4px 20px 16px; }
+.legend { background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+          padding: 4px 20px 16px; margin-top: 28px; }
+.legend h3 { margin-top: 14px; }
 .legend ul { list-style: none; padding: 0; }
 .legend li { margin: 10px 0; }
-.swatch { display: inline-block; width: 26px; height: 0; border-top: 2px solid var(--muted); vertical-align: middle; margin-right: 10px; }
+.swatch { display: inline-block; width: 26px; height: 0; border-top: 2px solid var(--faint); vertical-align: middle; margin-right: 10px; }
 .swatch.inferred { border-top: 2px dashed var(--inferred); }
-.swatch.routed { border-top: 2px dotted var(--muted); }
+.swatch.routed { border-top: 2px dotted var(--faint); }
 
-figure { margin: 16px 0; padding: 12px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; overflow-x: auto; }
-svg.diagram { display: block; max-width: 100%; height: auto; }
+/* Diagram colours are tuned for a light surface (ADR-0024), so the figure
+   card stays white in both schemes — and an SVG copied out of the page into
+   a wiki or an email lands on the surface it was drawn for. */
+figure { margin: 16px 0; padding: 14px; background: var(--diagram-bg);
+         border: 1px solid var(--line); border-radius: 10px; overflow-x: auto; }
+svg.diagram { display: block; max-width: 100%; height: auto; margin: 0 auto; }
 
 .caption { color: var(--muted); font-size: 13.5px; }
-.empty { color: var(--muted); font-style: italic; }
+.empty { color: var(--faint); font-style: italic; }
 .warn { color: var(--warn); }
 
 .notes { color: var(--muted); font-size: 13.5px; padding-left: 20px; }
@@ -743,12 +930,16 @@ table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13px;
 caption { text-align: left; color: var(--muted); font-size: 13px; padding-bottom: 8px; }
 th, td { text-align: left; vertical-align: top; padding: 8px 10px; border-bottom: 1px solid var(--line);
          overflow-wrap: anywhere; }
-th { color: var(--muted); font-weight: 600; }
+/* Headers are single words; breaking "Confidence" into "Confidenc e" to save
+   a wrap is worse than letting the word wrap whole. */
+th { color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase;
+     letter-spacing: 0.03em; overflow-wrap: normal; }
 /* A numeric column is narrow, and left to itself the browser breaks "Commits"
    across two lines rather than widening it by six pixels. */
-td.num, th.num { text-align: right; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 th.num { white-space: nowrap; }
-tr.inferred td { background: rgba(227, 179, 65, 0.07); }
+tbody tr:hover td { background: rgba(42, 120, 214, 0.05); }
+tr.inferred td { background: rgba(154, 103, 0, 0.06); }
 
 /* The relationship tables only. Left to the browser, its column sizing gives
    the three fqn columns everything and crushes the evidence into a
@@ -770,18 +961,29 @@ td code { overflow-wrap: anywhere; }
 .evidence-label { color: var(--muted); font-size: 13px; margin: 12px 0 4px; }
 
 .tag { display: inline-block; padding: 1px 8px; margin-right: 6px; border: 1px solid var(--line);
-       border-radius: 999px; font-size: 12px; color: var(--muted); }
-.tag.sev { text-transform: uppercase; letter-spacing: 0.04em; }
+       border-radius: 999px; font-size: 12px; color: var(--muted); white-space: nowrap; }
+.tag.sev { text-transform: uppercase; letter-spacing: 0.04em; font-weight: 650; font-size: 11px; }
+/* Severity is a word in a tinted badge — the colour never carries it alone. */
+.sev-high .tag.sev { background: rgba(208, 59, 59, 0.12); border-color: transparent; color: #b32d2d; }
+.sev-medium .tag.sev { background: rgba(236, 131, 90, 0.16); border-color: transparent; color: #a2511f; }
+.sev-low .tag.sev { background: rgba(250, 178, 25, 0.18); border-color: transparent; color: #7a5800; }
+.sev-info .tag.sev { background: var(--line); border-color: transparent; }
+@media (prefers-color-scheme: dark) {
+  .sev-high .tag.sev { color: #ef8f8f; }
+  .sev-medium .tag.sev { color: #f0a175; }
+  .sev-low .tag.sev { color: #fab219; }
+}
 .inferred-tag { color: var(--inferred); border-color: var(--inferred); font-style: italic; }
 
 .findings { list-style: none; padding: 0; counter-reset: finding; }
 .finding { counter-increment: finding; position: relative; background: var(--panel);
-           border: 1px solid var(--line); border-left-width: 4px; border-radius: 8px;
-           padding: 16px 20px; margin: 12px 0; }
-.finding h3::before { content: counter(finding) ". "; color: var(--muted); }
+           border: 1px solid var(--line); border-left-width: 4px; border-radius: 10px;
+           padding: 16px 20px; margin: 12px 0; box-shadow: 0 1px 2px rgba(11, 11, 11, 0.04); }
+.finding h3 { margin-top: 0; }
+.finding h3::before { content: counter(finding) ". "; color: var(--faint); }
 .finding.sev-high { border-left-color: var(--warn); }
-.finding.sev-medium { border-left-color: var(--inferred); }
-.finding.sev-low { border-left-color: var(--accent); }
+.finding.sev-medium { border-left-color: var(--serious); }
+.finding.sev-low { border-left-color: var(--caution); }
 .finding.sev-info { border-left-color: var(--line); }
 .finding.model h3 { font-style: italic; color: var(--inferred); }
 .detail { white-space: pre-wrap; color: var(--muted); margin: 8px 0; overflow-x: auto; }
@@ -789,28 +991,30 @@ td code { overflow-wrap: anywhere; }
 /* The API surface, the matrix and the hotspots each want their own column
    proportions, so they opt out of the six-column grid the relationship tables
    are sized for. */
-.verb { display: inline-block; min-width: 52px; text-align: center; padding: 1px 6px;
+.verb { display: inline-block; min-width: 56px; text-align: center; padding: 1px 6px;
         border-radius: 4px; font-family: var(--mono); font-size: 11.5px; font-weight: 600;
-        background: #30363d; color: var(--text); }
-.verb-get { background: #1f6feb; }
-.verb-post { background: #238636; }
-.verb-put, .verb-patch { background: #9e6a03; }
-.verb-delete { background: #b62324; }
+        background: var(--faint); color: #ffffff; white-space: nowrap; overflow-wrap: normal; }
+.verb-get { background: #2a78d6; }
+.verb-post { background: #008300; }
+.verb-put, .verb-patch { background: #9a6700; }
+.verb-delete { background: #d03b3b; }
 
 .scroller { overflow-x: auto; }
 table.matrix { font-size: 12px; width: auto; }
 table.matrix th.rowhead { font-family: var(--mono); font-weight: 500; white-space: nowrap;
-                          text-align: left; color: var(--text); }
-table.matrix td { text-align: right; padding: 4px 8px; }
-table.matrix td.zero { color: #484f58; }
+                          text-align: left; color: var(--text); text-transform: none;
+                          letter-spacing: 0; font-size: 12px; }
+table.matrix td { text-align: right; padding: 4px 8px; font-variant-numeric: tabular-nums; }
+table.matrix td.zero { color: var(--line); }
 table.matrix td.diagonal { background: var(--line); }
 /* A cell shaded on both sides of the diagonal is a cycle, findable by eye. */
-table.matrix td.mutual { background: rgba(248, 81, 73, 0.22); font-weight: 650; }
+table.matrix td.mutual { background: rgba(208, 59, 59, 0.18); font-weight: 650; }
 
 td.bar-cell { min-width: 220px; white-space: nowrap; }
 .bar { display: inline-block; height: 10px; background: var(--accent); border-radius: 2px;
        vertical-align: middle; margin-right: 8px; min-width: 2px; max-width: 60%; }
-.bar-value { font-family: var(--mono); font-size: 11.5px; color: var(--muted); }
+.bar-value { font-family: var(--mono); font-size: 11.5px; color: var(--muted);
+             font-variant-numeric: tabular-nums; }
 
 details { margin: 12px 0; }
 summary { cursor: pointer; color: var(--muted); font-size: 13px; }
@@ -818,11 +1022,15 @@ details pre { background: var(--panel); border: 1px solid var(--line); border-ra
               padding: 12px; overflow-x: auto; }
 
 footer { margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--line);
-         color: var(--muted); font-size: 13px; }
+         color: var(--faint); font-size: 13px; }
 
-@media (prefers-color-scheme: light) {
-  :root { --bg: #ffffff; --panel: #f6f8fa; --line: #d0d7de; --text: #1f2328;
-          --muted: #59636e; --accent: #0969da; --inferred: #9a6700; --warn: #cf222e; }
-  figure { background: #22272e; }
+/* Print is the whole document: every panel, in order, no tab chrome. */
+@media print {
+  .tabs, .tab-input { display: none; }
+  .panel { display: block !important; break-before: page; }
+  .panel:first-of-type { break-before: auto; }
+  body { background: #ffffff; }
+  .page { max-width: none; padding: 0; }
+  figure { break-inside: avoid; }
 }
 `.trim();
