@@ -1,6 +1,6 @@
 {
   "name": "stratigraph",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "description": "Read the layers of a codebase: static facts from source and git history, assembled into a dependency graph, hotspots, and grounded structural findings.",
   "license": "Apache-2.0",
   "type": "module",
