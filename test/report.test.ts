@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, readdirSync } from 'node:fs';
+import { mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -270,5 +270,60 @@ describe('stratigraph report refuses', () => {
     const fresh = mkdtempSync(join(tmpdir(), 'stratigraph-report-fresh-'));
     runInit({ repo: FIXTURE, cwd: fresh });
     expect(() => runReport({ repo: FIXTURE, cwd: fresh, out: 'arch' })).toThrow(/no runs in/);
+  });
+});
+
+describe('a branded report (ADR-0025)', () => {
+  function brandUp(accent: string): void {
+    writeFileSync(join(cwd, 'logo.svg'), '<svg xmlns="http://www.w3.org/2000/svg"/>');
+    writeFileSync(
+      join(cwd, 'stratigraph.config.json'),
+      JSON.stringify({
+        report: { brand: { name: 'Acme Corp', logo: 'logo.svg', accent } },
+      }),
+    );
+  }
+
+  it('carries the name, the embedded logo, and the accent', () => {
+    seedRepository();
+    brandUp('#7c3aed');
+    report();
+    const html = read('index.html');
+    expect(html).toContain('Acme Corp');
+    expect(html).toContain('data:image/svg+xml;base64,');
+    expect(html).toContain('--accent: #7c3aed');
+    // The diagrams take the accent through the derived ramp, not raw.
+    expect(html).not.toContain('#b7d3f6');
+  });
+
+  it('is still self-contained and still deterministic', () => {
+    seedRepository();
+    brandUp('#7c3aed');
+    report();
+    const first = read('index.html');
+    expect(first).not.toMatch(/src="(?!data:)/);
+    report({ out: 'arch2' });
+    expect(readFileSync(join(cwd, 'arch2', 'index.html'), 'utf8')).toBe(first);
+  });
+
+  it('reports an accent it had to step, in the limits panel', () => {
+    seedRepository();
+    brandUp('#fab219');
+    report();
+    const html = read('index.html');
+    expect(html).toContain('cannot hold 3:1 contrast');
+    // The light scheme takes the stepped colour; the dark scheme keeps the
+    // original, which holds 3:1 on that surface as it is.
+    expect(html).not.toMatch(/^:root \{ --accent: #fab219; \}$/m);
+    expect(html).toContain('dark) { :root { --accent: #fab219; } }');
+  });
+
+  it('fails the command on an unreadable logo, not the page on a broken image', () => {
+    seedRepository();
+    writeFileSync(
+      join(cwd, 'stratigraph.config.json'),
+      JSON.stringify({ report: { brand: { logo: 'missing.png' } } }),
+    );
+    expect(() => report()).toThrow(/cannot be read/);
   });
 });

@@ -47,6 +47,9 @@ export function configTemplate(options: TemplateOptions): string {
       apiKeyEnv: DEFAULT_API_KEY_ENV,
       sendSource: false,
     },
+    report: {
+      brand: { name: null, logo: null, accent: null },
+    },
   };
 
   return `${JSON.stringify(template, null, 2)}\n`;

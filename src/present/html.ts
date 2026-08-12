@@ -18,6 +18,7 @@
  */
 
 import type { RunSummary } from '../mcp/queries.js';
+import { paletteFrom, type DiagramPalette, type ResolvedBrand } from './brand.js';
 import type { C4Diagram, C4Model } from './c4.js';
 import { classLayoutInput, type ClassDiagram } from './classes.js';
 import { CARDINALITY_LABEL, erLayoutInput, type ErModel } from './erd.js';
@@ -29,6 +30,8 @@ import type { DependencyMatrix, HotspotChart, HttpSurface } from './surface.js';
 
 export interface ReportContext {
   run: RunSummary;
+  /** White-label branding, already resolved and contrast-checked (ADR-0025). */
+  brand: ResolvedBrand | null;
   /** Extractor complaints, grouped. Part of "what this report did not see". */
   diagnostics: Array<{ level: string; extractor: string | null; count: number }>;
   /** Model output discarded by the citation check (ADR-0013). */
@@ -61,6 +64,7 @@ export function toHtml(data: ReportData, context: ReportContext): string {
   const { run } = context;
   const repoName = run.repoPath.split(/[\\/]/).filter(Boolean).pop() ?? 'repository';
   const title = `${repoName} — structure`;
+  const palette = context.brand?.accent ? paletteFrom(context.brand.accent.light) : undefined;
 
   // Built as a list so the tab bar and the page cannot disagree about what is
   // on it. A panel whose section has nothing to say is omitted along with its
@@ -68,9 +72,9 @@ export function toHtml(data: ReportData, context: ReportContext): string {
   const panels: Panel[] = [
     panel('summary', 'Summary', 'Summary', summarySection(data, context)),
     panel('findings', 'Findings', 'Findings, ranked', findingsSection(data.ranked)),
-    panel('architecture', 'Architecture', 'Architecture — C4 levels 1 to 3', architecturePanel(data)),
-    panel('code', 'Code', 'Code — one class diagram per package', codePanel(data)),
-    panel('data', 'Data model', 'Data model', erSection(data.er)),
+    panel('architecture', 'Architecture', 'Architecture — C4 levels 1 to 3', architecturePanel(data, palette)),
+    panel('code', 'Code', 'Code — one class diagram per package', codePanel(data, palette)),
+    panel('data', 'Data model', 'Data model', erSection(data.er, palette)),
     panel('api', 'HTTP API', 'HTTP surface', apiSection(data.surface)),
     panel('coupling', 'Coupling', 'Dependency matrix and hotspots', couplingPanel(data)),
     panel('limits', 'Limits', 'What this report did not see', limitsSection(context, data)),
@@ -83,7 +87,7 @@ export function toHtml(data: ReportData, context: ReportContext): string {
     '<meta charset="utf-8">',
     '<meta name="viewport" content="width=device-width, initial-scale=1">',
     `<title>${escapeText(title)}</title>`,
-    `<style>${STYLE}\n${tabStyle(panels)}</style>`,
+    `<style>${STYLE}\n${tabStyle(panels)}${accentStyle(context.brand)}</style>`,
     '</head>',
     '<body>',
     // The tab machinery: one radio per panel, checked = visible. They sit
@@ -111,6 +115,15 @@ export function toHtml(data: ReportData, context: ReportContext): string {
     '</html>',
     '',
   ].join('\n');
+}
+
+/** The brand accent, applied as a token override so every use follows it. */
+function accentStyle(brand: ResolvedBrand | null): string {
+  if (brand === null || brand.accent === null) return '';
+  return (
+    `\n:root { --accent: ${brand.accent.light}; }\n` +
+    `@media (prefers-color-scheme: dark) { :root { --accent: ${brand.accent.dark}; } }`
+  );
 }
 
 function panel(id: string, label: string, title: string, html: string): Panel {
@@ -150,9 +163,21 @@ function header(context: ReportContext): string {
   // commit sha, which the header shows the first twelve characters of.
   const repoName = run.repoPath.split(/[\\/]/).filter(Boolean).pop() ?? run.repoPath;
   const head = run.repoHead;
+  const brand = context.brand;
+  const brandMark =
+    brand === null || (brand.logo === null && brand.name === null)
+      ? ''
+      : '<span class="brand-co">' +
+        (brand.logo === null
+          ? ''
+          : `<img class="brand-logo" src="${escapeAttr(brand.logo)}" alt="${escapeAttr(
+              brand.name ?? 'logo',
+            )}">`) +
+        (brand.name === null ? '' : `<span>${escapeText(brand.name)}</span>`) +
+        '</span>';
   return [
     '<header>',
-    '<p class="brand">stratigraph</p>',
+    `<div class="brand-row"><p class="brand">stratigraph</p>${brandMark}</div>`,
     `<h1>${escapeText(repoName)}</h1>`,
     '<p class="subtitle">Architecture &amp; structure report</p>',
     '<p class="run-line">' +
@@ -253,25 +278,25 @@ function summarySection(data: ReportData, context: ReportContext): string {
 
 // ---------------------------------------------------- panels that aggregate
 
-function architecturePanel(data: ReportData): string {
+function architecturePanel(data: ReportData, palette: DiagramPalette | undefined): string {
   return [
     subheading('Level 1 — system context'),
-    diagramSection(data.model.context, 'context'),
+    diagramSection(data.model.context, 'context', palette),
     subheading('Level 2 — containers'),
-    diagramSection(data.model.container, 'container'),
+    diagramSection(data.model.container, 'container', palette),
     ...data.model.components.flatMap((diagram, n) => [
       subheading(`Level 3 — components of ${diagram.scope ?? ''}`),
-      diagramSection(diagram, `component-${n}`),
+      diagramSection(diagram, `component-${n}`, palette),
     ]),
   ].join('\n');
 }
 
-function codePanel(data: ReportData): string {
+function codePanel(data: ReportData, palette: DiagramPalette | undefined): string {
   if (data.classes.length === 0) return '';
   return data.classes
     .flatMap((diagram, n) => [
       subheading(`Level 4 — code in ${diagram.packageFqn}`),
-      classSection(diagram, `code-${n}`),
+      classSection(diagram, `code-${n}`, palette),
     ])
     .join('\n');
 }
@@ -327,14 +352,14 @@ function legend(): string {
   ].join('\n');
 }
 
-function diagramSection(diagram: C4Diagram, id: string): string {
+function diagramSection(diagram: C4Diagram, id: string, palette?: DiagramPalette): string {
   const placed = layout(diagram);
   const parts = [`<p class="caption">${escapeText(diagram.title)}</p>`];
 
   if (placed.boxes.length === 0) {
     parts.push('<p class="empty">Nothing to draw at this level for this run.</p>');
   } else {
-    parts.push('<figure>', toSvg(placed, id), '</figure>');
+    parts.push('<figure>', toSvg(placed, id, palette), '</figure>');
   }
 
   parts.push(notes([...diagram.notes, ...placed.notes]));
@@ -367,7 +392,7 @@ function mermaidDetails(source: string): string {
 
 // ------------------------------------------------------------ level 4: code
 
-function classSection(diagram: ClassDiagram, id: string): string {
+function classSection(diagram: ClassDiagram, id: string, palette?: DiagramPalette): string {
   const { nodes, links } = classLayoutInput(diagram);
   const placed = layoutGraph(nodes, links);
   const parts = [
@@ -376,7 +401,7 @@ function classSection(diagram: ClassDiagram, id: string): string {
         `as the source declares them.`,
     )}</p>`,
     '<figure>',
-    toSvg(placed, id),
+    toSvg(placed, id, palette),
     '</figure>',
     notes([...diagram.notes, ...placed.notes]),
   ];
@@ -412,7 +437,7 @@ function classSection(diagram: ClassDiagram, id: string): string {
 
 // ------------------------------------------------------------- data model
 
-function erSection(model: ErModel): string {
+function erSection(model: ErModel, palette?: DiagramPalette): string {
   if (model.entities.length === 0) {
     return `<p class="empty">No O/R mapping was read in this run.</p>\n${notes(model.notes)}`;
   }
@@ -425,7 +450,7 @@ function erSection(model: ErModel): string {
         `${model.relationships.length} relationship(s) between them that could be read.`,
     )}</p>`,
     '<figure>',
-    toSvg(placed, 'er'),
+    toSvg(placed, 'er', palette),
     '</figure>',
     notes([...model.notes, ...placed.notes]),
   ];
@@ -749,6 +774,7 @@ function limitsSection(context: ReportContext, data: ReportData): string {
   const parts = ['<ul class="notes">'];
 
   for (const gap of context.run.gaps) parts.push(`<li>${escapeText(gap)}</li>`);
+  for (const note of context.brand?.notes ?? []) parts.push(`<li>${escapeText(note)}</li>`);
 
   if (data.classDiagramsSkipped > 0) {
     parts.push(
@@ -853,6 +879,10 @@ a { color: var(--accent); }
 
 /* ------------------------------------------------------------ header */
 header { padding: 18px 0 4px; }
+.brand-row { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; }
+.brand-co { display: flex; align-items: center; gap: 10px; color: var(--muted);
+            font-size: 13.5px; font-weight: 600; }
+.brand-logo { height: 28px; max-width: 180px; object-fit: contain; display: block; }
 header .brand { margin: 0 0 14px; font-size: 12px; font-weight: 650; letter-spacing: 0.16em;
                 text-transform: uppercase; color: var(--accent);
                 border-top: 3px solid var(--accent); display: inline-block; padding-top: 8px; }

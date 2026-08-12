@@ -460,3 +460,35 @@ describe('loadConfig — the user config file', () => {
     expect(loadConfig({ repo, cwd: dir, env: NO_USER_CONFIG }).userSource).toBeNull();
   });
 });
+
+describe('report.brand', () => {
+  it('rejects a colour that does not parse', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'stratigraph-config-'));
+    writeFileSync(
+      join(dir, 'stratigraph.config.json'),
+      JSON.stringify({ report: { brand: { accent: 'purple' } } }),
+    );
+    expect(() => loadConfig({ cwd: dir, env: NO_USER_CONFIG })).toThrow(/not a colour/);
+  });
+
+  it('rejects an unknown brand key', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'stratigraph-config-'));
+    writeFileSync(
+      join(dir, 'stratigraph.config.json'),
+      JSON.stringify({ report: { brand: { color: '#123456' } } }),
+    );
+    expect(() => loadConfig({ cwd: dir, env: NO_USER_CONFIG })).toThrow(
+      /unknown key "report.brand.color"/,
+    );
+  });
+
+  it('resolves the logo against the config file', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'stratigraph-config-'));
+    writeFileSync(
+      join(dir, 'stratigraph.config.json'),
+      JSON.stringify({ repo: '.', report: { brand: { logo: 'assets/logo.png' } } }),
+    );
+    const config = loadConfig({ cwd: dir, env: NO_USER_CONFIG });
+    expect(config.report.brand?.logo).toBe(join(dir, 'assets', 'logo.png'));
+  });
+});

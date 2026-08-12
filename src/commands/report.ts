@@ -13,6 +13,7 @@ import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { basename, join, resolve } from 'node:path';
 
 import { loadConfig, type ConfigOverrides } from '../config.js';
+import { resolveBrand, type ResolvedBrand } from '../present/brand.js';
 import { assertSchemaCurrent, openDatabase, type Db } from '../db/database.js';
 import { findRun, latestRun } from '../db/run.js';
 import { info, print } from '../log.js';
@@ -70,6 +71,13 @@ export interface ReportResult {
 
 export function runReport(options: ReportOptions): ReportResult {
   const config = loadConfig(options);
+
+  // Brand is config data, resolved before anything is written: an unreadable
+  // logo or an uncorrectable colour must fail the command, not the page
+  // (ADR-0025).
+  const brand: ResolvedBrand | null = config.report.brand
+    ? resolveBrand(config.report.brand)
+    : null;
   const top = options.top ?? DEFAULT_TOP;
 
   if (!existsSync(config.dbPath)) {
@@ -108,6 +116,7 @@ export function runReport(options: ReportOptions): ReportResult {
       run: summary,
       diagnostics: loadDiagnostics(db, runId),
       rejectedByCitationCheck: countRejections(db, runId),
+      brand,
     };
 
     const outDir = resolve(options.cwd ?? process.cwd(), options.out);

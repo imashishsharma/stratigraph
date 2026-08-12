@@ -122,6 +122,17 @@ export const DEFAULT_INTERPRET: InterpretConfig = {
 /** Used when `llm.enabled` and nothing more specific was configured. */
 export const DEFAULT_MODEL = 'claude-opus-5';
 
+/** White-label branding for `stratigraph report` (ADR-0025). */
+export interface ReportConfig {
+  brand: {
+    name: string | null;
+    /** Absolute path to a logo file, resolved against the config file. */
+    logo: string | null;
+    /** `#rrggbb`, validated at load. */
+    accent: string | null;
+  } | null;
+}
+
 export interface StratigraphConfig {
   /** Absolute path to the repository under analysis. */
   repoPath: string;
@@ -134,6 +145,7 @@ export interface StratigraphConfig {
   java: JavaConfig;
   history: HistoryConfig;
   interpret: InterpretConfig;
+  report: ReportConfig;
   /** The shared config file, if one was found. */
   source: string | null;
   /** The per-project, per-machine overrides file, if one was found. */
@@ -187,6 +199,7 @@ const KNOWN_KEYS = new Set([
   'java',
   'history',
   'interpret',
+  'report',
 ]);
 const KNOWN_LLM_KEYS = new Set([
   'enabled',
@@ -199,6 +212,7 @@ const KNOWN_LLM_KEYS = new Set([
 const KNOWN_JAVA_KEYS = new Set(['home', 'jar']);
 const KNOWN_HISTORY_KEYS = new Set(['since', 'maxFilesPerCommit', 'minShared', 'minCommits']);
 const KNOWN_INTERPRET_KEYS = new Set(['couplingWeight', 'minClusterSize', 'maxClusters']);
+const KNOWN_BRAND_KEYS = new Set(['name', 'logo', 'accent']);
 
 /**
  * Precedence, highest first:
@@ -319,6 +333,24 @@ export function loadConfig(overrides: ConfigOverrides = {}): StratigraphConfig {
       minClusterSize: file.interpret?.minClusterSize ?? DEFAULT_INTERPRET.minClusterSize,
       maxClusters: file.interpret?.maxClusters ?? DEFAULT_INTERPRET.maxClusters,
     },
+    report: {
+      brand:
+        file.report?.brand &&
+        (file.report.brand.name !== undefined ||
+          file.report.brand.logo !== undefined ||
+          file.report.brand.accent !== undefined)
+          ? {
+              name: file.report.brand.name ?? null,
+              logo: file.report.brand.logo
+                ? absolute(
+                    expandHome(file.report.brand.logo),
+                    configPath ? dirOf(configPath) : cwd,
+                  )
+                : null,
+              accent: file.report.brand.accent ?? null,
+            }
+          : null,
+    },
     source: sharedPath,
     localSource: localPath,
     userSource: userConfig,
@@ -347,6 +379,11 @@ function mergeConfigFiles(...files: ConfigFile[]): ConfigFile {
     java: { ...merged.java, ...file.java },
     history: { ...merged.history, ...file.history },
     interpret: { ...merged.interpret, ...file.interpret },
+    report: {
+      ...merged.report,
+      ...file.report,
+      brand: { ...merged.report?.brand, ...file.report?.brand },
+    },
   }));
 }
 
@@ -381,6 +418,9 @@ interface ConfigFile {
     couplingWeight?: number;
     minClusterSize?: number;
     maxClusters?: number;
+  };
+  report?: {
+    brand?: { name?: string; logo?: string; accent?: string };
   };
 }
 
@@ -533,6 +573,49 @@ function readConfigFile(path: string, options: { allowInlineKey: boolean }): Con
         'interpret.maxClusters',
         interpretObj['maxClusters'],
       );
+  }
+
+  if (obj['report'] !== undefined) {
+    const report = obj['report'];
+    if (typeof report !== 'object' || report === null || Array.isArray(report)) {
+      throw new ConfigError(`${path}: "report" must be an object`);
+    }
+    const reportObj = report as Record<string, unknown>;
+    for (const key of Object.keys(reportObj)) {
+      if (key !== 'brand') {
+        throw new ConfigError(`${path}: unknown key "report.${key}"`);
+      }
+    }
+    out.report = {};
+    if (reportObj['brand'] !== undefined && reportObj['brand'] !== null) {
+      const brand = reportObj['brand'];
+      if (typeof brand !== 'object' || Array.isArray(brand)) {
+        throw new ConfigError(`${path}: "report.brand" must be an object`);
+      }
+      const brandObj = brand as Record<string, unknown>;
+      for (const key of Object.keys(brandObj)) {
+        if (!KNOWN_BRAND_KEYS.has(key)) {
+          throw new ConfigError(`${path}: unknown key "report.brand.${key}"`);
+        }
+      }
+      out.report.brand = {};
+      if (isSet(brandObj['name']))
+        out.report.brand.name = expectString(path, 'report.brand.name', brandObj['name']);
+      if (isSet(brandObj['logo']))
+        out.report.brand.logo = expectString(path, 'report.brand.logo', brandObj['logo']);
+      if (isSet(brandObj['accent'])) {
+        const accent = expectString(path, 'report.brand.accent', brandObj['accent']);
+        // Validated where every other malformed value is: a colour that cannot
+        // parse must fail the load, not the report that eventually uses it.
+        if (!/^#[0-9a-fA-F]{6}$/.test(accent)) {
+          throw new ConfigError(
+            `${path}: "report.brand.accent" is not a colour: ` +
+              `${JSON.stringify(accent)} — expected #rrggbb`,
+          );
+        }
+        out.report.brand.accent = accent;
+      }
+    }
   }
 
   return out;

@@ -10,6 +10,7 @@
  * the stylesheet does not follow it.
  */
 
+import type { DiagramPalette } from './brand.js';
 import type { Layout, LayoutBox, LayoutEdge, LayoutLine } from './layout.js';
 import { FONT_SIZE } from './layout.js';
 
@@ -59,12 +60,20 @@ const LINE = '#6b6a66';
 const SURFACE = '#ffffff';
 const STEREOTYPE = '#1c5cab';
 
+/** Today's palette, used whenever no brand supplies one (ADR-0025). */
+const DEFAULT_PALETTE: DiagramPalette = {
+  fill: FILL,
+  stroke: STROKE,
+  headerFill: HEADER_FILL,
+  stereotype: STEREOTYPE,
+};
+
 /**
  * Render a fragment. `idPrefix` namespaces the marker ids, because several
  * diagrams share one HTML document and duplicate ids would make every arrow on
  * the page point at whichever marker was defined last.
  */
-export function toSvg(layout: Layout, idPrefix: string): string {
+export function toSvg(layout: Layout, idPrefix: string, palette: DiagramPalette = DEFAULT_PALETTE): string {
   if (layout.boxes.length === 0) {
     return `<svg class="diagram" role="img" aria-label="empty diagram" width="0" height="0"></svg>`;
   }
@@ -85,7 +94,7 @@ export function toSvg(layout: Layout, idPrefix: string): string {
 
   // Edges first, so a line never covers the box it points at.
   for (const edge of layout.edges) parts.push(...renderEdge(edge, arrow, arrowInferred));
-  for (const box of layout.boxes) parts.push(...renderBox(box));
+  for (const box of layout.boxes) parts.push(...renderBox(box, palette));
 
   parts.push('</svg>');
   return parts.join('\n');
@@ -112,9 +121,9 @@ function hollowMarker(id: string, colour: string): string {
   );
 }
 
-function renderBox(box: LayoutBox): string[] {
-  const fill = FILL[box.kind] ?? FILL['component'];
-  const stroke = box.inference ? INFERRED : (STROKE[box.kind] ?? LINE);
+function renderBox(box: LayoutBox, palette: DiagramPalette): string[] {
+  const fill = palette.fill[box.kind] ?? palette.fill['component'];
+  const stroke = box.inference ? INFERRED : (palette.stroke[box.kind] ?? LINE);
   const dashed = box.inference ? ' stroke-dasharray="5 3"' : '';
   // A store is drawn as a cylinder and an external system with a rounder
   // corner, because those are the shapes a C4 reader already knows. A
@@ -131,7 +140,7 @@ function renderBox(box: LayoutBox): string[] {
     // A filled header strip and a rule under it: the two marks that make a
     // stack of text read as a class or a table rather than as a paragraph.
     const headerHeight = box.dividerAfter * 16 + 8;
-    const headerFill = HEADER_FILL[box.kind] ?? '#39414a';
+    const headerFill = palette.headerFill[box.kind] ?? '#e9e8e3';
     parts.push(
       `<path d="M ${box.x} ${box.y + radius} a ${radius} ${radius} 0 0 1 ${radius} ${-radius} ` +
         `h ${box.width - radius * 2} a ${radius} ${radius} 0 0 1 ${radius} ${radius} ` +
@@ -143,7 +152,7 @@ function renderBox(box: LayoutBox): string[] {
 
   let y = box.y + 10 + FONT_SIZE;
   for (const line of box.lines) {
-    parts.push(renderLine(box, line, y));
+    parts.push(renderLine(box, line, y, palette));
     y += 16;
   }
   parts.push('</g>');
@@ -156,8 +165,8 @@ function renderBox(box: LayoutBox): string[] {
  * Compartment rows are left-aligned and header lines are centred, which is the
  * UML convention and also the only way a column list reads as a list.
  */
-function renderLine(box: LayoutBox, line: LayoutLine, y: number): string {
-  const attributes = styleFor(line);
+function renderLine(box: LayoutBox, line: LayoutLine, y: number, palette: DiagramPalette): string {
+  const attributes = styleFor(line, palette);
   const leftAligned = box.compartment && line.emphasis === 'member';
   const x = leftAligned ? box.x + 10 : box.x + box.width / 2;
   const anchor = leftAligned ? 'start' : 'middle';
@@ -167,7 +176,7 @@ function renderLine(box: LayoutBox, line: LayoutLine, y: number): string {
   );
 }
 
-function styleFor(line: LayoutLine): { size: number; fill: string; style: string } {
+function styleFor(line: LayoutLine, palette: DiagramPalette): { size: number; fill: string; style: string } {
   switch (line.emphasis) {
     case 'name':
       return { size: FONT_SIZE, fill: TEXT, style: ' font-weight="600"' };
@@ -176,7 +185,7 @@ function styleFor(line: LayoutLine): { size: number; fill: string; style: string
     case 'group':
       return { size: FONT_SIZE - 2, fill: MUTED, style: ' font-style="italic"' };
     case 'stereotype':
-      return { size: FONT_SIZE - 2, fill: STEREOTYPE, style: ' font-style="italic"' };
+      return { size: FONT_SIZE - 2, fill: palette.stereotype, style: ' font-style="italic"' };
     case 'member':
       return { size: FONT_SIZE - 1, fill: TEXT, style: '' };
     default:

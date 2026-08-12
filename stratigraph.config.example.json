@@ -23,5 +23,13 @@
     "model": "claude-opus-5",
     "apiKeyEnv": "ANTHROPIC_API_KEY",
     "sendSource": false
+  },
+
+  "report": {
+    "brand": {
+      "name": null,
+      "logo": null,
+      "accent": null
+    }
   }
 }
