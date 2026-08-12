@@ -2,54 +2,81 @@
 
 **Read the layers of a codebase.**
 
+[![npm](https://img.shields.io/npm/v/stratigraph)](https://www.npmjs.com/package/stratigraph)
+[![CI](https://github.com/imashishsharma/stratigraph/actions/workflows/ci.yml/badge.svg)](https://github.com/imashishsharma/stratigraph/actions/workflows/ci.yml)
+[![license: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+[![node >=18.18](https://img.shields.io/badge/node-%3E%3D18.18-brightgreen)](package.json)
+
 Stratigraphy is how archaeologists read a site: layer by layer, deducing the
 order things happened from what sits on top of what. `stratigraph` does the same
 to a large codebase — it reads the source, reads the git history, and
 reconstructs how the thing came to be shaped the way it is.
 
 Aimed at monoliths and multi-module builds of 100k+ LOC where nobody remembers
-why things are the way they are. Java/Spring Boot and Angular first.
+why things are the way they are. Java/Spring Boot and Angular first. It runs on
+repositories that do not compile, have never had `node_modules` installed, and
+use layouts nobody has used since Ant — because those are exactly the
+repositories nobody remembers.
 
-> **Status: M4.** The Java extractor, the package graph, history mining, the
-> interpretation layer and the MCP server all work. Pointed at
-> [apache/dubbo](https://github.com/apache/dubbo) — 4,053 Java files, no Spring
-> Boot, `javax.*`, Spring XML wiring — it produces 47,350 nodes and 163,693
-> edges in 18 seconds and reports 17 package cycles across 652 packages, three
-> verified by hand against the cited lines. It then mines 8,893 commits in 4.5
-> seconds (332 MB peak), resolving 6,189 paths through rename chains, and finds
-> 3,303 co-changing file pairs the dependency graph cannot explain.
->
-> It then clusters those packages and has a model name them — under a citation
-> check that rejects any sentence naming something the model was not shown.
-> Across dubbo's 38 evidence packs that check sits at 38 of 38 grounded
-> descriptions accepted and zero fabrications missed, and it is re-run against
-> five kinds of mutated identifier on every change to the rule.
->
-> All of it is then served over MCP, and a fresh Claude Code with dubbo out of
-> context answered five structural questions from it correctly — every answer
-> checked by hand against the lines it cited.
->
-> **M5 adds the second stack.** The Angular extractor reads TypeScript with the
-> compiler API and templates with `@angular/compiler` — and deliberately not
-> with `@angular/compiler-cli`, so it works on a repository that has never been
-> installed. Pointed at [bitwarden/clients](https://github.com/bitwarden/clients)
-> with no `node_modules` present, it produces 42,016 nodes and 76,179 edges from
-> 5,788 sources in 5.6 seconds, including 7,024 DI edges, 165 routes and 4,013
-> component relationships read out of templates. 87% of the DI edges resolve
-> through the type checker, which is what follows a barrel re-export to the file
-> the class is actually declared in.
->
-> Both extractors write into one run, so an Angular service and the Spring
-> endpoint it calls can be joined — as an **inference**, never as a fact.
->
-> **M6 adds the report.** `stratigraph report` writes C4 diagrams for all four
-> levels — including class diagrams — an ER model read out of the O/R mappings,
-> the HTTP surface, a dependency matrix and ranked hotspots, as Structurizr
-> DSL, as Mermaid, and as a single self-contained HTML page. No script, no
-> network, rendered by a layout engine small enough that its SVG is asserted
-> byte-for-byte in a fixture test. Every relationship it draws is followed by
-> the edges behind it with file and line, and the page ends with what the run
-> did not see.
+## What comes out
+
+- **A fact graph** — packages, classes, methods, endpoints, DI edges, routes,
+  O/R mappings — in a local SQLite file, every row citing a file and line, a
+  commit sha, or the build file it was read from.
+- **History you can act on** — hotspots ranked by churn × complexity, files
+  whose history is one person, and files that change together over and over
+  with *nothing in the code connecting them*.
+- **C4 diagrams at all four levels**, an ER model read out of the O/R mappings,
+  the HTTP surface, and a ranked findings list — as Structurizr DSL, as
+  Mermaid, and as one self-contained HTML page: no script, no network, no CDN.
+- **An MCP server**, so an agent working in the codebase can ask structural
+  questions instead of grepping for them.
+- **Optionally, model-written names and descriptions** for the package
+  clusters — under a citation check, enforced in code, that rejects any
+  sentence naming something the model was not shown.
+
+## Sixty seconds
+
+```sh
+npm install -g stratigraph      # or run every command through: npx stratigraph
+
+cd ~/work                       # the fact store lands here, not in the repo
+stratigraph init    --repo ../some-monolith   # create the fact store
+stratigraph extract --repo ../some-monolith   # parse the source into facts
+stratigraph history --repo ../some-monolith   # mine git: churn, coupling, authors
+stratigraph analyze --repo ../some-monolith --no-llm  # cycles, clusters, hotspots
+stratigraph report  --repo ../some-monolith --out ./arch
+open ./arch/index.html
+```
+
+TypeScript and Angular analysis works out of the box — the extractor ships in
+this package and runs on the Node you already have. Java needs a JDK 17+ and
+the extractor jar; [The Java extractor](#the-java-extractor) has the two
+commands. No API key is needed for any of the above: `--no-llm` is the whole
+structural report, and a model only ever adds prose on top of it.
+
+```sh
+stratigraph doctor    # says which of these your machine can do right now
+```
+
+## Contents
+
+- [The rule that shapes everything](#the-rule-that-shapes-everything)
+- [Measured on real repositories](#measured-on-real-repositories)
+- [Install](#install)
+- [Set your API key](#set-your-api-key) — optional
+- [Use](#use)
+  - [Angular, and the endpoint it might be calling](#angular-and-the-endpoint-it-might-be-calling)
+  - [History, and the coupling nobody wrote down](#history-and-the-coupling-nobody-wrote-down)
+  - [Clusters, and the packages whose name is a lie](#clusters-and-the-packages-whose-name-is-a-lie)
+  - [Interpretation, and what stops it inventing things](#interpretation-and-what-stops-it-inventing-things)
+  - [The report you would actually show someone](#the-report-you-would-actually-show-someone)
+  - [Ask it questions from an agent](#ask-it-questions-from-an-agent) — MCP
+  - [The Java extractor](#the-java-extractor)
+  - [The TypeScript extractor](#the-typescript-extractor)
+  - [Configuration](#configuration)
+- [Architecture](#architecture)
+- [Development](#development)
 
 ## The rule that shapes everything
 
@@ -68,35 +95,80 @@ See [ADR-0002](docs/adr/0002-sqlite-fact-store.md).
 
 The whole pipeline runs with `--no-llm` and still produces a useful report.
 
+## Measured on real repositories
+
+Every milestone ended with an acceptance run against a repository that is not a
+fixture. The numbers below come from those runs, each recorded in an ADR with
+what produced it — including the runs that produced nothing.
+
+**[apache/dubbo](https://github.com/apache/dubbo)** — 4,053 Java files, no
+Spring Boot, `javax.*`, Spring XML wiring: 47,350 nodes and 163,693 edges in
+18 seconds; 17 package cycles across 652 packages, three verified by hand
+against the cited lines. History: 8,893 commits mined in 4.5 seconds (332 MB
+peak), 6,189 paths resolved through rename chains, 3,303 co-changing file
+pairs the dependency graph cannot explain. The interpretation layer's citation
+check held at 38 of 38 grounded cluster descriptions accepted, zero
+fabrications missed — and it is re-run against five kinds of mutated
+identifier on every change to the rule.
+
+**[bitwarden/clients](https://github.com/bitwarden/clients)** — 5,788
+TypeScript sources, analysed with no `node_modules` present: 42,016 nodes and
+76,179 edges in 5.6 seconds, including 7,024 DI edges, 165 routes and 4,013
+component relationships read out of templates. 87% of the DI edges resolve
+through the type checker, which is what follows a barrel re-export to the file
+the class is actually declared in.
+
+**[spring-petclinic](https://github.com/spring-projects/spring-petclinic)** —
+49 Java sources, 1,040 commits: 6 tables with 4 relationships, 6 class
+diagrams, 17 endpoints and 44 ranked findings, every one carrying a
+`file:line` or a commit sha.
+
+**[jhipster-sample-app](https://github.com/jhipster/jhipster-sample-app)** —
+the wildcard-import stress test. JHipster generates every REST controller with
+`import org.springframework.web.bind.annotation.*;`, which a source-only
+resolver must not guess through — a repository can declare its own
+`@GetMapping`. v1.3 read 2 endpoints out of 136 Java sources and said why on
+every refusal. v1.4 *earns* the resolution instead
+([ADR-0023](docs/adr/0023-earning-resolution-through-a-wildcard-import.md))
+and reads 41 — while still refusing the 8 that are genuinely ambiguous,
+naming the competing imports on each one.
+
+And over MCP: a fresh Claude Code session, with dubbo out of its context,
+answered five structural questions from the store correctly — every answer
+checked by hand against the lines it cited. One of its numbers disagreed with
+`git log --follow`, and the tool turned out to be right.
+
 ## Install
 
 ```sh
-npx stratigraph --help
+npm install -g stratigraph
 ```
 
 Requires Node 18.18 or newer. Nothing else, until you analyse Java — the Java
-extractor needs a JDK 17+ available, and tells you so rather than crashing:
+extractor needs a JDK 17+ available, and tells you so rather than crashing.
+`stratigraph doctor` is the honest inventory of what your machine can do:
 
-```sh
-stratigraph doctor
+```console
+$ stratigraph doctor
+ok   stratigraph     v1.4.0, fact-store schema v1
+ok   node            v20.11.1 on darwin-arm64
+ok   git             git version 2.50.1
+warn java            1.8.0_432 from JAVA_HOME is below JDK 17; the Java extractor
+                     will not run (this limits the analyser, not the code it can analyse)
+warn java extractor  jar not found — see the README for the two commands that build it
+ok   ts extractor    dist/extractors/typescript/main.js (built, no JDK required)
+ok   config          defaults (no stratigraph.config.json found)
+warn model           claude-opus-5, but no credential found
+--   database        .stratigraph/my-repo.db does not exist yet — run `stratigraph init`
 ```
 
-```
-ok   stratigraph  v1.0.1, fact-store schema v1
-ok   node         v20.11.1 on darwin-arm64
-ok   git          git version 2.50.1
-warn java         1.8.0_432 from JAVA_HOME is below JDK 17; the Java extractor
-                  will not run (this limits the analyser, not the code it can analyse)
-warn extractor    Java extractor jar not found — build it with
-                  `cd extractors/java && ./mvnw package`
-ok   config       defaults (no stratigraph.config.json found)
-warn model        claude-opus-5, but no credential found
---   database     .stratigraph/my-repo.db does not exist yet — run `stratigraph init`
-```
-
-A Docker image is the second channel, for environments where you would rather
-not think about toolchains at all. See
-[ADR-0004](docs/adr/0004-distribution-and-runtime-independence.md).
+Every `warn` above still leaves a working tool: that machine can analyse any
+TypeScript or Angular repository, mine any git history, and produce the full
+structural report. A Docker image that carries its own JDK is the planned
+second channel, for environments where you would rather not think about
+toolchains at all — see
+[ADR-0004](docs/adr/0004-distribution-and-runtime-independence.md) for where
+distribution is headed.
 
 ## Set your API key
 
@@ -230,8 +302,11 @@ excluded from the package graph, so no cycle can be assembled out of a string
 match. Only literal and template-literal URLs are matched; a computed one gets
 a diagnostic and no edge, and a URL matching two endpoints equally well gets a
 diagnostic naming both rather than a coin toss
-([ADR-0018](docs/adr/0018-cross-stack-links-are-inferences.md), which also
-records what this cost on a real JHipster monolith: nothing at all, honestly).
+([ADR-0018](docs/adr/0018-cross-stack-links-are-inferences.md)). On a real
+JHipster monolith that honesty is visible: its Angular services build every
+URL dynamically, so the six candidate calls match eight endpoints equally
+well each — and the run records six diagnostics naming all eight, not six
+guessed edges.
 
 It also reports subscriptions nothing can end — no `takeUntil`, no retained
 `Subscription`, no `ngOnDestroy` on the class. All three have to hold, so a
@@ -498,13 +573,31 @@ on a repository that does not compile, has no build file, or uses a layout
 nobody has used since Ant. Plain core Java with no framework at all gets the
 full structural output — package graph, cycles and all.
 
-Until the first release with a jar attached, build it from a checkout:
+The npm package does not ship the jar — it is 23 MB of JVM bytecode. Until a
+release has one attached to download, build it once from a checkout:
 
 ```sh
-cd extractors/java && ./mvnw package
+git clone https://github.com/imashishsharma/stratigraph
+cd stratigraph/extractors/java && ./mvnw package
 ```
 
-`stratigraph doctor` reports where it found the jar and when it was built.
+then point at it with `--extractor-jar <path>`, `java.jar` in the config file,
+or the `STRATIGRAPH_JAVA_JAR` environment variable. `stratigraph doctor`
+reports where it found the jar and when it was built.
+
+**Wildcard imports are refused, then earned.** `@GetMapping` under
+`import org.springframework.web.bind.annotation.*;` is genuinely ambiguous
+from one file's source — a repository can declare its own `GetMapping` — so
+the extractor does not guess. Since v1.4 the resolution is *earned* instead
+([ADR-0023](docs/adr/0023-earning-resolution-through-a-wildcard-import.md)):
+the name resolves when the known-annotation table places it in the one
+wildcard-imported package and no type of that name is declared anywhere in the
+parsed source set. Facts resolved this way carry
+`resolution: "wildcard-import"` so they can always be told apart from a
+single-type import, and every refusal that remains names the condition that
+failed — the competing wildcard imports, or the shadowing declaration and the
+file it sits in. On JHipster's generated controllers this is the difference
+between 2 endpoints and 41.
 
 What it cannot see without a classpath is stated rather than guessed:
 meta-annotated custom stereotypes, members inherited from third-party
