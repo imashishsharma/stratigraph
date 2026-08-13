@@ -1,8 +1,28 @@
 # ADR-0004: Distribution — one npm package, a fetched extractor jar, a Docker image
 
-- Status: accepted
+- Status: accepted; implemented in M8, with one amendment below
 - Date: 2026-07-28
 - Milestone: M0
+
+## Amendment (M8): the fetch is a command, not a first use
+
+This ADR says the jar is "fetched on first use". It is not. It is fetched by
+`stratigraph fetch-extractor`, and `extract` never reaches the network — the
+missing-jar message names the command instead of running it.
+
+The consequence section below already required the download to be "explicit,
+logged, checksum-verified, and skippable", and the strongest available reading
+of *explicit* is that the user typed it. CLAUDE.md states that extraction and
+history mining run entirely locally with no network access. A first-use fetch
+would make that sentence need a footnote; a separate command lets it stay true
+as written, which matters more for a tool asking to be pointed at a private
+codebase than one saved keystroke does.
+
+Everything else stands: cached per version under the platform cache dir,
+`STRATIGRAPH_CACHE_HOME` for a pre-populated or air-gapped cache, verified
+against a digest written into the npm tarball by the same release job that
+builds and attaches the jar — so the digest never arrives from the same place
+as the file it describes. There is no flag to skip verification.
 
 ## Context
 

@@ -13,6 +13,12 @@ stratigraph.config.local.json
 # Java extractor build output (M1)
 extractors/java/target/
 
+# Written by the release workflow from the jar it is about to attach, and
+# shipped in the npm tarball. Never committed: a digest in git would date from
+# whenever someone last ran maven, and `fetch-extractor` would refuse every
+# real download for the rest of the release.
+extractor-checksum.json
+
 # Scratch repo built by fixtures/git-log/build-probe-repo.sh. The captured log
 # is committed; a nested git repo is not.
 fixtures/git-log/repo/

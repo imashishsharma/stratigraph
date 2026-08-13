@@ -1,24 +1,27 @@
 /**
  * Finding the Java extractor jar.
  *
- * ADR-0004 describes the end state: the jar is downloaded from the GitHub
- * release matching the installed package version, checksum-verified, and cached
- * under the platform cache directory. That path lands when there is a release
- * with a jar attached to fetch — it cannot be built or tested against nothing.
+ * Four places someone can put one and one the tool fills in itself: the cache
+ * written by `stratigraph fetch-extractor`, which is the path a user who did
+ * not build this from a checkout takes (ADR-0004). A locally built jar still
+ * wins over a downloaded one, because a developer who just ran maven means the
+ * jar they just built.
  *
- * Until then the jar is supplied locally, and the failure mode when it is
- * absent has to be a sentence that tells the user what to do rather than a
- * stack trace naming a path they have never heard of.
+ * When there is none, the failure has to be a sentence that says what to do
+ * rather than a stack trace naming a path the reader has never heard of.
  */
 
 import { existsSync, statSync } from 'node:fs';
 import { isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-export const JAR_NAME = 'stratigraph-java-extractor.jar';
+import { TOOL_VERSION } from '../version.js';
+import { cachedJarPath, JAR_NAME } from './jar-cache.js';
+
+export { JAR_NAME };
 export const JAR_ENV_VAR = 'STRATIGRAPH_JAVA_JAR';
 
-export type JarSource = 'flag' | 'config' | 'env' | 'build';
+export type JarSource = 'flag' | 'config' | 'env' | 'build' | 'cache';
 
 export interface ExtractorJar {
   path: string;
@@ -34,6 +37,8 @@ export interface FindJarOptions {
   cwd?: string | undefined;
   /** Overridable so a test can point at a fixture instead of a real build. */
   buildOutput?: string | undefined;
+  /** The version whose cached jar to look for. Defaults to this package's. */
+  version?: string | undefined;
 }
 
 /**
@@ -57,6 +62,7 @@ export function findExtractorJar(options: FindJarOptions = {}): ExtractorJar | n
     [options.configJar, 'config'],
     [env[JAR_ENV_VAR], 'env'],
     [options.buildOutput ?? defaultBuildOutput(), 'build'],
+    [cachedJarPath(options.version ?? TOOL_VERSION, { env }), 'cache'],
   ];
 
   for (const [path, source] of candidates) {
@@ -80,13 +86,17 @@ export function missingJarMessage(options: FindJarOptions = {}): string {
     options.configJar ? `java.jar in the config file (${options.configJar})` : null,
     env[JAR_ENV_VAR] ? `${JAR_ENV_VAR}=${env[JAR_ENV_VAR]}` : null,
     options.buildOutput ?? defaultBuildOutput(),
+    cachedJarPath(options.version ?? TOOL_VERSION, { env }),
   ].filter((entry): entry is string => entry !== null);
 
   return [
     'the Java extractor jar was not found. Looked at:',
     ...looked.map((entry) => `  ${entry}`),
     '',
-    'Build it from a checkout:',
+    'Download it, verified against the checksum pinned in this package:',
+    '  stratigraph fetch-extractor',
+    '',
+    'Or build it from a checkout:',
     '  cd extractors/java && ./mvnw package',
     `or point at one with --extractor-jar <path>, java.jar in the config, or ${JAR_ENV_VAR}.`,
   ].join('\n');

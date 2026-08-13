@@ -100,6 +100,45 @@ jobs:
           npx tsx src/cli.ts history --repo fixtures/legacy-java
           npx tsx src/cli.ts analyze --repo fixtures/legacy-java
 
+  image:
+    name: docker image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+
+      # Built on every push and never pushed from here. The release workflow
+      # publishes the same Dockerfile to ghcr.io, and a broken image discovered
+      # at release time would already have an npm publish behind it.
+      - name: Build the image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          load: true
+          tags: stratigraph:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # The image exists to remove the toolchain question, so what it has to
+      # prove is that it answers it: a JDK 17, git, and a jar, all inside.
+      - name: The image carries its own toolchain
+        run: |
+          docker run --rm stratigraph:ci --version
+          docker run --rm stratigraph:ci doctor | tee /tmp/doctor.txt
+          grep -qE '^ok +java ' /tmp/doctor.txt
+          grep -qE '^ok +java extractor' /tmp/doctor.txt
+          grep -qE '^ok +git' /tmp/doctor.txt
+
+      - name: Analyse a mounted repository end to end
+        run: |
+          docker run --rm -v "$PWD:/repo:ro" -v /tmp/out:/work stratigraph:ci \
+            init --repo /repo/fixtures/legacy-java
+          docker run --rm -v "$PWD:/repo:ro" -v /tmp/out:/work stratigraph:ci \
+            extract --repo /repo/fixtures/legacy-java
+          docker run --rm -v "$PWD:/repo:ro" -v /tmp/out:/work stratigraph:ci \
+            analyze --repo /repo/fixtures/legacy-java --no-llm
+
   no-jdk:
     name: no JDK installed
     runs-on: ubuntu-latest

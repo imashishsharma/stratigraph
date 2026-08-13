@@ -13,6 +13,7 @@ import { currentVersion, openDatabase } from '../db/database.js';
 import { SCHEMA_VERSION } from '../db/migrations/index.js';
 import { countCommits, gitToplevel, isShallowClone } from '../history/git-log.js';
 import { findExtractorJar, JAR_ENV_VAR } from '../toolchain/extractor-jar.js';
+import { pinnedChecksum } from '../toolchain/jar-cache.js';
 import { findTsExtractor } from '../toolchain/ts-extractor.js';
 import { resolveCredential, type Credential } from '../interpret/client.js';
 import { discoverJavaRuntimes, findJava, MIN_JAVA_MAJOR } from '../toolchain/java.js';
@@ -56,7 +57,7 @@ export function runDoctor(overrides: ConfigOverrides): Check[] {
     checks.push({
       name: 'java',
       status: 'warn',
-      detail: `not found — the Java extractor needs a JDK ${MIN_JAVA_MAJOR}+ (set java.home or JAVA_HOME); every other extractor still runs`,
+      detail: `not found — the JVM extractor (Java and Kotlin) needs a JDK ${MIN_JAVA_MAJOR}+ (set java.home or JAVA_HOME); every other extractor still runs`,
     });
   } else if (!java.meetsMinimum) {
     const alternatives = discoverJavaRuntimes({ home: overrides.javaHome });
@@ -67,7 +68,7 @@ export function runDoctor(overrides: ConfigOverrides): Check[] {
     checks.push({
       name: 'java',
       status: 'warn',
-      detail: `${java.version} from ${java.source} is below JDK ${MIN_JAVA_MAJOR}${hint}; the Java extractor will not run — this limits the analyser, not the code it can analyse`,
+      detail: `${java.version} from ${java.source} is below JDK ${MIN_JAVA_MAJOR}${hint}; the JVM extractor will not run — this limits the analyser, not the code it can analyse`,
     });
   } else {
     checks.push({
@@ -84,7 +85,7 @@ export function runDoctor(overrides: ConfigOverrides): Check[] {
   checks.push(
     jar
       ? {
-          name: 'java extractor',
+          name: 'jvm extractor',
           status: 'ok',
           // The build date is here because `mvn test` does not repackage, so a
           // developer can easily be running a jar older than their last change
@@ -92,9 +93,14 @@ export function runDoctor(overrides: ConfigOverrides): Check[] {
           detail: `${jar.path} (${jar.source}, built ${builtAt(jar.path)})`,
         }
       : {
-          name: 'java extractor',
+          name: 'jvm extractor',
           status: 'warn',
-          detail: `jar not found — build it with \`cd extractors/java && ./mvnw package\`, or set java.jar / ${JAR_ENV_VAR}`,
+          detail:
+            pinnedChecksum() === null
+              ? // No pinned checksum means this is a checkout, where maven is
+                // the route and a download would be refused anyway.
+                `jar not found — build it with \`cd extractors/java && ./mvnw package\`, or set java.jar / ${JAR_ENV_VAR}`
+              : `jar not found — run \`stratigraph fetch-extractor\` to download it (verified), or set java.jar / ${JAR_ENV_VAR}`,
         },
   );
 
