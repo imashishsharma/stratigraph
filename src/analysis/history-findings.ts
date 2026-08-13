@@ -134,6 +134,28 @@ export function recordHistoryFindings(
     );
   }
 
+  /**
+   * How strong a coupling claim is allowed to be.
+   *
+   * Co-change strength alone is the wrong answer, and petclinic shows why:
+   * `gradle-wrapper.jar` and `gradlew.bat` change together in 11 of 11 commits,
+   * which is a perfect score and means only that one tool regenerates both.
+   * Rated on strength it came out `high` — as did 19 others like it, filling
+   * the severity band that a package cycle competes in.
+   *
+   * The distinguishing fact is already computed for the wording a few lines
+   * up: whether a dependency between the two files *could have been observed*.
+   * When no extractor parses one of them, "they change together with nothing
+   * connecting them" is not a finding about the code, and `staticNote` says so
+   * in the detail. A finding whose own evidence disclaims it must not be rated
+   * as strongly as one that does not (ADR-0028).
+   */
+  function couplingSeverity(pair: CoupledPair, staticGraph: boolean): string {
+    const checkable = staticGraph && pair.parsedA && pair.parsedB;
+    if (!checkable) return 'low';
+    return pair.strength >= 0.8 ? 'high' : pair.strength >= 0.5 ? 'medium' : 'low';
+  }
+
   db.transaction(() => {
     for (const rule of RULES) {
       db.prepare('DELETE FROM finding WHERE run_id = ? AND rule = ?').run(runId, rule);
@@ -163,7 +185,7 @@ export function recordHistoryFindings(
           `  ${pair.pathB}: ${pair.commitsB} commits`,
           staticNote(pair, input.staticGraph),
         ].join('\n'),
-        pair.strength >= 0.8 ? 'high' : pair.strength >= 0.5 ? 'medium' : 'low',
+        couplingSeverity(pair, input.staticGraph),
         shas,
       );
       counts.coupling += 1;
@@ -183,7 +205,11 @@ export function recordHistoryFindings(
             `${Math.round(file.topAuthorShare * 100)}% of the commits.`,
           `  Indentation is a proxy for nesting, not a parsed measure of complexity.`,
         ].join('\n'),
-        index < 3 ? 'high' : index < 10 ? 'medium' : 'low',
+        // Capped at medium on purpose — see `couplingSeverity` and ADR-0028.
+        // Rank position is relative to this repository, so a pristine one would
+        // otherwise mint three `high` findings exactly like a rotten one, and
+        // they would outrank a cited package cycle while doing it.
+        index < 3 ? 'medium' : 'low',
         shas,
       );
       counts.hotspots += 1;

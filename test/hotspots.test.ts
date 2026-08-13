@@ -234,6 +234,39 @@ describe('recordHistoryFindings', () => {
     expect(findings(COUPLING_RULE).map((f) => f['severity'])).toEqual(['high', 'medium', 'low']);
   });
 
+  it('will not rate a coupling claim it could not check as strongly as one it could', () => {
+    // petclinic's `gradle-wrapper.jar` and `gradlew.bat` co-change in 11 of 11
+    // commits — a perfect strength that means one tool regenerates both. Rated
+    // on strength alone that was `high`, and twenty like it filled the band a
+    // package cycle competes in (ADR-0028).
+    recordHistoryFindings(db, runId, {
+      pairs: [
+        pair({ pathA: 'a.java', pathB: 'b.java', strength: 0.95 }),
+        pair({ pathA: 'gradlew', pathB: 'gradlew.bat', strength: 0.95, parsedA: false, parsedB: false }),
+        pair({ pathA: 'c.java', pathB: 'schema.sql', strength: 0.95, parsedB: false }),
+      ],
+      hotspots: [],
+      busFactor: [],
+      staticGraph: true,
+    });
+
+    expect(findings(COUPLING_RULE).map((f) => f['severity'])).toEqual(['high', 'low', 'low']);
+  });
+
+  it('rates nothing as high when there was no static graph to check against', () => {
+    // Every pair has staticEdges 0 here because nothing was extracted, not
+    // because nothing connects them. Severity has to reflect that too, or a
+    // history-only run reports its whole coupling list as high.
+    recordHistoryFindings(db, runId, {
+      pairs: [pair({ strength: 0.95 })],
+      hotspots: [],
+      busFactor: [],
+      staticGraph: false,
+    });
+
+    expect(findings(COUPLING_RULE)[0]?.['severity']).toBe('low');
+  });
+
   it('does not claim an absence it never checked for', () => {
     // With no extracted code, staticEdges is zero for every pair because
     // nothing was looked at. The finding has to say that, or it asserts an
@@ -296,7 +329,10 @@ describe('recordHistoryFindings', () => {
     });
 
     const [finding] = findings(HOTSPOT_RULE);
-    expect(finding?.['severity']).toBe('high');
+    // Medium, not high: hotspot severity comes from rank within this
+    // repository, and a relative position must not outrank a cited structural
+    // defect in the same list (ADR-0028).
+    expect(finding?.['severity']).toBe('medium');
     const cited = db
       .prepare('SELECT commit_sha FROM citation WHERE finding_id = ?')
       .all(finding?.['id']) as Array<{ commit_sha: string }>;
