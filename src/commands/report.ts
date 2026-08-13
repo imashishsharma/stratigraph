@@ -16,7 +16,7 @@ import { loadConfig, type ConfigOverrides } from '../config.js';
 import { resolveBrand, type ResolvedBrand } from '../present/brand.js';
 import { assertSchemaCurrent, openDatabase, type Db } from '../db/database.js';
 import { findRun, latestRun } from '../db/run.js';
-import { info, print } from '../log.js';
+import { info, print, warn } from '../log.js';
 import { describeRun } from '../mcp/queries.js';
 import { buildC4Model } from '../present/c4.js';
 import { buildClassDiagrams } from '../present/classes.js';
@@ -129,6 +129,8 @@ export function runReport(options: ReportOptions): ReportResult {
         runId: summary.runId,
         toolVersion: summary.toolVersion,
         startedAt: summary.startedAt,
+        analysisStored: summary.coverage.analysis,
+        gaps: summary.gaps,
       }),
     );
 
@@ -142,6 +144,20 @@ export function runReport(options: ReportOptions): ReportResult {
         `${data.surface.endpoints.length} endpoint(s), ` +
         `${data.ranked.total - data.ranked.uncited} publishable finding(s)`,
     );
+    // `extract` opens a new run, and this command reports the latest one. Left
+    // silent, "0 publishable finding(s)" on a run nobody analysed reads exactly
+    // like a clean repository — the one misreading this whole project exists to
+    // prevent. It is a warning rather than an error because the diagrams, the
+    // HTTP surface and the data model are all real and worth having.
+    if (!summary.coverage.analysis) {
+      warn(
+        `run ${runId} has no analysis output — no rule was evaluated against it, so the ` +
+          `findings list is empty for that reason and not because the repository is clean. ` +
+          `Run \`stratigraph analyze${options.run === undefined ? '' : ` --run ${runId}`}\`, ` +
+          `then generate this report again.`,
+      );
+    }
+
     // The paths are what the user asked for, so they go to stdout.
     print(`Report written to ${outDir}`);
     for (const file of files) print(`  ${basename(file)}`);

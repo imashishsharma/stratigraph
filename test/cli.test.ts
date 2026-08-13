@@ -101,6 +101,29 @@ describe('stratigraph init', () => {
   });
 });
 
+describe('a command run before init', () => {
+  // Forgetting `init` is the single likeliest first mistake, and every one of
+  // these used to answer it with a better-sqlite3 TypeError under a commander
+  // stack trace. `report` and `mcp` always guarded; the rest did not.
+  for (const args of [
+    ['extract'],
+    ['history'],
+    ['analyze', '--no-llm'],
+    ['report', '--out', 'arch'],
+    ['ingest', '--from', 'facts.ndjson'],
+  ]) {
+    it(`names the missing store and the fix, rather than throwing: ${args[0]}`, () => {
+      const dir = scratch();
+      const { status, stderr } = runCli([...args, '--repo', FIXTURE], dir);
+
+      expect(status).toBe(2);
+      expect(stderr).toMatch(/no fact store at/);
+      expect(stderr).toMatch(/stratigraph (init|extract)/);
+      expect(stderr).not.toMatch(/better-sqlite3|SqliteError|at Command\./);
+    });
+  }
+});
+
 describe('stratigraph ingest', () => {
   it('reads NDJSON from a file into the fact store', async () => {
     const dir = scratch();

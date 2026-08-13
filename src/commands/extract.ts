@@ -2,7 +2,7 @@ import { spawn } from 'node:child_process';
 import { createInterface } from 'node:readline';
 
 import { loadConfig, type ConfigOverrides, type StratigraphConfig } from '../config.js';
-import { assertSchemaCurrent, openDatabase, type Db } from '../db/database.js';
+import { assertSchemaCurrent, openDatabase, requireStore, type Db } from '../db/database.js';
 import { createRun, finishRun } from '../db/run.js';
 import { ingestInto } from '../facts/ingest.js';
 import type { FactWriterStats } from '../facts/writer.js';
@@ -143,6 +143,7 @@ export async function runExtract(options: ExtractOptions): Promise<ExtractResult
     };
   }
 
+  requireStore(config.dbPath, 'run `stratigraph init` first, then this command again.');
   const db = openDatabase(config.dbPath, { mustExist: true });
   try {
     assertSchemaCurrent(db);

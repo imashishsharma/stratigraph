@@ -222,12 +222,16 @@ describe('describeRun', () => {
       staticGraph: true,
       history: false,
       metrics: false,
+      analysis: false,
       interpretation: false,
     });
     // The gaps are the point: an agent must be able to see that hotspots are
     // unavailable before it concludes this codebase has none.
     expect(summary?.gaps.join(' ')).toContain('stratigraph history');
     expect(summary?.gaps.join(' ')).toContain('stratigraph analyze');
+    // An agent reading this run must not take an empty findings list for a
+    // clean one, so the gap has to name which kind of empty it is.
+    expect(summary?.gaps.join(' ')).toContain('no rule was evaluated');
   });
 
   it('says an empty run is empty rather than reporting a clean codebase', () => {

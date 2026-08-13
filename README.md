@@ -74,6 +74,7 @@ stratigraph doctor    # says which of these your machine can do right now
   - [Ask it questions from an agent](#ask-it-questions-from-an-agent) — MCP
   - [The Java extractor](#the-java-extractor)
   - [The TypeScript extractor](#the-typescript-extractor)
+  - [Keeping the fact store small](#keeping-the-fact-store-small)
   - [Configuration](#configuration)
 - [Architecture](#architecture)
 - [Development](#development)
@@ -239,6 +240,7 @@ stratigraph history --repo ../some-monolith   # mine git: churn, complexity, aut
 stratigraph analyze --repo ../some-monolith   # cycles, clusters, coupling, hotspots, ownership
 stratigraph report  --repo ../some-monolith --out ./arch   # C4 diagrams, HTML, ranked findings
 stratigraph mcp     --repo ../some-monolith   # serve it all to an agent over MCP
+stratigraph prune   --repo ../some-monolith --keep 2   # drop old runs, reclaim the space
 ```
 
 `analyze --no-llm` is the whole report minus the prose: clusters, mismatches,
@@ -626,6 +628,48 @@ Each produces a diagnostic and an absence, never a wrong edge.
 
 The fact store defaults to `.stratigraph/<repo-name>.db` **under your current
 directory**, never inside the repository being analysed.
+
+### Keeping the fact store small
+
+Every `extract`, `history` and `ingest` opens a **run**, and a run holds a whole
+copy of the graph for the commit it read. That is what lets you keep last
+quarter's structure next to today's — and it means a store analysed on a
+schedule grows without bound.
+
+```console
+$ stratigraph prune --repo ../some-monolith --keep 2
+run 1    2026-08-12T22:00:06.038Z      343 nodes      205 commits  delete
+run 2    2026-08-12T22:03:23.143Z      343 nodes        0 commits  delete
+run 3    2026-08-12T22:03:25.010Z      343 nodes        0 commits  delete
+run 4    2026-08-13T03:25:56.552Z      343 nodes        0 commits  keep
+run 5    2026-08-13T03:25:58.507Z      343 nodes        0 commits  keep
+3 run(s) deleted. 2.1 MB -> 792.0 KB (1.3 MB reclaimed).
+```
+
+Every run is listed with what it holds and what is about to happen to it,
+because a destructive command reporting only a total gives you no way to notice
+it took the wrong two. `--dry-run` prints exactly that table and writes nothing.
+`--keep` defaults to 3 and must be at least 1; if you want no runs at all,
+delete the file.
+
+The space is actually returned rather than left on SQLite's free list — the
+delete cascades through every table, then the store is vacuumed and the
+write-ahead log folded back in, so the file on disk shrinks.
+
+**Recency is the wrong axis for one thing, and it says so.** `history` attaches
+to the run `extract` opened, so two bare extracts leave the newest runs with no
+commits and all the mined history on an older one. Pruning by recency would
+then delete it, and re-mining a large repository is minutes rather than
+seconds — so that case is a warning before it happens:
+
+```
+warning: every run being deleted carries the git history and none of the kept
+runs has any. After this the store has no commits, and hotspots, churn and
+co-change all become unavailable until you run `stratigraph history` again.
+```
+
+Nothing prunes automatically. A tool that silently discarded the run you were
+about to compare against would be worse than a large file.
 
 ### Configuration
 

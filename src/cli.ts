@@ -12,12 +12,14 @@ import { HistoryError, runHistory } from './commands/history.js';
 import { runIngest } from './commands/ingest.js';
 import { runInit } from './commands/init.js';
 import { McpError, runMcp } from './commands/mcp.js';
+import { DEFAULT_KEEP, PruneError, runPrune } from './commands/prune.js';
 import {
   DEFAULT_TOP as DEFAULT_REPORT_TOP,
   ReportError,
   runReport,
 } from './commands/report.js';
 import { CONFIG_FILENAME, ConfigError, userConfigPath } from './config.js';
+import { MissingStoreError } from './db/database.js';
 import { FactProtocolError } from './facts/ndjson.js';
 import { error, print, setQuiet } from './log.js';
 import { parseLanguages, type Language } from './toolchain/languages.js';
@@ -196,6 +198,19 @@ export function buildProgram(): Command {
     });
 
   program
+    .command('prune')
+    .description('delete all but the newest runs from the fact store, and reclaim the space')
+    .option('--keep <n>', `newest runs to keep (default ${DEFAULT_KEEP})`)
+    .option('--dry-run', 'list what would go; delete nothing')
+    .action((options: { keep?: string; dryRun?: boolean }) => {
+      runPrune({
+        ...overrides(program),
+        keep: parsePositiveInt('--keep', options.keep),
+        dryRun: options.dryRun,
+      });
+    });
+
+  program
     .command('mcp')
     .description('serve the fact store over MCP on stdio, for an agent to query')
     .option('--run <id>', 'serve a specific run instead of the most recent')
@@ -253,6 +268,8 @@ export async function main(argv: string[]): Promise<number> {
       err instanceof ExtractError ||
       err instanceof HistoryError ||
       err instanceof McpError ||
+      err instanceof MissingStoreError ||
+      err instanceof PruneError ||
       err instanceof ReportError
     ) {
       error(err.message);

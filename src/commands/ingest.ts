@@ -2,7 +2,7 @@ import { createReadStream } from 'node:fs';
 import type { Readable } from 'node:stream';
 
 import { loadConfig, type ConfigOverrides } from '../config.js';
-import { assertSchemaCurrent, openDatabase } from '../db/database.js';
+import { assertSchemaCurrent, openDatabase, requireStore } from '../db/database.js';
 import { createRun, finishRun } from '../db/run.js';
 import { ingestInto } from '../facts/ingest.js';
 import type { FactWriterStats } from '../facts/writer.js';
@@ -27,6 +27,7 @@ export interface IngestResult extends FactWriterStats {
  */
 export async function runIngest(options: IngestOptions): Promise<IngestResult> {
   const config = loadConfig(options);
+  requireStore(config.dbPath, 'run `stratigraph init` first, then this command again.');
   const db = openDatabase(config.dbPath, { mustExist: true });
   try {
     assertSchemaCurrent(db);

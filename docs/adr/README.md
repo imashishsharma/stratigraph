@@ -32,6 +32,8 @@ the code when it is incidental. Either way, before the commit.
 | [0022](0022-code-level-and-the-data-model.md) | C4 level 4 per package, an ER model from declared mappings, and the cost of an erased type | accepted |
 | [0023](0023-earning-resolution-through-a-wildcard-import.md) | A wildcard-imported annotation resolves only when the source set proves it can | accepted |
 | [0024](0024-the-tabbed-report.md) | The report is tabbed in CSS alone, summary first, light by default; no guarantee moves | accepted |
+| [0025](0025-report-theming.md) | Brand is config data validated at load; the scheme toggle and print path move no guarantee | accepted |
+| [0026](0026-coverage-describes-the-store.md) | Coverage states what the store holds, never which commands ran; an unanalysed run says so | accepted |
 
 Format: context, decision, alternatives considered (with why each was rejected),
 consequences — including the costs, not only the benefits.

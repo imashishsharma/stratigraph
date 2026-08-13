@@ -15,6 +15,16 @@ export interface MarkdownContext {
   runId: number;
   toolVersion: string;
   startedAt: string;
+  /**
+   * Whether `analyze` left any output on this run — see `Coverage.analysis`.
+   *
+   * This file is the one that leaves the machine: it gets pasted into an issue
+   * with none of the report's limits section around it. So it has to carry the
+   * distinction itself, or an unanalysed run reads as a clean one.
+   */
+  analysisStored: boolean;
+  /** What this run could not answer, and the command that would fix it. */
+  gaps?: string[] | undefined;
 }
 
 export function toMarkdown(ranked: RankedFindings, context: MarkdownContext): string {
@@ -30,14 +40,24 @@ export function toMarkdown(ranked: RankedFindings, context: MarkdownContext): st
 
   if (ranked.total === 0) {
     lines.push(
-      'No findings for this run. That means every rule that ran found nothing —',
-      'not that nothing was looked at. `stratigraph analyze` reports which rules ran.',
+      ...(context.analysisStored
+        ? [
+            'No findings for this run. That means every rule that ran found nothing —',
+            'not that nothing was looked at. `stratigraph analyze` reports which rules ran.',
+          ]
+        : [
+            '**No rule has been evaluated against this run.** No analysis output is stored',
+            `for run ${context.runId} — no cluster, no finding, no coupled pair — so this is`,
+            'an absence of analysis, not a clean result. Run `stratigraph analyze` and',
+            'generate the report again.',
+          ]),
       '',
+      ...limits(context),
     );
     return `${lines.join('\n')}`;
   }
 
-  lines.push(summary(ranked), '');
+  lines.push(summary(ranked), '', ...limits(context));
 
   if (ranked.uncited > 0) {
     lines.push(
@@ -76,6 +96,20 @@ export function toMarkdown(ranked: RankedFindings, context: MarkdownContext): st
   }
 
   return lines.join('\n');
+}
+
+/**
+ * What this run could not answer, restated inside the file itself.
+ *
+ * The HTML report has a limits tab; a markdown file pasted into an issue has
+ * whatever it carries. A list of findings mined from a run with no history is
+ * a different claim from the same list mined from a full one, and the reader
+ * cannot tell without this.
+ */
+function limits(context: MarkdownContext): string[] {
+  const gaps = context.gaps ?? [];
+  if (gaps.length === 0) return [];
+  return ['## Limits of this run', '', ...gaps.map((gap) => `- ${gap}`), ''];
 }
 
 function summary(ranked: RankedFindings): string {

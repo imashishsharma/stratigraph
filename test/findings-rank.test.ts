@@ -285,7 +285,36 @@ describe('findings.md', () => {
     runId: 1,
     toolVersion: '1.3.0',
     startedAt: '2026-07-31T00:00:00Z',
+    analysisStored: true,
   };
+
+  it('says no rule ran, rather than that none found anything, on an unanalysed run', () => {
+    const out = toMarkdown(rankFindings(db, runId, { top: 20 }), {
+      ...context,
+      analysisStored: false,
+      gaps: ['No analysis output is stored for this run. Fix: `stratigraph analyze`.'],
+    });
+    expect(out).toContain('No rule has been evaluated against this run');
+    expect(out).not.toContain('every rule that ran found nothing');
+    expect(out).toContain('## Limits of this run');
+    expect(out).toContain('Fix: `stratigraph analyze`.');
+  });
+
+  it('keeps the clean-result wording when analysis ran and found nothing', () => {
+    const out = toMarkdown(rankFindings(db, runId, { top: 20 }), context);
+    expect(out).toContain('every rule that ran found nothing');
+    expect(out).not.toContain('No rule has been evaluated');
+  });
+
+  it('carries the run limits into the file even when there are findings', () => {
+    finding({ title: 'a.b depends on b.a', severity: 'high', detail: 'two hops' });
+    const out = toMarkdown(rankFindings(db, runId, { top: 20 }), {
+      ...context,
+      gaps: ['No git history was mined. Fix: `stratigraph history`.'],
+    });
+    expect(out).toContain('## Limits of this run');
+    expect(out).toContain('Fix: `stratigraph history`.');
+  });
 
   it('writes the ranked findings with their evidence', () => {
     finding({ title: 'a.b depends on b.a', severity: 'high', detail: 'two hops' });

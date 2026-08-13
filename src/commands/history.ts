@@ -1,5 +1,5 @@
 import { loadConfig, type ConfigOverrides } from '../config.js';
-import { assertSchemaCurrent, openDatabase, type Db } from '../db/database.js';
+import { assertSchemaCurrent, openDatabase, requireStore, type Db } from '../db/database.js';
 import { createRun, finishRun, findRun, latestRun, readHead, type Run } from '../db/run.js';
 import {
   gitPrefix,
@@ -67,6 +67,7 @@ export async function runHistory(options: HistoryOptions): Promise<HistoryResult
     info(`git: analysing ${prefix} of the repository at ${toplevel}`);
   }
 
+  requireStore(config.dbPath, 'run `stratigraph init` first, then this command again.');
   const db = openDatabase(config.dbPath, { mustExist: true });
   try {
     assertSchemaCurrent(db);

@@ -1,4 +1,4 @@
-import { mkdirSync } from 'node:fs';
+import { existsSync, mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 
 import Database from 'better-sqlite3';
@@ -6,6 +6,34 @@ import Database from 'better-sqlite3';
 import { MIGRATIONS, SCHEMA_VERSION, type Migration } from './migrations/index.js';
 
 export type Db = Database.Database;
+
+/**
+ * The store a command needs does not exist yet.
+ *
+ * Its own type because every command that reads the store can hit it, and the
+ * alternative is what shipped before: better-sqlite3's own `TypeError: Cannot
+ * open database because the directory does not exist`, printed with a
+ * commander stack trace, at the exact moment a first-time user forgets
+ * `stratigraph init`.
+ */
+export class MissingStoreError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'MissingStoreError';
+  }
+}
+
+/**
+ * Fail with the command that would fix it, before better-sqlite3 fails without.
+ *
+ * `remedy` completes the sentence "no fact store at <path> — ", so it names the
+ * commands in the order this particular one needs them.
+ */
+export function requireStore(path: string, remedy: string): void {
+  if (path !== ':memory:' && !existsSync(path)) {
+    throw new MissingStoreError(`no fact store at ${path} — ${remedy}`);
+  }
+}
 
 export interface OpenOptions {
   /** Fail instead of creating the file if it does not exist. */

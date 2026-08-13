@@ -69,6 +69,17 @@ export interface Coverage {
   history: boolean;
   /** Any per-file metrics, i.e. churn and complexity. */
   metrics: boolean;
+  /**
+   * Any stored output from `analyze` at all: a cluster, a finding, or a coupled
+   * pair. False means no rule has been evaluated against this run, which reads
+   * identically to "every rule passed" unless something says so — see
+   * ADR-0021 on why an empty findings list must state which kind of empty it is.
+   *
+   * This describes what the store holds, never which commands were run: a run
+   * that `analyze` genuinely left with nothing to say is reported the same way,
+   * and the remedy printed is the same one.
+   */
+  analysis: boolean;
   /** Any model-authored cluster names or findings. */
   interpretation: boolean;
 }
@@ -150,6 +161,10 @@ export function describeRun(db: Db, runId: number): RunSummary | null {
     staticGraph: dependencyEdgeCount(db, runId) > 0,
     history: counts.commits > 0,
     metrics: count(db, 'SELECT COUNT(*) AS n FROM file_metric WHERE run_id = ?', runId) > 0,
+    analysis:
+      counts.clusters > 0 ||
+      count(db, 'SELECT COUNT(*) AS n FROM finding WHERE run_id = ?', runId) > 0 ||
+      count(db, 'SELECT COUNT(*) AS n FROM temporal_coupling WHERE run_id = ?', runId) > 0,
     interpretation:
       count(
         db,
@@ -182,7 +197,13 @@ export function describeRun(db: Db, runId: number): RunSummary | null {
         'will be absent. That is the `--no-llm` path, and everything structural is unaffected.',
     );
   }
-  if (counts.clusters === 0) {
+  if (!coverage.analysis) {
+    gaps.push(
+      'No analysis output is stored for this run — no cluster, no finding, no coupled ' +
+        'pair. An empty findings list here means no rule was evaluated, not that every ' +
+        'rule passed. Fix: `stratigraph analyze`.',
+    );
+  } else if (counts.clusters === 0) {
     gaps.push('No clustering has been run for this run. Fix: `stratigraph analyze`.');
   }
 

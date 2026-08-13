@@ -22,7 +22,7 @@ import {
   type IntentMismatch,
 } from '../analysis/intent-mismatch.js';
 import { buildPackageGraph, DEPENDENCY_EDGE_KINDS } from '../analysis/package-graph.js';
-import { assertSchemaCurrent, openDatabase, type Db } from '../db/database.js';
+import { assertSchemaCurrent, openDatabase, requireStore, type Db } from '../db/database.js';
 import { latestRun } from '../db/run.js';
 import {
   createModelClient,
@@ -103,6 +103,11 @@ export interface AnalyzeResult {
 export async function runAnalyze(options: AnalyzeOptions): Promise<AnalyzeResult> {
   const config = loadConfig(options);
   const top = options.top ?? DEFAULT_TOP;
+  requireStore(
+    config.dbPath,
+    'analyze derives structure from stored facts, it never extracts. ' +
+      'Run `stratigraph extract` or `stratigraph history` first.',
+  );
   const db = openDatabase(config.dbPath, { mustExist: true });
   try {
     assertSchemaCurrent(db);
