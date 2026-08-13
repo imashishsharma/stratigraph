@@ -71,7 +71,12 @@ export function toHtml(data: ReportData, context: ReportContext): string {
   // tab, rather than shipping an empty page.
   const panels: Panel[] = [
     panel('summary', 'Summary', 'Summary', summarySection(data, context)),
-    panel('findings', 'Findings', 'Findings, ranked', findingsSection(data.ranked)),
+    panel(
+      'findings',
+      'Findings',
+      'Findings, ranked',
+      findingsSection(data.ranked, context.run.coverage.analysis),
+    ),
     panel('architecture', 'Architecture', 'Architecture — C4 levels 1 to 3', architecturePanel(data, palette)),
     panel('code', 'Code', 'Code — one class diagram per package', codePanel(data, palette)),
     panel('data', 'Data model', 'Data model', erSection(data.er, palette)),
@@ -87,9 +92,14 @@ export function toHtml(data: ReportData, context: ReportContext): string {
     '<meta charset="utf-8">',
     '<meta name="viewport" content="width=device-width, initial-scale=1">',
     `<title>${escapeText(title)}</title>`,
-    `<style>${STYLE}\n${tabStyle(panels)}${accentStyle(context.brand)}</style>`,
+    `<style>${STYLE}\n${themeStyle()}\n${themeSwitchStyle()}\n${tabStyle(panels)}${accentStyle(context.brand)}</style>`,
     '</head>',
     '<body>',
+    // The scheme toggle: `:root:has()` reads these from anywhere, and a
+    // browser without `:has()` keeps following the OS setting (ADR-0025).
+    '<input type="radio" name="theme" class="tab-input" id="theme-auto" checked>',
+    '<input type="radio" name="theme" class="tab-input" id="theme-light">',
+    '<input type="radio" name="theme" class="tab-input" id="theme-dark">',
     // The tab machinery: one radio per panel, checked = visible. They sit
     // before everything else so a sibling selector can reach both the tab bar
     // and the panels. No script (ADR-0020, ADR-0024).
@@ -117,12 +127,96 @@ export function toHtml(data: ReportData, context: ReportContext): string {
   ].join('\n');
 }
 
+/**
+ * The scheme tokens, one map for both so light and dark cannot drift
+ * (ADR-0025). Everything scheme-independent stays in the static stylesheet.
+ */
+const TOKENS: { light: Record<string, string>; dark: Record<string, string> } = {
+  light: {
+    '--bg': '#f9f9f7',
+    '--panel': '#fcfcfb',
+    '--line': '#e1e0d9',
+    '--text': '#0b0b0b',
+    '--muted': '#52514e',
+    '--accent': '#2a78d6',
+    '--inferred': '#9a6700',
+  },
+  dark: {
+    '--bg': '#0d0d0d',
+    '--panel': '#1a1a19',
+    '--line': '#2c2c2a',
+    '--text': '#ffffff',
+    '--muted': '#c3c2b7',
+    '--accent': '#3987e5',
+    '--inferred': '#e3b341',
+  },
+};
+
+function decls(tokens: Record<string, string>): string {
+  return Object.entries(tokens)
+    .map(([name, value]) => `${name}: ${value};`)
+    .join(' ');
+}
+
+/**
+ * The three blocks that make a declaration pair follow the toggle:
+ * light is the default; the OS may choose dark unless light is forced; dark
+ * can be forced outright. A browser without `:has()` drops the forcing rules
+ * and keeps the OS behaviour, which is what it has today (ADR-0025).
+ */
+function schemeCss(light: string, dark: string): string {
+  return [
+    `:root { ${light} }`,
+    `@media (prefers-color-scheme: dark) { :root { ${dark} } ` +
+      `:root:has(#theme-light:checked) { ${light} } }`,
+    `:root:has(#theme-dark:checked) { ${dark} }`,
+    // Paper is light. Printing the dark scheme wastes toner to say the same thing.
+    `@media print { :root { ${light} } }`,
+  ].join('\n');
+}
+
+function themeStyle(): string {
+  return schemeCss(decls(TOKENS.light), decls(TOKENS.dark));
+}
+
+/** Which switch segment reads active — sibling selectors, no \`:has()\` needed. */
+function themeSwitchStyle(): string {
+  return ['auto', 'light', 'dark']
+    .map(
+      (scheme) =>
+        `#theme-${scheme}:checked ~ .page .theme-switch label[for="theme-${scheme}"] ` +
+        '{ background: var(--accent); color: #ffffff; }',
+    )
+    .join('\n');
+}
+
 /** The brand accent, applied as a token override so every use follows it. */
 function accentStyle(brand: ResolvedBrand | null): string {
   if (brand === null || brand.accent === null) return '';
+  return `\n${schemeCss(`--accent: ${brand.accent.light};`, `--accent: ${brand.accent.dark};`)}`;
+}
+
+/**
+ * The stratigraph mark: three strata, reading top-down the way the tool reads
+ * a codebase. Inline SVG so it costs no request and no bytes beyond these,
+ * and drawn from `--accent` so a branded report's mark keeps to the brand.
+ */
+const STRATA_MARK =
+  '<svg class="strata-mark" viewBox="0 0 24 24" width="22" height="22" ' +
+  'xmlns="http://www.w3.org/2000/svg" aria-hidden="true">' +
+  '<rect x="4" y="4" width="16" height="4.5" rx="1.5" fill="var(--accent)"/>' +
+  '<rect x="2" y="10" width="20" height="4.5" rx="1.5" fill="var(--accent)" opacity="0.62"/>' +
+  '<rect x="6" y="16" width="12" height="4.5" rx="1.5" fill="var(--accent)" opacity="0.34"/>' +
+  '</svg>';
+
+/** Auto / light / dark, forced by CSS alone (ADR-0025). */
+function themeSwitch(): string {
   return (
-    `\n:root { --accent: ${brand.accent.light}; }\n` +
-    `@media (prefers-color-scheme: dark) { :root { --accent: ${brand.accent.dark}; } }`
+    '<span class="theme-switch" aria-label="Colour scheme">' +
+    '<label for="theme-auto">Auto</label>' +
+    '<label for="theme-light">Light</label>' +
+    '<label for="theme-dark">Dark</label>' +
+    '</span>'
   );
 }
 
@@ -177,7 +271,8 @@ function header(context: ReportContext): string {
         '</span>';
   return [
     '<header>',
-    `<div class="brand-row"><p class="brand">stratigraph</p>${brandMark}</div>`,
+    `<div class="brand-row"><p class="brand">${STRATA_MARK}<span>stratigraph</span></p>` +
+      `${brandMark}${themeSwitch()}</div>`,
     `<h1>${escapeText(repoName)}</h1>`,
     '<p class="subtitle">Architecture &amp; structure report</p>',
     '<p class="run-line">' +
@@ -697,15 +792,20 @@ function evidenceList(
   ].join('');
 }
 
-function findingsSection(ranked: RankedFindings): string {
+function findingsSection(ranked: RankedFindings, analysisStored: boolean): string {
   const parts: string[] = [];
 
   if (ranked.total === 0) {
-    return (
-      '<p class="empty">No findings for this run. That means every rule that ran found ' +
-      'nothing &mdash; not that nothing was looked at; the limits below say which ' +
-      'rules could run.</p>'
-    );
+    // Two different kinds of empty, and the difference is the whole point: one
+    // says the rules found nothing, the other says no rule ran (ADR-0021).
+    return analysisStored
+      ? '<p class="empty">No findings for this run. That means every rule that ran found ' +
+          'nothing &mdash; not that nothing was looked at; the limits below say which ' +
+          'rules could run.</p>'
+      : '<p class="empty"><strong>No rule has been evaluated against this run.</strong> ' +
+          'No analysis output is stored for it &mdash; no cluster, no finding, no coupled ' +
+          'pair &mdash; so this is an absence of analysis, not a clean result. Run ' +
+          '<code>stratigraph analyze</code> and generate the report again.</p>';
   }
 
   const publishable = ranked.total - ranked.uncited;
@@ -850,17 +950,12 @@ function footer(run: RunSummary): string {
  * sits next to the word.
  */
 const STYLE = `
+/* Scheme-independent tokens. The light/dark pairs are generated beside this
+   sheet from one map, so the two schemes cannot drift (ADR-0025). */
 :root {
-  --bg: #f9f9f7; --panel: #fcfcfb; --line: #e1e0d9; --text: #0b0b0b;
-  --muted: #52514e; --faint: #898781; --accent: #2a78d6;
-  --inferred: #9a6700; --warn: #d03b3b; --serious: #ec835a; --caution: #fab219;
+  --faint: #898781; --warn: #d03b3b; --serious: #ec835a; --caution: #fab219;
   --diagram-bg: #ffffff;
   --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace;
-}
-@media (prefers-color-scheme: dark) {
-  :root { --bg: #0d0d0d; --panel: #1a1a19; --line: #2c2c2a; --text: #ffffff;
-          --muted: #c3c2b7; --faint: #898781; --accent: #3987e5;
-          --inferred: #e3b341; }
 }
 * { box-sizing: border-box; }
 body {
@@ -879,10 +974,17 @@ a { color: var(--accent); }
 
 /* ------------------------------------------------------------ header */
 header { padding: 18px 0 4px; }
-.brand-row { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; }
+.brand-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+header .brand { display: inline-flex; align-items: center; gap: 8px; }
+.strata-mark { display: block; }
 .brand-co { display: flex; align-items: center; gap: 10px; color: var(--muted);
-            font-size: 13.5px; font-weight: 600; }
+            font-size: 13.5px; font-weight: 600; margin-left: auto; }
 .brand-logo { height: 28px; max-width: 180px; object-fit: contain; display: block; }
+.theme-switch { display: inline-flex; border: 1px solid var(--line); border-radius: 999px;
+                overflow: hidden; background: var(--panel); }
+.theme-switch label { padding: 3px 12px; font-size: 12px; font-weight: 600;
+                      color: var(--muted); cursor: pointer; }
+.theme-switch label:hover { color: var(--text); }
 header .brand { margin: 0 0 14px; font-size: 12px; font-weight: 650; letter-spacing: 0.16em;
                 text-transform: uppercase; color: var(--accent);
                 border-top: 3px solid var(--accent); display: inline-block; padding-top: 8px; }
@@ -1056,7 +1158,7 @@ footer { margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--line);
 
 /* Print is the whole document: every panel, in order, no tab chrome. */
 @media print {
-  .tabs, .tab-input { display: none; }
+  .tabs, .tab-input, .theme-switch { display: none; }
   .panel { display: block !important; break-before: page; }
   .panel:first-of-type { break-before: auto; }
   body { background: #ffffff; }
