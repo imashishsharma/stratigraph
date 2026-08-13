@@ -1,5 +1,5 @@
 import { execFileSync, spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createRequire } from 'node:module';
@@ -60,6 +60,16 @@ function runCli(args: string[], cwd: string): { status: number; stdout: string; 
 
 function scratch(): string {
   return mkdtempSync(join(tmpdir(), 'stratigraph-cli-'));
+}
+
+/** git is present on every CI runner, but the suite must not require it. */
+function hasGit(): boolean {
+  try {
+    execFileSync('git', ['--version'], { stdio: 'ignore' });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 describe('stratigraph init', () => {
@@ -148,46 +158,91 @@ describe('--format json', () => {
   });
 });
 
+/**
+ * A repository these tests fully control, mined by `history` alone.
+ *
+ * Deliberately not `extract` on a fixture: that needs the JVM extractor jar,
+ * and the release workflow builds the jar *after* `npm test` — so these passed
+ * on a developer machine with a jar lying in `target/` and failed in CI, which
+ * is exactly the dependency the TypeScript suite is supposed not to have.
+ *
+ * Two authors, because bus-factor is `high` when a file has exactly one. With
+ * two, nothing history alone produces reaches `high`: hotspots cap at `medium`
+ * and coupling with no static graph is `low` (ADR-0028). That is what makes
+ * "reaches the threshold" and "does not" both deterministic here.
+ */
+function minedRepo(): { dir: string; repo: string } | null {
+  if (!hasGit()) return null;
+
+  const dir = scratch();
+  const repo = join(dir, 'repo');
+  mkdirSync(repo, { recursive: true });
+
+  const git = (args: string[], author: string): void => {
+    execFileSync(
+      'git',
+      [
+        '-c', `user.name=${author}`,
+        '-c', `user.email=${author.toLowerCase().replace(/\s+/g, '.')}@example.invalid`,
+        '-c', 'commit.gpgsign=false',
+        '-c', 'init.defaultBranch=main',
+        ...args,
+      ],
+      { cwd: repo, stdio: 'ignore' },
+    );
+  };
+
+  git(['init'], 'Ada Probe');
+  for (const [n, author] of [
+    [1, 'Ada Probe'],
+    [2, 'Grace Probe'],
+    [3, 'Ada Probe'],
+  ] as const) {
+    writeFileSync(
+      join(repo, 'thing.java'),
+      `class Thing {\n${'    int x;\n'.repeat(n)}}\n`,
+    );
+    git(['add', '-A'], author);
+    git(['commit', '-m', `change ${n}`], author);
+  }
+
+  runCli(['init', '--repo', repo], dir);
+  runCli(['history', '--repo', repo], dir);
+  runCli(['analyze', '--no-llm', '--repo', repo], dir);
+  return { dir, repo };
+}
+
 describe('--fail-on', () => {
   // A distinct exit code is the whole feature: a pipeline must not read
   // "the analyser crashed" as "the repository is clean".
-  it('exits 3 — not 1 or 2 — when the threshold is reached', () => {
-    const dir = scratch();
-    runCli(['init', '--repo', FIXTURE], dir);
-    runCli(['extract', '--repo', FIXTURE], dir);
-    runCli(['history', '--repo', FIXTURE], dir);
-    runCli(['analyze', '--no-llm', '--repo', FIXTURE], dir);
+  it.skipIf(!hasGit())('exits 3 — not 1 or 2 — when the threshold is reached', () => {
+    const mined = minedRepo()!;
 
     const { status, stderr } = runCli(
-      ['analyze', '--no-llm', '--fail-on', 'info', '--repo', FIXTURE],
-      dir,
+      ['analyze', '--no-llm', '--fail-on', 'info', '--repo', mined.repo],
+      mined.dir,
     );
 
     expect(status).toBe(3);
     expect(stderr).toMatch(/finding\(s\) at or above `info`/);
   });
 
-  it('exits 0 when nothing reaches the threshold', () => {
-    const dir = scratch();
-    runCli(['init', '--repo', FIXTURE], dir);
-    runCli(['extract', '--repo', FIXTURE], dir);
+  it.skipIf(!hasGit())('exits 0 when nothing reaches the threshold', () => {
+    const mined = minedRepo()!;
+
     const { status } = runCli(
-      ['analyze', '--no-llm', '--fail-on', 'high', '--repo', FIXTURE],
-      dir,
+      ['analyze', '--no-llm', '--fail-on', 'high', '--repo', mined.repo],
+      mined.dir,
     );
     expect(status).toBe(0);
   });
 
-  it('still writes the JSON document when the gate fails', () => {
-    const dir = scratch();
-    runCli(['init', '--repo', FIXTURE], dir);
-    runCli(['extract', '--repo', FIXTURE], dir);
-    runCli(['history', '--repo', FIXTURE], dir);
-    runCli(['analyze', '--no-llm', '--repo', FIXTURE], dir);
+  it.skipIf(!hasGit())('still writes the JSON document when the gate fails', () => {
+    const mined = minedRepo()!;
 
     const { status, stdout } = runCli(
-      ['analyze', '--no-llm', '--fail-on', 'info', '--format', 'json', '--repo', FIXTURE],
-      dir,
+      ['analyze', '--no-llm', '--fail-on', 'info', '--format', 'json', '--repo', mined.repo],
+      mined.dir,
     );
 
     expect(status).toBe(3);
