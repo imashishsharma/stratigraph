@@ -10,7 +10,7 @@ schema carries a `user_version` and is migrated forward, and every JSON
 document carries `format`, which moves only for a change a parser could trip
 over.
 
-## Unreleased
+## [1.6.0] — 2026-08-14
 
 ### Added
 
@@ -122,6 +122,7 @@ over.
   protocol, the Java extractor, and `init` / `ingest` / `doctor`
   ([ADR-0001](docs/adr/0001-language-split.md)–[ADR-0004](docs/adr/0004-distribution-and-runtime-independence.md)).
 
+[1.6.0]: https://github.com/imashishsharma/stratigraph/releases/tag/v1.6.0
 [1.5.0]: https://github.com/imashishsharma/stratigraph/releases/tag/v1.5.0
 [1.4.0]: https://github.com/imashishsharma/stratigraph/releases/tag/v1.4.0
 [1.3.0]: https://github.com/imashishsharma/stratigraph/releases/tag/v1.3.0

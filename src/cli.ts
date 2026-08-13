@@ -4,10 +4,12 @@ import { pathToFileURL } from 'node:url';
 
 import { Command, Option } from 'commander';
 
-import { AnalysisError, DEFAULT_TOP, runAnalyze } from './commands/analyze.js';
+import { AnalysisError, DEFAULT_TOP, GateError, runAnalyze } from './commands/analyze.js';
 import { runConfigPaths, runConfigSetKey } from './commands/config.js';
 import { runDoctor } from './commands/doctor.js';
+import { DiffError, runDiff } from './commands/diff.js';
 import { ExtractError, runExtract } from './commands/extract.js';
+import { runFetchExtractor } from './commands/fetch-extractor.js';
 import { HistoryError, runHistory } from './commands/history.js';
 import { runIngest } from './commands/ingest.js';
 import { runInit } from './commands/init.js';
@@ -20,8 +22,17 @@ import {
 } from './commands/report.js';
 import { CONFIG_FILENAME, ConfigError, userConfigPath } from './config.js';
 import { MissingStoreError } from './db/database.js';
+import { JarFetchError } from './toolchain/jar-cache.js';
 import { FactProtocolError } from './facts/ndjson.js';
-import { error, print, setQuiet } from './log.js';
+import { error, outputFormat, print, printJson, setFormat, setQuiet } from './log.js';
+import { GATE_SEVERITIES, isGateSeverity, type GateSeverity } from './present/findings.js';
+import {
+  doctorDocument,
+  extractDocument,
+  fetchExtractorDocument,
+  historyDocument,
+  pruneDocument,
+} from './present/json.js';
 import { parseLanguages, type Language } from './toolchain/languages.js';
 import { TOOL_VERSION } from './version.js';
 
@@ -35,6 +46,7 @@ interface GlobalOptions {
   javaHome?: string;
   extractorJar?: string;
   quiet?: boolean;
+  format?: string;
 }
 
 export function buildProgram(): Command {
@@ -65,9 +77,16 @@ export function buildProgram(): Command {
         'send raw source bodies to the model API (off by default)',
       ),
     )
+    .addOption(
+      new Option('--format <format>', "output as 'text' for a person or 'json' for a pipeline")
+        .choices(['text', 'json'])
+        .default('text'),
+    )
     .option('-q, --quiet', 'suppress progress output on stderr')
     .hook('preAction', (thisCommand) => {
-      setQuiet(Boolean((thisCommand.opts() as GlobalOptions).quiet));
+      const opts = thisCommand.opts() as GlobalOptions;
+      setQuiet(Boolean(opts.quiet));
+      setFormat(opts.format === 'json' ? 'json' : 'text');
     });
 
   program
@@ -121,13 +140,18 @@ export function buildProgram(): Command {
         javaOpts?: string;
         lang?: string;
       }) => {
-        await runExtract({
+        const result = await runExtract({
           ...overrides(program),
           extractorJar: options.extractorJar,
           emit: options.emit,
           javaOpts: options.javaOpts ? options.javaOpts.split(/\s+/).filter(Boolean) : undefined,
           languages: parseLanguageFlag(options.lang),
         });
+        // `--emit` already owns stdout: the NDJSON is the product, and a
+        // summary document after it would corrupt the stream it describes.
+        if (outputFormat() === 'json' && !options.emit) {
+          printJson(extractDocument(result));
+        }
       },
     );
 
@@ -137,11 +161,12 @@ export function buildProgram(): Command {
     .option('--since <when>', 'only commits after this date; anything `git log --since` accepts')
     .option('--run <id>', 'attach to a specific run instead of the most recent')
     .action(async (options: { since?: string; run?: string }) => {
-      await runHistory({
+      const result = await runHistory({
         ...overrides(program),
         since: options.since,
         run: parsePositiveInt('--run', options.run),
       });
+      if (outputFormat() === 'json') printJson(historyDocument(result));
     });
 
   program
@@ -159,17 +184,25 @@ export function buildProgram(): Command {
       '--coupling-weight <n>',
       'how much co-change weighs against dependency when clustering (0 disables it)',
     )
+    .addOption(
+      new Option(
+        '--fail-on <severity>',
+        'exit 3 when a publishable finding reaches this severity',
+      ).choices([...GATE_SEVERITIES]),
+    )
     .action(
       async (options: {
         run?: string;
         top?: string;
         maxFilesPerCommit?: string;
         couplingWeight?: string;
+        failOn?: string;
       }) => {
         await runAnalyze({
           ...overrides(program),
           run: parsePositiveInt('--run', options.run),
           top: parsePositiveInt('--top', options.top),
+          failOn: parseFailOn(options.failOn),
           maxFilesPerCommit: parsePositiveInt(
             '--max-files-per-commit',
             options.maxFilesPerCommit,
@@ -188,13 +221,50 @@ export function buildProgram(): Command {
     .requiredOption('--out <dir>', 'directory to write the report into')
     .option('--run <id>', 'report a specific run instead of the most recent')
     .option('--top <n>', `rows per section (default ${DEFAULT_REPORT_TOP})`)
-    .action((options: { out: string; run?: string; top?: string }) => {
+    .addOption(
+      new Option(
+        '--fail-on <severity>',
+        'exit 3 when a publishable finding reaches this severity',
+      ).choices([...GATE_SEVERITIES]),
+    )
+    .action((options: { out: string; run?: string; top?: string; failOn?: string }) => {
       runReport({
         ...overrides(program),
         out: options.out,
         run: parsePositiveInt('--run', options.run),
         top: parsePositiveInt('--top', options.top),
+        failOn: parseFailOn(options.failOn),
       });
+    });
+
+  program
+    .command('diff')
+    .description('compare two runs: findings gained and resolved, and how the structure moved')
+    .option('--from <id>', 'the earlier run (default: the analysed run before --to)')
+    .option('--to <id>', 'the later run (default: the most recent analysed run)')
+    .addOption(
+      new Option(
+        '--fail-on-new <severity>',
+        'exit 3 when a finding this severe is new; pre-existing ones do not count',
+      ).choices([...GATE_SEVERITIES]),
+    )
+    .action((options: { from?: string; to?: string; failOnNew?: string }) => {
+      runDiff({
+        ...overrides(program),
+        from: parsePositiveInt('--from', options.from),
+        to: parsePositiveInt('--to', options.to),
+        failOnNew: parseFailOn(options.failOnNew),
+      });
+    });
+
+  program
+    .command('fetch-extractor')
+    .description('download the Java extractor jar, verified against a pinned checksum')
+    .option('--force', 're-download even if this version is already cached')
+    .option('--dry-run', 'report the URL, target and checksum; download nothing')
+    .action(async (options: { force?: boolean; dryRun?: boolean }) => {
+      const result = await runFetchExtractor({ force: options.force, dryRun: options.dryRun });
+      if (outputFormat() === 'json') printJson(fetchExtractorDocument(result));
     });
 
   program
@@ -203,11 +273,12 @@ export function buildProgram(): Command {
     .option('--keep <n>', `newest runs to keep (default ${DEFAULT_KEEP})`)
     .option('--dry-run', 'list what would go; delete nothing')
     .action((options: { keep?: string; dryRun?: boolean }) => {
-      runPrune({
+      const result = runPrune({
         ...overrides(program),
         keep: parsePositiveInt('--keep', options.keep),
         dryRun: options.dryRun,
       });
+      if (outputFormat() === 'json') printJson(pruneDocument(result));
     });
 
   program
@@ -229,6 +300,10 @@ export function buildProgram(): Command {
     .description('report what this machine can run')
     .action(() => {
       const checks = runDoctor(overrides(program));
+      if (outputFormat() === 'json') {
+        printJson(doctorDocument(checks));
+        return;
+      }
       const width = Math.max(...checks.map((c) => c.name.length));
       for (const check of checks) {
         const mark = check.status === 'ok' ? 'ok  ' : check.status === 'warn' ? 'warn' : '--  ';
@@ -261,13 +336,22 @@ export async function main(argv: string[]): Promise<number> {
     await buildProgram().parseAsync(argv);
     return 0;
   } catch (err) {
+    // A tripped `--fail-on` is not a malfunction, and a pipeline has to tell
+    // the two apart: 3 means the analysis ran and the repository failed the
+    // threshold, where 1 and 2 both mean no verdict was reached.
+    if (err instanceof GateError) {
+      error(err.message);
+      return 3;
+    }
     if (
       err instanceof ConfigError ||
       err instanceof FactProtocolError ||
       err instanceof AnalysisError ||
+      err instanceof DiffError ||
       err instanceof ExtractError ||
       err instanceof HistoryError ||
       err instanceof McpError ||
+      err instanceof JarFetchError ||
       err instanceof MissingStoreError ||
       err instanceof PruneError ||
       err instanceof ReportError
@@ -291,6 +375,20 @@ function parseLanguageFlag(value: string | undefined): Set<Language> | 'all' | u
   } catch (err) {
     throw new ConfigError(`--lang: ${(err as Error).message}`);
   }
+}
+
+/**
+ * `--fail-on`. Commander's `.choices()` already rejects anything else, so this
+ * is the narrowing rather than the validation.
+ */
+function parseFailOn(value: string | undefined): GateSeverity | undefined {
+  if (value === undefined) return undefined;
+  if (!isGateSeverity(value)) {
+    throw new ConfigError(
+      `--fail-on must be one of ${GATE_SEVERITIES.join(', ')}, got "${value}"`,
+    );
+  }
+  return value;
 }
 
 function parsePositiveInt(flag: string, value: string | undefined): number | undefined {
