@@ -13,7 +13,7 @@ to a large codebase — it reads the source, reads the git history, and
 reconstructs how the thing came to be shaped the way it is.
 
 Aimed at monoliths and multi-module builds of 100k+ LOC where nobody remembers
-why things are the way they are. Java/Spring Boot and Angular first. It runs on
+why things are the way they are. Java, Kotlin and Angular first. It runs on
 repositories that do not compile, have never had `node_modules` installed, and
 use layouts nobody has used since Ant — because those are exactly the
 repositories nobody remembers.
@@ -29,6 +29,9 @@ repositories nobody remembers.
 - **C4 diagrams at all four levels**, an ER model read out of the O/R mappings,
   the HTTP surface, and a ranked findings list — as Structurizr DSL, as
   Mermaid, and as one self-contained HTML page: no script, no network, no CDN.
+- **A diff between two runs**, so CI can fail a pull request for the cycle it
+  *added* and stay quiet about the six hundred that were already there — the
+  only gate a legacy monolith can switch on today.
 - **An MCP server**, so an agent working in the codebase can ask structural
   questions instead of grepping for them.
 - **Optionally, model-written names and descriptions** for the package
@@ -50,10 +53,11 @@ open ./arch/index.html
 ```
 
 TypeScript and Angular analysis works out of the box — the extractor ships in
-this package and runs on the Node you already have. Java needs a JDK 17+ and
-the extractor jar; [The Java extractor](#the-java-extractor) has the two
-commands. No API key is needed for any of the above: `--no-llm` is the whole
-structural report, and a model only ever adds prose on top of it.
+this package and runs on the Node you already have. Java and Kotlin need a JDK 17+ and
+one more command, `stratigraph fetch-extractor`, which downloads the extractor
+jar and verifies it against a checksum pinned in this package. No API key is
+needed for any of the above: `--no-llm` is the whole structural report, and a
+model only ever adds prose on top of it.
 
 ```sh
 stratigraph doctor    # says which of these your machine can do right now
@@ -72,9 +76,10 @@ stratigraph doctor    # says which of these your machine can do right now
   - [Interpretation, and what stops it inventing things](#interpretation-and-what-stops-it-inventing-things)
   - [The report you would actually show someone](#the-report-you-would-actually-show-someone)
   - [Ask it questions from an agent](#ask-it-questions-from-an-agent) — MCP
-  - [The Java extractor](#the-java-extractor)
+  - [The JVM extractor — Java and Kotlin](#the-jvm-extractor--java-and-kotlin)
   - [The TypeScript extractor](#the-typescript-extractor)
   - [Keeping the fact store small](#keeping-the-fact-store-small)
+  - [In a pipeline: JSON and a quality gate](#in-a-pipeline-json-and-a-quality-gate)
   - [Configuration](#configuration)
 - [Architecture](#architecture)
 - [Development](#development)
@@ -165,11 +170,17 @@ warn model           claude-opus-5, but no credential found
 
 Every `warn` above still leaves a working tool: that machine can analyse any
 TypeScript or Angular repository, mine any git history, and produce the full
-structural report. A Docker image that carries its own JDK is the planned
-second channel, for environments where you would rather not think about
-toolchains at all — see
-[ADR-0004](docs/adr/0004-distribution-and-runtime-independence.md) for where
-distribution is headed.
+structural report. `stratigraph fetch-extractor` clears the second warning;
+the first needs a JDK 17+, which the tool will find wherever it is installed
+rather than making you export `JAVA_HOME`.
+
+For environments where you would rather not think about toolchains at all,
+the image carries its own JDK, git and extractor:
+
+```sh
+docker run --rm -v "$PWD:/repo:ro" -v "$PWD/out:/work" \
+  ghcr.io/imashishsharma/stratigraph doctor
+```
 
 ## Set your API key
 
@@ -239,6 +250,7 @@ stratigraph extract --repo ../some-monolith   # run every applicable extractor i
 stratigraph history --repo ../some-monolith   # mine git: churn, complexity, authors
 stratigraph analyze --repo ../some-monolith   # cycles, clusters, coupling, hotspots, ownership
 stratigraph report  --repo ../some-monolith --out ./arch   # C4 diagrams, HTML, ranked findings
+stratigraph diff    --repo ../some-monolith   # what changed since the previous run
 stratigraph mcp     --repo ../some-monolith   # serve it all to an agent over MCP
 stratigraph prune   --repo ../some-monolith --keep 2   # drop old runs, reclaim the space
 ```
@@ -339,6 +351,18 @@ written down in [ADR-0011](docs/adr/0011-which-commits-count.md): merge commits
 are excluded, commits touching more than 50 files take no part in pairing (one
 repo-wide reformat otherwise couples everything it touched), and a pair must
 co-change *more often than chance*, not merely often.
+
+A fourth decides how loudly it is reported. `gradle-wrapper.jar` and
+`gradlew.bat` change together in 11 of 11 commits — a perfect co-change score
+that means one tool regenerates both. **A pair is rated on its strength only
+when a dependency between the two files could have been observed at all**: the
+run has a static graph, and both files are ones an extractor parses. Otherwise
+it is `low`, because the finding's own detail already says no dependency could
+have been seen either way, and a finding must not be rated as strongly as one
+whose evidence does not disclaim it. On petclinic that is the difference
+between 23 high findings and 7 — and between a `--fail-on high` gate that fires
+on every repository with a build wrapper and one worth turning on
+([ADR-0028](docs/adr/0028-severity-and-what-was-checkable.md)).
 
 Renames are followed, so a file moved three years ago has one history rather
 than two halves. `git log --follow` cannot do this — it takes exactly one
@@ -566,7 +590,7 @@ was checked by hand against the lines it cited. One of its numbers disagreed
 with `git log --follow`, and the tool turned out to be right; the run is
 recorded in the ADR.
 
-### The Java extractor
+### The JVM extractor — Java and Kotlin
 
 Needs a JDK 17+ to *run in*; it parses source of any vintage, including Java 8.
 It **parses the source set and never runs or resolves your build**
@@ -575,17 +599,101 @@ on a repository that does not compile, has no build file, or uses a layout
 nobody has used since Ant. Plain core Java with no framework at all gets the
 full structural output — package graph, cycles and all.
 
-The npm package does not ship the jar — it is 23 MB of JVM bytecode. Until a
-release has one attached to download, build it once from a checkout:
+**Kotlin is read by the same extractor, in the same run.** That last part is
+the point: Kotlin turns up *inside* Java repositories — a Spring Boot service
+with a Kotlin test module, a team migrating package by package — and two
+separate analyses could not join a Kotlin service to the Java repository it
+calls, because nodes are scoped by `run_id`. One run, one graph.
+
+Everything built on the fact graph therefore works on Kotlin without knowing
+about it. On a four-file Kotlin fixture:
+
+```
+node  class     com.example.shop.service.OrderService
+edge  annotated_with  OrderService -> org.springframework.stereotype.Service
+edge  injects         OrderService -> repo.OrderRepository
+node  endpoint  GET /api/orders/{id}
+edge  handles         OrderController#byId(long) -> GET /api/orders/{id}
+edge  maps_to         domain.Order -> orders
+```
+
+— constructor injection, the HTTP surface, and an ER model with `Long id PK`
+read out of `@Entity` and `@Id`. `--lang kotlin`, `kt` and `jvm` all name this
+extractor; `.kt` files select it with no flag at all. A `build.gradle.kts` is
+read as a module's identity, never as a source file.
+
+What the `J` model has no place for is read as its nearest Java shape or not at
+all: extension functions appear as methods, and coroutines and `object`
+declarations have no distinct representation yet. Nothing is guessed
+([ADR-0029](docs/adr/0029-kotlin-rides-the-java-extractor.md)).
+
+**One boundary is worth knowing before you rely on a mixed repository.** The two
+languages are parsed by different parsers that cannot see each other's sources,
+so a Kotlin class injecting a Java one resolves — that comes from the import and
+the declared type — while a *call* from Kotlin into a Java method does not:
+
+```
+edge  injects  com.example.NewService -> com.example.LegacyRepository   ✓
+info: 1 call site(s) could not be resolved to a declaring type and were
+      not recorded as edges
+```
+
+Closing that would mean compiling the Java half and handing the Kotlin parser a
+classpath, which is the one thing this extractor will not do. So it is an
+absence with a diagnostic attached, never a guessed edge.
+
+The npm package does not ship the jar — it is 22 MB of JVM bytecode, and most
+installs never analyse a line of Java. One command downloads it:
+
+```sh
+stratigraph fetch-extractor
+```
+
+It is verified against a SHA-256 **written into the npm package by the same
+release job that built and attached the jar**, so the digest never arrives from
+the same place as the file it describes. A mismatch writes nothing and says so.
+There is no flag to skip the check. The jar is cached per version under
+`~/.cache/stratigraph/` — keyed by version, so installing an older
+`stratigraph` cannot silently run a newer extractor — and every command finds
+it there afterwards with no flag.
+
+**This is the only thing in the tool that touches the network, and it is a
+command rather than something `extract` does on your behalf.** Extraction and
+history mining are entirely local; keeping that true is worth one extra line
+([ADR-0004](docs/adr/0004-distribution-and-runtime-independence.md)).
+
+`--dry-run` prints the URL, the target path and the pinned digest without
+downloading. For an air-gapped machine, fetch the jar somewhere else and drop
+it in — `STRATIGRAPH_CACHE_HOME` points the cache anywhere:
+
+```sh
+STRATIGRAPH_CACHE_HOME=/mnt/share/stratigraph stratigraph extract --repo ../monolith
+```
+
+Building it yourself still works and still wins over a downloaded jar, because
+a developer who has just run maven means the jar they just built:
 
 ```sh
 git clone https://github.com/imashishsharma/stratigraph
 cd stratigraph/extractors/java && ./mvnw package
 ```
 
-then point at it with `--extractor-jar <path>`, `java.jar` in the config file,
-or the `STRATIGRAPH_JAVA_JAR` environment variable. `stratigraph doctor`
-reports where it found the jar and when it was built.
+You can also point at one with `--extractor-jar <path>`, `java.jar` in the
+config file, or `STRATIGRAPH_JAVA_JAR`. `stratigraph doctor` reports which of
+these it found, and when the jar was built.
+
+#### Or skip the toolchain question entirely
+
+The image carries its own JDK 17, git and the extractor, so nothing on the host
+matters:
+
+```sh
+docker run --rm -v "$PWD:/repo:ro" -v "$PWD/out:/work" \
+  ghcr.io/imashishsharma/stratigraph extract --repo /repo
+```
+
+The repository is mounted read-only and the fact store is written to `/work`,
+never inside the repository being analysed — the same rule the CLI follows.
 
 **Wildcard imports are refused, then earned.** `@GetMapping` under
 `import org.springframework.web.bind.annotation.*;` is genuinely ambiguous
@@ -670,6 +778,143 @@ co-change all become unavailable until you run `stratigraph history` again.
 
 Nothing prunes automatically. A tool that silently discarded the run you were
 about to compare against would be worse than a large file.
+
+### In a pipeline: JSON and a quality gate
+
+`--format json` is global. Every command that produces a result emits one
+document on stdout; progress stays on stderr, so a pipe carries only the
+document:
+
+```console
+$ stratigraph analyze --repo ../monolith --no-llm --format json | jq '.findings.bySeverity'
+{
+  "high": 9,
+  "medium": 35,
+  "low": 10
+}
+```
+
+Every document carries `format: 1`. That number moves only for a change a
+parser could trip over, so a consumer can say which shape it understands.
+
+Three things in the shape are worth knowing about, and all three exist for the
+same reason the rest of the tool does:
+
+- **`run.coverage` and `run.gaps` travel with the findings.** An empty
+  `findings.items` and a clean repository are otherwise the same document
+  ([ADR-0026](docs/adr/0026-coverage-describes-the-store.md)).
+- **`findings.shown` and `findings.truncated`** say when the item list is capped
+  by `--top` while the counts describe the whole run. Totals that do not add up
+  should be explained by the document, not discovered by the reader.
+- **`findings.unpublishable`** counts findings withheld for carrying no
+  citation, rather than dropping them silently
+  ([ADR-0021](docs/adr/0021-finding-rank-and-publishability.md)).
+
+#### Failing the build
+
+`--fail-on <severity>` on `analyze` or `report` exits **3** when any publishable
+finding reaches that severity:
+
+```console
+$ stratigraph analyze --repo . --no-llm --fail-on high
+error: 9 finding(s) at or above `high` (9 high). Run `stratigraph report` for the evidence behind each one.
+$ echo $?
+3
+```
+
+**Three, not one.** A pipeline has to tell "this build has nine high findings"
+from "the tool could not run" — and a broken analyser read as a clean
+repository is the CI version of the mistake this whole project is written
+against. The codes are `0` success, `1` unexpected error, `2` a reported error,
+`3` the gate.
+
+The gate counts exactly what the report publishes: a finding with no citation
+fails no build, because it is a claim the report itself refuses to show. And
+the document is written *before* the non-zero exit — a gate that failed still
+hands the pipeline the findings that failed it.
+
+#### Failing only on what got worse
+
+`--fail-on` has a problem on the codebases this tool exists for: a 100k-LOC
+monolith nobody remembers has hundreds of findings on day one, so a gate that
+fails from the first commit gets deleted from the pipeline in a week.
+
+`stratigraph diff` compares two runs, and `--fail-on-new` gates on the
+difference:
+
+```console
+$ stratigraph diff --repo ../monolith --fail-on-new high
+run 41 (a3f19c2e04, 2026-08-06T09:14:02Z) -> run 47 (7b02de1188, 2026-08-13T09:02:55Z)
+
+Findings
+  new           3  2 high, 1 medium
+  resolved      1  1 high
+  unchanged   612
+
+New since the earlier run:
+  [high] Package cycle: com.shop.web ⇄ com.shop.billing
+  ...
+
+error: 2 new finding(s) at or above `high` since run 41 (2 high). Findings that
+were already there do not count.
+```
+
+**That gate can be switched on today by a repository that would fail
+`--fail-on` on every commit for a year.** The two answer different questions —
+"is this codebase acceptable" and "did this change make it worse" — and only the
+second one can be asked of a monolith on day one.
+
+Findings are matched across runs by rule and title, which every rule builds
+deterministically from the entities involved. Cycles are matched on their *set*
+of packages, because the title names the shortest path through a component and
+that path rotates when an unrelated edge appears — same cycle, different
+sentence. Two analyses of an unchanged repository produce an empty diff; on
+spring-petclinic that is 44 findings, 0 new, 0 resolved, in 0.13s.
+
+What it cannot see is a finding whose wording changes while the problem stays:
+renaming a package reports its old findings resolved and new ones added. That
+is the deliberate trade — matching fuzzily would report a genuinely new cycle as
+an old one under a new name, and a gate that quietly does not fire is worse than
+one that reports a rename
+([ADR-0027](docs/adr/0027-comparing-two-runs.md)).
+
+#### A pipeline that works on a repository with existing debt
+
+```yaml
+- uses: actions/checkout@v4
+  with: { fetch-depth: 0 }        # a shallow clone understates every history metric
+
+# The base commit, so there is something to compare against.
+- run: |
+    git checkout -q ${{ github.event.pull_request.base.sha }}
+    npx stratigraph init    --repo .
+    npx stratigraph extract --repo .
+    npx stratigraph history --repo .
+    npx stratigraph analyze --repo . --no-llm
+
+# Then this one. Both land in the same store as consecutive runs.
+- run: |
+    git checkout -q ${{ github.sha }}
+    npx stratigraph extract --repo .
+    npx stratigraph history --repo .
+    npx stratigraph analyze --repo . --no-llm
+
+- run: npx stratigraph diff --repo . --fail-on-new high --format json > diff.json
+
+- if: always()
+  run: npx stratigraph report --repo . --out ./arch
+- if: always()
+  uses: actions/upload-artifact@v4
+  with: { name: architecture, path: ./arch }
+```
+
+`history` reports `"shallow": true` in its document when the clone is shallow,
+so a pipeline can catch a missing `fetch-depth: 0` rather than silently
+comparing understated numbers.
+
+Keep the store between runs (cache `.stratigraph/`) and `stratigraph prune
+--keep 10` on a schedule; keep it per-job and the base analysis above is what
+gives `diff` its second run.
 
 ### Configuration
 
@@ -796,6 +1041,22 @@ It needs git for exactly one test, which builds its own repository with fixed
 dates and authors. Everything else about history is driven from a captured
 `git log` in `fixtures/git-log/` or from seeded rows, so the three-OS matrix
 depends on no binary it did not install.
+
+### Contributing
+
+[CONTRIBUTING.md](CONTRIBUTING.md) has the conventions, and they are stricter
+than most: a parser change without a fixture test does not get merged, every
+non-obvious decision gets an ADR, and nothing may state a fact it cannot cite.
+
+**The most useful contribution right now is not code.** Run it against a
+repository I have never seen and tell me what it got wrong — a wrong edge, a
+missed endpoint, a finding that is noise. A confidently wrong dependency map is
+the failure this project is built to avoid, so a fact that should not be there
+is as valuable a report as one that is missing. There is an issue template for
+exactly that.
+
+Security reports go through [SECURITY.md](SECURITY.md), never a public issue.
+[CHANGELOG.md](CHANGELOG.md) is what changed and why.
 
 Conventions:
 

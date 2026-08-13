@@ -34,6 +34,9 @@ the code when it is incidental. Either way, before the commit.
 | [0024](0024-the-tabbed-report.md) | The report is tabbed in CSS alone, summary first, light by default; no guarantee moves | accepted |
 | [0025](0025-report-theming.md) | Brand is config data validated at load; the scheme toggle and print path move no guarantee | accepted |
 | [0026](0026-coverage-describes-the-store.md) | Coverage states what the store holds, never which commands ran; an unanalysed run says so | accepted |
+| [0027](0027-comparing-two-runs.md) | A finding is recognised across runs by its content; only regressions can fail a build | accepted |
+| [0028](0028-severity-and-what-was-checkable.md) | Severity reflects how checkable a finding is, not only how strong it looks | accepted |
+| [0029](0029-kotlin-rides-the-java-extractor.md) | Kotlin is parsed by the Java extractor, in the same jar, walked by the same visitor | accepted |
 
 Format: context, decision, alternatives considered (with why each was rejected),
 consequences — including the costs, not only the benefits.
