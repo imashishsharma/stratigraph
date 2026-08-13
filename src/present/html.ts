@@ -113,6 +113,7 @@ export function toHtml(data: ReportData, context: ReportContext): string {
     header(context),
     tabBar(panels),
     '<main>',
+    cover(data, context),
     ...panels.map(
       (entry) =>
         `<section class="panel" id="panel-${escapeAttr(entry.id)}">\n` +
@@ -298,11 +299,51 @@ function header(context: ReportContext): string {
  * nothing is exclusive to this panel, and every number agrees with the panel
  * it points at because it is computed from the same object.
  */
-function summarySection(data: ReportData, context: ReportContext): string {
-  const { run } = context;
-  const counts = run.counts;
+/** The count tiles — the summary's and the print cover's, from one function. */
+function tilesHtml(data: ReportData, context: ReportContext): string {
+  const counts = context.run.counts;
   const publishable = data.ranked.total - data.ranked.uncited;
   const high = data.ranked.bySeverity.find((row) => row.severity === 'high')?.count ?? 0;
+  return [
+    // The numbers a reader wants before they decide whether to read the rest.
+    '<ul class="tiles">',
+    tile(counts.packages, 'packages'),
+    tile(counts.types, 'types'),
+    tile(counts.endpoints, 'endpoints'),
+    tile(counts.tables, 'tables'),
+    tile(counts.commits, 'commits'),
+    tile(publishable, 'findings', high > 0 ? `${high} high` : null),
+    '</ul>',
+  ].join('\n');
+}
+
+/**
+ * The printed document's first page. Hidden on screen — there the summary is
+ * the cover — and assembled from the same objects, deriving nothing.
+ */
+function cover(data: ReportData, context: ReportContext): string {
+  const { run } = context;
+  const repoName = run.repoPath.split(/[\\/]/).filter(Boolean).pop() ?? run.repoPath;
+  const brand = context.brand;
+  return [
+    '<section class="cover">',
+    `<p class="brand">${STRATA_MARK}<span>stratigraph</span></p>`,
+    brand?.name ? `<p class="cover-for">Prepared for ${escapeText(brand.name)}</p>` : '',
+    `<h1>${escapeText(repoName)}</h1>`,
+    '<p class="subtitle">Architecture &amp; structure report</p>',
+    '<dl class="meta">',
+    row('Commit', run.repoHead ?? 'not recorded'),
+    row('Generated', run.startedAt),
+    row('Tool', `stratigraph ${run.toolVersion}`),
+    '</dl>',
+    tilesHtml(data, context),
+    '</section>',
+  ].filter((line) => line !== '').join('\n');
+}
+
+function summarySection(data: ReportData, context: ReportContext): string {
+  const { run } = context;
+  const publishable = data.ranked.total - data.ranked.uncited;
 
   const parts: string[] = [
     '<p class="lead">Everything in this report was read from the source at the commit ' +
@@ -314,15 +355,7 @@ function summarySection(data: ReportData, context: ReportContext): string {
     row('Extractors', run.extractors.join(', ') || 'none'),
     row('Languages', run.languages.join(', ') || 'none'),
     '</dl>',
-    // The numbers a reader wants before they decide whether to read the rest.
-    '<ul class="tiles">',
-    tile(counts.packages, 'packages'),
-    tile(counts.types, 'types'),
-    tile(counts.endpoints, 'endpoints'),
-    tile(counts.tables, 'tables'),
-    tile(counts.commits, 'commits'),
-    tile(publishable, 'findings', high > 0 ? `${high} high` : null),
-    '</ul>',
+    tilesHtml(data, context),
   ];
 
   if (data.ranked.findings.length > 0) {
@@ -1156,13 +1189,20 @@ details pre { background: var(--panel); border: 1px solid var(--line); border-ra
 footer { margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--line);
          color: var(--faint); font-size: 13px; }
 
-/* Print is the whole document: every panel, in order, no tab chrome. */
+/* The printed document's first page; on screen the summary is the cover. */
+.cover { display: none; }
+.cover-for { color: var(--muted); font-size: 15px; margin: 18px 0 2px; }
+
+/* Print is the whole document: a cover, then every panel, no tab chrome. */
 @media print {
   .tabs, .tab-input, .theme-switch { display: none; }
+  .cover { display: block; break-after: page; padding-top: 15vh; }
+  header { display: none; }
   .panel { display: block !important; break-before: page; }
-  .panel:first-of-type { break-before: auto; }
   body { background: #ffffff; }
   .page { max-width: none; padding: 0; }
   figure { break-inside: avoid; }
+  tr, .finding, .tiles li { break-inside: avoid; }
+  h3.subheading { break-after: avoid; }
 }
 `.trim();

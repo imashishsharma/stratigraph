@@ -343,6 +343,9 @@ describe('a branded report (ADR-0025)', () => {
     expect(html).toContain('Acme Corp');
     expect(html).toContain('data:image/svg+xml;base64,');
     expect(html).toContain('--accent: #7c3aed');
+    // The printed document opens with a cover naming the customer.
+    expect(html).toContain('class="cover"');
+    expect(html).toContain('Prepared for Acme Corp');
     // The diagrams take the accent through the derived ramp, not raw.
     expect(html).not.toContain('#b7d3f6');
   });
