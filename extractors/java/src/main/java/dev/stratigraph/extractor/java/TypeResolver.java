@@ -2,6 +2,7 @@ package dev.stratigraph.extractor.java;
 
 import org.openrewrite.java.tree.Expression;
 import org.openrewrite.java.tree.J;
+import org.openrewrite.java.tree.JavaSourceFile;
 import org.openrewrite.java.tree.JavaType;
 
 import java.util.ArrayList;
@@ -86,10 +87,16 @@ final class TypeResolver {
      */
     private final Map<String, String> declaredTypeNames;
 
-    TypeResolver(J.CompilationUnit cu, String packageName, Map<String, String> declaredTypeNames) {
+    /** Takes a {@link JavaSourceFile} so a Kotlin compilation unit resolves too — ADR-0029. */
+    TypeResolver(JavaSourceFile cu, String packageName, Map<String, String> declaredTypeNames,
+                 boolean kotlin) {
         this.packageName = packageName;
         this.declaredTypeNames = declaredTypeNames;
         for (J.Import anImport : cu.getImports()) {
+            if (kotlin) {
+                readKotlinImport(anImport);
+                continue;
+            }
             if (anImport.isStatic()) {
                 continue;
             }
@@ -98,6 +105,42 @@ final class TypeResolver {
             } else {
                 singleTypeImports.put(simpleName(anImport.getClassName()), anImport.getTypeName());
             }
+        }
+    }
+
+    /**
+     * A Kotlin import, read off the qualified id rather than the accessors.
+     *
+     * Three of `J.Import`'s accessors mean something else on a Kotlin
+     * compilation unit, and the first one cost every Spring annotation in a
+     * Kotlin file its resolution:
+     *
+     * <ul>
+     *   <li>{@code isStatic()} is <b>true for every Kotlin import</b>. Kotlin
+     *       has no static imports; the Java branch above skips static ones
+     *       because they name members rather than types, and applying that here
+     *       discarded the lot.</li>
+     *   <li>{@code getTypeName()} returns the <i>package</i>
+     *       ({@code org.springframework.stereotype}), not the type.</li>
+     *   <li>{@code getClassName()} returns the simple name, so the {@code "*"}
+     *       test for a wildcard never fires.</li>
+     * </ul>
+     *
+     * The qualified id prints the whole dotted name in both languages, so that
+     * is what this reads. An aliased import ({@code import a.B as C}) keeps the
+     * alias out of the key deliberately — resolution is by the name as written,
+     * and an alias is a different name this does not yet follow.
+     */
+    private void readKotlinImport(J.Import anImport) {
+        String dotted = anImport.getQualid().printTrimmed().trim();
+        int alias = dotted.indexOf(" as ");
+        if (alias != -1) {
+            dotted = dotted.substring(0, alias).trim();
+        }
+        if (dotted.endsWith(".*")) {
+            wildcardImports.add(dotted.substring(0, dotted.length() - 2));
+        } else if (!dotted.isEmpty()) {
+            singleTypeImports.put(simpleName(dotted), dotted);
         }
     }
 

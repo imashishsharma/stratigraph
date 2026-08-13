@@ -94,7 +94,10 @@ final class SourceDiscovery {
             @Override
             public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
                 String name = file.getFileName().toString();
-                if (name.endsWith(".java") && included(file)) {
+                // `.kts` is deliberately absent: `build.gradle.kts` is matched
+                // by BUILD_FILES below as a module's identity, and a build
+                // script declares no domain type worth walking for.
+                if ((name.endsWith(".java") || name.endsWith(".kt")) && included(file)) {
                     result.sources.add(file);
                 } else if (BUILD_FILES.contains(name)) {
                     buildFiles.add(file);

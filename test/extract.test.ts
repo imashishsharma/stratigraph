@@ -10,7 +10,7 @@ import { runExtract, type SpawnExtractor } from '../src/commands/extract.js';
 import { runInit } from '../src/commands/init.js';
 import { openDatabase } from '../src/db/database.js';
 import { setQuiet } from '../src/log.js';
-import { detectLanguages, type Language } from '../src/toolchain/languages.js';
+import { detectLanguages, parseLanguages, type Language } from '../src/toolchain/languages.js';
 import {
   findExtractorJar,
   JAR_ENV_VAR,
@@ -247,7 +247,7 @@ describe('runExtract across two stacks', () => {
     runInit({ repo, cwd: dir });
     await expect(
       runExtract({ repo, cwd: dir, spawnExtractor: fakeExtractor(dir, PER_LANGUAGE) }),
-    ).rejects.toThrow(/no Java or TypeScript sources/);
+    ).rejects.toThrow(/no Java, Kotlin or TypeScript sources/);
   });
 
   it('fails the whole run when one of two extractors dies', async () => {
@@ -295,6 +295,34 @@ describe('detectLanguages', () => {
     const repo = scratch();
     writeFileSync(join(repo, 'globals.d.ts'), 'declare const x: number;');
     expect([...detectLanguages(repo, [])]).toEqual([]);
+  });
+
+  it('routes Kotlin to the same extractor as Java, because one jar parses both', () => {
+    const repo = scratch();
+    writeFileSync(join(repo, 'Service.kt'), 'class Service');
+    expect([...detectLanguages(repo, [])]).toEqual(['java']);
+  });
+
+  it('does not treat a Kotlin build script as a source set', () => {
+    // `build.gradle.kts` names a module (ADR-0006); it declares no domain type,
+    // and a repository holding only build scripts has nothing to extract.
+    const repo = scratch();
+    writeFileSync(join(repo, 'build.gradle.kts'), 'plugins { kotlin("jvm") }');
+    expect([...detectLanguages(repo, [])]).toEqual([]);
+  });
+});
+
+describe('parseLanguages', () => {
+  it('accepts the names a Kotlin user would reach for', () => {
+    for (const alias of ['kotlin', 'kt', 'jvm', 'java']) {
+      expect([...(parseLanguages(alias) as Set<Language>)]).toEqual(['java']);
+    }
+  });
+
+  it('still rejects a language it does not have', () => {
+    expect(() => parseLanguages('rust')).toThrow(/unknown language "rust"/);
+    // The message has to list what *is* accepted, aliases included.
+    expect(() => parseLanguages('rust')).toThrow(/kotlin/);
   });
 });
 

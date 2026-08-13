@@ -86,6 +86,19 @@
       <scope>runtime</scope>
     </dependency>
 
+    <!--
+      Kotlin, walked by the same visitor as Java: OpenRewrite's Kotlin LST is
+      built from the same `J` elements (ADR-0029).
+
+      This is what makes the jar large. `kotlin-compiler-embeddable` alone is
+      57 MB against the 22 MB everything else weighs, and the decision to carry
+      it for every user rather than ship a second artefact is recorded in
+      ADR-0029 — one jar, fetched once, cached per version.
+    -->
+    <dependency>
+      <groupId>org.openrewrite</groupId>
+      <artifactId>rewrite-kotlin</artifactId>
+    </dependency>
     <dependency>
       <groupId>org.junit.jupiter</groupId>
       <artifactId>junit-jupiter</artifactId>
@@ -118,6 +131,50 @@
                   <mainClass>dev.stratigraph.extractor.java.Main</mainClass>
                 </transformer>
                 <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
+                <!--
+                  A fat jar redistributes ~44 third-party artefacts, and Apache-2.0
+                  section 4(d) requires their attribution notices to travel with them.
+                  Without these two transformers the shade plugin keeps whichever
+                  META-INF/NOTICE it happened to copy last and silently drops the rest.
+                  Merged here rather than hand-maintained in a file, so the notice
+                  cannot drift from the dependency tree that produced it.
+                -->
+                <transformer implementation="org.apache.maven.plugins.shade.resource.ApacheNoticeResourceTransformer">
+                  <projectName>stratigraph Java extractor</projectName>
+                  <!--
+                    Both of these default to the Apache Software Foundation, which
+                    would put "Copyright The Apache Software Foundation" at the head
+                    of this project's own notice. The dependencies are Apache-2.0;
+                    this is not an Apache project, and a notice file is the wrong
+                    place to be casually wrong about who owns what.
+                  -->
+                  <organizationName>Ashish Sharma</organizationName>
+                  <organizationURL>https://github.com/imashishsharma/stratigraph</organizationURL>
+                  <!--
+                    Stated outright, because the transformer otherwise merges the
+                    copyright *years* of everything it bundles and attributes the
+                    range to this project — "Copyright 2006-2026 Ashish Sharma",
+                    where 2006 belongs to a dependency. A notice file is a poor
+                    place to be approximately right.
+                  -->
+                  <copyright>Copyright 2026 Ashish Sharma</copyright>
+                </transformer>
+                <!--
+                  Not ApacheLicenseResourceTransformer: that one *discards* the
+                  bundled LICENSE files rather than merging them, which left the
+                  jar carrying no copy of Apache-2.0 at all — the opposite of
+                  section 4(a). This puts the project's own licence in at a known
+                  path; the per-component notices are in the merged NOTICE above,
+                  and the full inventory is in the NOTICE at the repository root.
+                -->
+                <transformer implementation="org.apache.maven.plugins.shade.resource.IncludeResourceTransformer">
+                  <resource>META-INF/LICENSE</resource>
+                  <file>${project.basedir}/../../LICENSE</file>
+                </transformer>
+                <transformer implementation="org.apache.maven.plugins.shade.resource.IncludeResourceTransformer">
+                  <resource>META-INF/THIRD-PARTY-NOTICE</resource>
+                  <file>${project.basedir}/../../NOTICE</file>
+                </transformer>
               </transformers>
               <filters>
                 <filter>
@@ -127,6 +184,29 @@
                     <exclude>META-INF/*.DSA</exclude>
                     <exclude>META-INF/*.RSA</exclude>
                     <exclude>module-info.class</exclude>
+                    <!--
+                      Dozens of dependencies ship a META-INF/LICENSE, and one
+                      archive cannot hold two entries of the same name — shade
+                      fails outright rather than choosing. Theirs are dropped so
+                      the transformer below can put this project's licence at that
+                      path; every one of them is named with its licence in the
+                      NOTICE at the repository root, and their attribution
+                      notices are merged into META-INF/NOTICE, which is *not*
+                      excluded here because the notice transformer reads it.
+                    -->
+                    <exclude>META-INF/LICENSE</exclude>
+                    <exclude>META-INF/LICENSE.txt</exclude>
+                    <exclude>META-INF/LICENSE.md</exclude>
+                    <!--
+                      And this one for a different reason: `package` twice
+                      without `clean` re-shades the jar shade already produced,
+                      so the transformer below would add a second copy of a file
+                      the input already carries. Excluding it on the way in
+                      makes the build idempotent — `./mvnw package` is what the
+                      README tells a contributor to run, and it failed on the
+                      second try.
+                    -->
+                    <exclude>META-INF/THIRD-PARTY-NOTICE</exclude>
                   </excludes>
                 </filter>
               </filters>

@@ -86,7 +86,12 @@ public final class Main {
 
         SourceDiscovery discovery = new SourceDiscovery(repo, excludes, includes);
         SourceDiscovery.Result found = discovery.discover();
-        stderr.println("discovered " + found.sources.size() + " java sources in "
+        // Counted per language rather than reported as "java sources": a run
+        // over a Kotlin module that announced four java sources would be the
+        // first thing a reader distrusts, and rightly.
+        long kotlin = found.sources.stream().filter(JavaFactExtractor::isKotlin).count();
+        long java = found.sources.size() - kotlin;
+        stderr.println("discovered " + describe(java, kotlin) + " in "
                 + found.modules.size() + " module(s)");
 
         new JavaFactExtractor(repo, emitter, discovery).run(found);
@@ -106,6 +111,13 @@ public final class Main {
         stderr.println("usage: java -jar stratigraph-java-extractor.jar --repo <path> "
                 + "[--include <prefix>]... [--exclude <dir>]... [--no-default-excludes]");
         stderr.println("emits NDJSON facts on stdout; progress and diagnostics on stderr");
+    }
+
+    /** "4 kotlin sources", "9 java sources", or "9 java and 4 kotlin sources". */
+    private static String describe(long java, long kotlin) {
+        if (kotlin == 0) return java + " java sources";
+        if (java == 0) return kotlin + " kotlin sources";
+        return java + " java and " + kotlin + " kotlin sources";
     }
 
     private Main() {

@@ -7,8 +7,10 @@ import org.openrewrite.tree.ParseError;
 import org.openrewrite.SourceFile;
 import org.openrewrite.java.JavaIsoVisitor;
 import org.openrewrite.java.JavaParser;
+import org.openrewrite.kotlin.KotlinParser;
 import org.openrewrite.java.UpdateSourcePositions;
 import org.openrewrite.java.tree.J;
+import org.openrewrite.java.tree.JavaSourceFile;
 import org.openrewrite.java.tree.JavaType;
 import org.openrewrite.java.tree.Statement;
 import org.openrewrite.java.tree.TypeTree;
@@ -50,7 +52,7 @@ final class JavaFactExtractor {
 
     void run(SourceDiscovery.Result found) throws IOException {
         for (Path source : found.sources) {
-            emitter.file(discovery.relative(source), "java", countLines(source));
+            emitter.file(discovery.relative(source), languageOf(source), countLines(source));
         }
 
         // Framework XML we did not read. Saying so is the difference between
@@ -79,11 +81,35 @@ final class JavaFactExtractor {
         // One pass over every source with a shared type cache, so first-party
         // types resolve across module boundaries even though nothing was built
         // (ADR-0006). Types from jars we never read stay unattributed.
-        List<SourceFile> parsed = JavaParser.fromJavaVersion()
-                .logCompilationWarningsAndErrors(false)
-                .build()
-                .parse(found.sources, repoRoot, ctx)
-                .toList();
+        //
+        // Java and Kotlin are parsed by different parsers and then walked by the
+        // same visitor: OpenRewrite's Kotlin LST is built out of the same `J`
+        // elements, so a class is a `J.ClassDeclaration` whichever language
+        // declared it (ADR-0029). What the two parsers do not share is the type
+        // cache, so a Kotlin class extending a Java one in the same repository
+        // resolves only as far as each parser saw — stated in the diagnostics
+        // rather than papered over.
+        List<Path> javaSources = new ArrayList<>();
+        List<Path> kotlinSources = new ArrayList<>();
+        for (Path source : found.sources) {
+            (isKotlin(source) ? kotlinSources : javaSources).add(source);
+        }
+
+        List<SourceFile> parsed = new ArrayList<>();
+        if (!javaSources.isEmpty()) {
+            parsed.addAll(JavaParser.fromJavaVersion()
+                    .logCompilationWarningsAndErrors(false)
+                    .build()
+                    .parse(javaSources, repoRoot, ctx)
+                    .toList());
+        }
+        if (!kotlinSources.isEmpty()) {
+            parsed.addAll(KotlinParser.builder()
+                    .logCompilationWarningsAndErrors(false)
+                    .build()
+                    .parse(kotlinSources, repoRoot, ctx)
+                    .toList());
+        }
 
         // ADR-0023 condition 3 needs every declared type's simple name, nested
         // types included, before any resolution happens. A file that failed to
@@ -97,10 +123,18 @@ final class JavaFactExtractor {
             if (sourceFile instanceof ParseError) {
                 // Partial results beat no results: one file of unparseable Java
                 // must not cost us the map of the other 99,000 lines.
-                emitter.diagnostic("error", "could not be parsed as Java", path, null);
+                emitter.diagnostic("error",
+                        "could not be parsed as " + (path.endsWith(".kt") ? "Kotlin" : "Java"),
+                        path, null);
                 continue;
             }
-            if (!(sourceFile instanceof J.CompilationUnit)) {
+            // JavaSourceFile, not J.CompilationUnit: Kotlin parses to a
+            // K.CompilationUnit, which is not a J.CompilationUnit but is a
+            // JavaSourceFile — the interface carrying the package declaration,
+            // the imports and the classes, which is everything read below. Kept
+            // as the narrower type this walked every Kotlin file straight past
+            // and emitted a file fact with no declarations under it (ADR-0029).
+            if (!(sourceFile instanceof JavaSourceFile)) {
                 continue;
             }
 
@@ -108,7 +142,7 @@ final class JavaFactExtractor {
             // file. Sharing one leaves every file after the first with no line
             // numbers, which is a silent loss of the provenance every fact
             // is supposed to carry.
-            J.CompilationUnit cu = (J.CompilationUnit)
+            JavaSourceFile cu = (JavaSourceFile)
                     new UpdateSourcePositions().getVisitor().visit(sourceFile, ctx);
             if (cu == null) {
                 continue;
@@ -124,7 +158,7 @@ final class JavaFactExtractor {
     private static Map<String, String> declaredTypeNames(List<SourceFile> parsed) {
         Map<String, String> names = new LinkedHashMap<>();
         for (SourceFile sourceFile : parsed) {
-            if (!(sourceFile instanceof J.CompilationUnit)) {
+            if (!(sourceFile instanceof JavaSourceFile)) {
                 continue;
             }
             String path = sourceFile.getSourcePath().toString().replace('\\', '/');
@@ -134,12 +168,12 @@ final class JavaFactExtractor {
                     names.putIfAbsent(declaration.getSimpleName(), path);
                     return super.visitClassDeclaration(declaration, unused);
                 }
-            }.visit((J.CompilationUnit) sourceFile, null);
+            }.visit((JavaSourceFile) sourceFile, null);
         }
         return names;
     }
 
-    private void visit(J.CompilationUnit cu, String path, SourceDiscovery.ModuleId module,
+    private void visit(JavaSourceFile cu, String path, SourceDiscovery.ModuleId module,
                        Map<String, String> declaredTypeNames) {
         // Prefer the attributed package over the printed declaration: it is the
         // same string, but it comes from the type system rather than from
@@ -156,7 +190,7 @@ final class JavaFactExtractor {
         // type this same file went on to declare.
         DeclarationVisitor declarations =
                 new DeclarationVisitor(path, packageName,
-                        new TypeResolver(cu, packageName, declaredTypeNames));
+                        new TypeResolver(cu, packageName, declaredTypeNames, path.endsWith(".kt")));
         declarations.visit(cu, null);
         declarations.reportUnresolvedCalls();
 
@@ -173,7 +207,7 @@ final class JavaFactExtractor {
     }
 
     /** Fallback for a compilation unit that declares no type we could attribute. */
-    private static String declaredPackage(J.CompilationUnit cu) {
+    private static String declaredPackage(JavaSourceFile cu) {
         return cu.getPackageDeclaration() == null
                 ? null
                 : writtenName(cu.getPackageDeclaration().getExpression());
@@ -210,7 +244,7 @@ final class JavaFactExtractor {
         return "";
     }
 
-    private void emitImports(J.CompilationUnit cu, String path, String owner) {
+    private void emitImports(JavaSourceFile cu, String path, String owner) {
         Set<String> seen = new LinkedHashSet<>();
         for (J.Import anImport : cu.getImports()) {
             // A wildcard import names no type, so there is no edge to draw. The
@@ -950,5 +984,24 @@ final class JavaFactExtractor {
         } catch (Exception e) {
             return 0;
         }
+    }
+
+    static boolean isKotlin(Path file) {
+        String name = file.getFileName().toString();
+        // `.kts` is a build script, not a source set. It is discovered as a
+        // build file for a module's identity and never parsed as a declaration
+        // site — a `build.gradle.kts` declares no domain type.
+        return name.endsWith(".kt");
+    }
+
+    /**
+     * The language recorded on a `file` fact.
+     *
+     * Per file rather than per run: one jar parses both, and a repository that
+     * is 90% Java with a Kotlin test module should say so in the store rather
+     * than flatten to whichever ran first.
+     */
+    private static String languageOf(Path file) {
+        return isKotlin(file) ? "kotlin" : "java";
     }
 }

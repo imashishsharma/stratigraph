@@ -1,4 +1,4 @@
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -98,6 +98,113 @@ describe('stratigraph init', () => {
     const { status, stderr } = runCli(['init', '--repo', join(dir, 'nope')], dir);
     expect(status).toBe(2);
     expect(stderr).toMatch(/repository path does not exist/);
+  });
+});
+
+describe('--format json', () => {
+  it('puts one parseable document on stdout and nothing else', () => {
+    const dir = scratch();
+    const { status, stdout } = runCli(['doctor', '--format', 'json', '--repo', FIXTURE], dir);
+
+    expect(status).toBe(0);
+    const document = JSON.parse(stdout) as Record<string, unknown>;
+    expect(document['command']).toBe('doctor');
+    expect(document['format']).toBe(1);
+    expect(Array.isArray(document['checks'])).toBe(true);
+  });
+
+  it('keeps progress on stderr, so the document survives a pipe', () => {
+    const dir = scratch();
+    runCli(['init', '--repo', FIXTURE], dir);
+
+    // spawnSync directly rather than through `runCli`, which discards stderr
+    // on success — the split between the two streams is what this asserts.
+    const result = spawnSync(
+      process.execPath,
+      ['--import', TSX_LOADER, CLI, 'history', '--format', 'json', '--repo', FIXTURE],
+      { cwd: dir, encoding: 'utf8' },
+    );
+
+    expect(result.status).toBe(0);
+    expect(() => JSON.parse(result.stdout)).not.toThrow();
+    // Progress happened, and none of it landed in the document.
+    expect(result.stderr.length).toBeGreaterThan(0);
+    expect(result.stderr).not.toContain('"stratigraph"');
+  });
+
+  it('does not emit the human lines as well', () => {
+    const dir = scratch();
+    runCli(['init', '--repo', FIXTURE], dir);
+    const { stdout } = runCli(['history', '--format', 'json', '--repo', FIXTURE], dir);
+    expect(stdout.trimEnd().endsWith('}')).toBe(true);
+    expect(stdout.trimStart().startsWith('{')).toBe(true);
+  });
+
+  it('rejects a format it does not have', () => {
+    const dir = scratch();
+    const { status, stderr } = runCli(['doctor', '--format', 'yaml'], dir);
+    expect(status).not.toBe(0);
+    expect(stderr).toMatch(/yaml/);
+  });
+});
+
+describe('--fail-on', () => {
+  // A distinct exit code is the whole feature: a pipeline must not read
+  // "the analyser crashed" as "the repository is clean".
+  it('exits 3 — not 1 or 2 — when the threshold is reached', () => {
+    const dir = scratch();
+    runCli(['init', '--repo', FIXTURE], dir);
+    runCli(['extract', '--repo', FIXTURE], dir);
+    runCli(['history', '--repo', FIXTURE], dir);
+    runCli(['analyze', '--no-llm', '--repo', FIXTURE], dir);
+
+    const { status, stderr } = runCli(
+      ['analyze', '--no-llm', '--fail-on', 'info', '--repo', FIXTURE],
+      dir,
+    );
+
+    expect(status).toBe(3);
+    expect(stderr).toMatch(/finding\(s\) at or above `info`/);
+  });
+
+  it('exits 0 when nothing reaches the threshold', () => {
+    const dir = scratch();
+    runCli(['init', '--repo', FIXTURE], dir);
+    runCli(['extract', '--repo', FIXTURE], dir);
+    const { status } = runCli(
+      ['analyze', '--no-llm', '--fail-on', 'high', '--repo', FIXTURE],
+      dir,
+    );
+    expect(status).toBe(0);
+  });
+
+  it('still writes the JSON document when the gate fails', () => {
+    const dir = scratch();
+    runCli(['init', '--repo', FIXTURE], dir);
+    runCli(['extract', '--repo', FIXTURE], dir);
+    runCli(['history', '--repo', FIXTURE], dir);
+    runCli(['analyze', '--no-llm', '--repo', FIXTURE], dir);
+
+    const { status, stdout } = runCli(
+      ['analyze', '--no-llm', '--fail-on', 'info', '--format', 'json', '--repo', FIXTURE],
+      dir,
+    );
+
+    expect(status).toBe(3);
+    // A gate that failed must still hand the pipeline the findings that
+    // failed it, or the exit code is all anyone gets.
+    const document = JSON.parse(stdout) as { gate: { failed: boolean } };
+    expect(document.gate.failed).toBe(true);
+  });
+
+  it('rejects a severity that is not one of the four', () => {
+    const dir = scratch();
+    const { status, stderr } = runCli(
+      ['analyze', '--fail-on', 'critical', '--repo', FIXTURE],
+      dir,
+    );
+    expect(status).not.toBe(0);
+    expect(stderr).toMatch(/critical/);
   });
 });
 
@@ -277,7 +384,7 @@ describe('stratigraph doctor', () => {
       'node',
       'git',
       'java',
-      'java extractor',
+      'jvm extractor',
       'ts extractor',
       'config',
       'model',

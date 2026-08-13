@@ -85,7 +85,7 @@ export async function runExtract(options: ExtractOptions): Promise<ExtractResult
   const selected = selectLanguages(config, options);
   if (selected.length === 0) {
     throw new ExtractError(
-      `no Java or TypeScript sources found under ${config.repoPath}. Use --lang to run an ` +
+      `no Java, Kotlin or TypeScript sources found under ${config.repoPath}. Use --lang to run an ` +
         `extractor anyway, or --include to point at a subdirectory.`,
     );
   }

@@ -31,7 +31,7 @@ class ExtractorGoldenTest {
     private static final Path FIXTURES = Path.of("..", "..", "fixtures").toAbsolutePath().normalize();
 
     @ParameterizedTest
-    @ValueSource(strings = {"tiny-java", "tiny-spring", "legacy-java"})
+    @ValueSource(strings = {"tiny-java", "tiny-spring", "legacy-java", "tiny-kotlin"})
     void emitsExactlyTheExpectedFacts(String fixture) throws Exception {
         Path repo = FIXTURES.resolve(fixture);
         assertTrue(Files.isDirectory(repo), "fixture not found: " + repo);
