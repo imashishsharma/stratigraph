@@ -74,6 +74,14 @@ export async function runExtract(options: ExtractOptions): Promise<ExtractResult
   const config = loadConfig(options);
   const env = options.env ?? process.env;
 
+  // The store first, the toolchains second: a person who has not run `init`
+  // needs to hear that, not that a jar is missing — the jar complaint sends
+  // them building a toolchain the real error does not need. `--emit` writes
+  // to stdout and is exempt.
+  if (!options.emit) {
+    requireStore(config.dbPath, 'run `stratigraph init` first, then this command again.');
+  }
+
   const selected = selectLanguages(config, options);
   if (selected.length === 0) {
     throw new ExtractError(
