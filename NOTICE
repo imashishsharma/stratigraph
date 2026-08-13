@@ -1,0 +1,57 @@
+stratigraph
+Copyright 2026 Ashish Sharma
+
+Licensed under the Apache License, Version 2.0. See LICENSE for the full text.
+
+================================================================================
+Third-party components
+================================================================================
+
+The npm package `stratigraph` bundles no third-party code. Its runtime
+dependencies are installed by npm from their own registries under their own
+licences, and are listed in `package.json`.
+
+The **Java extractor jar** — distributed as a GitHub release asset, fetched by
+`stratigraph fetch-extractor`, and baked into the `ghcr.io` container image — is
+a shaded ("fat") jar. It redistributes roughly 50 third-party artefacts inside
+itself — including the Kotlin compiler, which is most of its size — so their
+attribution notices travel with it:
+
+  META-INF/NOTICE   — the merged attribution notices of every bundled component
+  META-INF/LICENSE  — the merged licence texts
+
+Both are assembled at build time by the maven-shade-plugin from the dependency
+tree that actually produced the jar, rather than transcribed here, so they
+cannot drift from what is really inside it. To read them:
+
+  unzip -p stratigraph-java-extractor.jar META-INF/NOTICE
+
+The principal components, and the licences they are used under:
+
+  OpenRewrite (rewrite-core, rewrite-java, rewrite-java-17,
+    rewrite-java-21, rewrite-kotlin, rewrite-xml, rewrite-yaml,
+    rewrite-properties, rewrite-java-lombok, jgit,
+    java-object-diff)                                    Apache-2.0
+  Kotlin (kotlin-compiler-embeddable, kotlin-reflect,
+    kotlin-stdlib)                                       Apache-2.0
+  Jackson (core, databind, annotations, and modules)     Apache-2.0
+  Apache Commons Lang3, Commons Text                     Apache-2.0
+  Caffeine, SnakeYAML, JavaEWAH, Objenesis, jspecify     Apache-2.0
+  Micrometer, Jandex, Gizmo, classgraph, error_prone     Apache-2.0
+  univocity-parsers, io.moderne:jsonrpc                  Apache-2.0
+  JetBrains annotations                                  Apache-2.0
+  ANTLR 4 runtime                                        BSD-3-Clause
+  OW2 ASM (asm, asm-tree, asm-analysis, asm-util)        BSD-3-Clause
+  SLF4J (api, nop)                                       MIT
+  Project Lombok                                         MIT
+  Checker Framework qualifiers                           MIT
+  HdrHistogram                                           BSD-2-Clause / CC0
+  LatencyUtils                                           CC0
+  JNA, JNA Platform                     Apache-2.0 (also offered as LGPL-2.1+)
+
+JNA is dual-licensed; it is used here under Apache-2.0. No component of this
+distribution is under a copyleft licence, and none is source-available-only.
+
+To regenerate this inventory after a dependency change:
+
+  cd extractors/java && ./mvnw -B dependency:list -DincludeScope=runtime
