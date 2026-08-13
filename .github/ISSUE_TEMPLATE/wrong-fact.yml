@@ -1,0 +1,65 @@
+name: The tool got something wrong
+description: A wrong edge, a missed endpoint, a finding that is noise — the most useful report there is
+labels: ["wrong-fact"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This is the report this project most wants. A confidently wrong
+        dependency map is worse than no map, so a fact that should not be there
+        is as serious as one that is missing — please open this for either.
+
+        You do not need to share your code. What the tool *said*, and roughly
+        what the code looks like, is usually enough.
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What did it say?
+      description: Paste the output — a finding, an edge, a diagram, a line from `analyze`.
+      render: text
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What should it have said?
+      description: |
+        "There is no such dependency", "this endpoint is missing", "this is
+        noise, here is why" — whichever applies.
+    validations:
+      required: true
+
+  - type: textarea
+    id: shape
+    attributes:
+      label: What does the code look like?
+      description: |
+        A reduced version is ideal — a few files that reproduce it. Rename
+        anything you need to; the tool does not care what things are called.
+        If you cannot share any of it, describe the shape: the annotations, the
+        framework, how the class is wired up.
+      render: java
+    validations:
+      required: false
+
+  - type: textarea
+    id: doctor
+    attributes:
+      label: Output of `stratigraph doctor --format json`
+      description: |
+        Most surprises turn out to be a toolchain difference rather than a
+        parser one. This reports *where* a credential came from and never the
+        credential itself, so it is safe to paste.
+      render: json
+    validations:
+      required: true
+
+  - type: input
+    id: language
+    attributes:
+      label: Language and framework
+      placeholder: Java 8 / Spring MVC with XML wiring, Kotlin / Spring Boot 3, Angular 17, ...
+    validations:
+      required: false

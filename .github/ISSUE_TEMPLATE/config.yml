@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/imashishsharma/stratigraph/security/advisories/new
+    about: Please do not open a public issue. See SECURITY.md.
+  - name: Ask a question or suggest something
+    url: https://github.com/imashishsharma/stratigraph/discussions
+    about: Including "does it handle X?" and "I need language Y".

@@ -1,0 +1,38 @@
+name: Something broke
+description: A crash, a hang, a command that fails or does nothing
+labels: ["bug"]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What did you run, and what happened?
+      description: The command and its output, including any stack trace.
+      render: shell
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect instead?
+    validations:
+      required: false
+
+  - type: textarea
+    id: doctor
+    attributes:
+      label: Output of `stratigraph doctor --format json`
+      description: |
+        Reports *where* a credential came from and never the credential itself,
+        so it is safe to paste.
+      render: json
+    validations:
+      required: true
+
+  - type: input
+    id: repo
+    attributes:
+      label: Roughly how big is the repository?
+      placeholder: ~4,000 Java files, 9,000 commits
+    validations:
+      required: false
