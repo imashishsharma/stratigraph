@@ -16,12 +16,14 @@ import { loadConfig, type ConfigOverrides } from '../config.js';
 import { resolveBrand, type ResolvedBrand } from '../present/brand.js';
 import { assertSchemaCurrent, openDatabase, type Db } from '../db/database.js';
 import { findRun, latestRun } from '../db/run.js';
-import { info, print, warn } from '../log.js';
+import { info, outputFormat, print, printJson, warn } from '../log.js';
 import { describeRun } from '../mcp/queries.js';
+import { GateError } from './analyze.js';
+import { reportDocument } from '../present/json.js';
 import { buildC4Model } from '../present/c4.js';
 import { buildClassDiagrams } from '../present/classes.js';
 import { buildErModel } from '../present/erd.js';
-import { rankFindings } from '../present/findings.js';
+import { evaluateGate, rankFindings, type GateSeverity } from '../present/findings.js';
 import { toHtml, type ReportContext, type ReportData } from '../present/html.js';
 import { toMarkdown } from '../present/markdown.js';
 import { toClassMermaid, toErMermaid, toMermaid } from '../present/mermaid.js';
@@ -60,6 +62,8 @@ export interface ReportOptions extends ConfigOverrides {
   /** Report a specific run instead of the most recent one. */
   run?: number | undefined;
   top?: number | undefined;
+  /** Exit non-zero when a publishable finding reaches this severity. */
+  failOn?: GateSeverity | undefined;
 }
 
 export interface ReportResult {
@@ -158,11 +162,28 @@ export function runReport(options: ReportOptions): ReportResult {
       );
     }
 
+    const gate =
+      options.failOn === undefined ? null : evaluateGate(data.ranked, options.failOn);
+
+    if (outputFormat() === 'json') {
+      printJson(reportDocument({ run: summary, outDir, files, ranked: data.ranked, gate }));
+    }
+
     // The paths are what the user asked for, so they go to stdout.
     print(`Report written to ${outDir}`);
     for (const file of files) print(`  ${basename(file)}`);
     print('');
     print(`Open ${join(outDir, 'index.html')} in a browser. It needs no network and no scripting.`);
+
+    // After the files are on disk and the document is written: the report is
+    // exactly what someone wants to look at when the gate has just failed.
+    if (gate?.failed === true) {
+      const breakdown = gate.bySeverity.map((row) => `${row.count} ${row.severity}`).join(', ');
+      throw new GateError(
+        `${gate.offending} finding(s) at or above \`${gate.threshold}\` (${breakdown}). ` +
+          `The evidence for each is in ${join(outDir, 'findings.md')}.`,
+      );
+    }
 
     return { runId, outDir, files };
   } finally {

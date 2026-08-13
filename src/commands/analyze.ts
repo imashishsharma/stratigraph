@@ -31,7 +31,16 @@ import {
   type ModelClient,
 } from '../interpret/client.js';
 import { ADR_RULE, runInterpretation, type InterpretResult } from '../interpret/run.js';
-import { info, print } from '../log.js';
+import { info, outputFormat, print, printJson } from '../log.js';
+import { describeRun, type RunSummary } from '../mcp/queries.js';
+import {
+  evaluateGate,
+  rankFindings,
+  type GateResult,
+  type GateSeverity,
+  type RankedFindings,
+} from '../present/findings.js';
+import { analyzeDocument } from '../present/json.js';
 
 /** Rows per report section, unless `--top` says otherwise. */
 export const DEFAULT_TOP = 20;
@@ -41,6 +50,8 @@ export interface AnalyzeOptions extends ConfigOverrides {
   run?: number | undefined;
   /** Rows per section. */
   top?: number | undefined;
+  /** Exit non-zero when a publishable finding reaches this severity. */
+  failOn?: GateSeverity | undefined;
   /**
    * Model client for the interpretation layer. Injected by tests; in normal use
    * one is constructed only when `llm.enabled` and a credential resolves.
@@ -86,6 +97,20 @@ export interface AnalyzeResult {
    * same in a report.
    */
   staticGraph: boolean;
+  /** The publishable findings for this run, read back after every rule ran. */
+  ranked?: RankedFindings | undefined;
+  /** The `--fail-on` verdict. Null when no threshold was given. */
+  gate?: GateResult | null | undefined;
+  /** What this run holds and what it does not. Null if the run vanished. */
+  summary?: RunSummary | null | undefined;
+}
+
+/** A `--fail-on` threshold was reached. Exits 3, distinctly from any other failure. */
+export class GateError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'GateError';
+  }
 }
 
 /**
@@ -252,10 +277,54 @@ export async function runAnalyze(options: AnalyzeOptions): Promise<AnalyzeResult
     }
 
     report(result, top, graph.packages.size, commits, config.interpret.couplingWeight);
+
+    // Read back from the store rather than assembled from the sections above,
+    // so this and `report` are two views of one table and cannot disagree
+    // (ADR-0021). It is also the only place that knows what "publishable"
+    // means, which is what the gate has to count.
+    result.ranked = rankFindings(db, runId, { top });
+    result.gate =
+      options.failOn === undefined ? null : evaluateGate(result.ranked, options.failOn);
+    result.summary = describeRun(db, runId);
+
+    if (outputFormat() === 'json' && result.summary !== null) {
+      printJson(
+        analyzeDocument({
+          run: result.summary,
+          packages: result.packages,
+          dependencies: result.dependencies,
+          ranked: result.ranked,
+          gate: result.gate,
+          interpretation: result.interpretation,
+          interpretationSkipped: result.interpretationSkipped,
+        }),
+      );
+    }
+
+    // Last, so the document above is always written: a gate that failed still
+    // has to hand the pipeline the findings that failed it.
+    if (result.gate?.failed === true) throw gateError(result.gate);
+
     return result;
   } finally {
     db.close();
   }
+}
+
+/**
+ * The `--fail-on` failure, as an error rather than a return value.
+ *
+ * A separate exit code from every other failure (3, not 2), because a pipeline
+ * has to tell "this build has three high findings" from "the tool could not
+ * run" — treating a broken analyser as a clean repository is the CI version of
+ * the mistake ADR-0026 is about.
+ */
+function gateError(gate: GateResult): GateError {
+  const breakdown = gate.bySeverity.map((row) => `${row.count} ${row.severity}`).join(', ');
+  return new GateError(
+    `${gate.offending} finding(s) at or above \`${gate.threshold}\` (${breakdown}). ` +
+      `Run \`stratigraph report\` for the evidence behind each one.`,
+  );
 }
 
 /**

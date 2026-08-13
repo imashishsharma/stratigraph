@@ -31,6 +31,13 @@ export interface HistoryResult extends MineStats, MetricsStats {
   runId: number;
   /** False when this command had to open the run itself. */
   reusedRun: boolean;
+  /**
+   * Whether the repository is a shallow clone.
+   *
+   * A warning on stderr is enough for a person and invisible to a pipeline,
+   * and every number in this result is understated when it is true.
+   */
+  shallow: boolean;
 }
 
 /**
@@ -52,7 +59,8 @@ export async function runHistory(options: HistoryOptions): Promise<HistoryResult
         `Run \`stratigraph doctor\` to check that git is on the PATH.`,
     );
   }
-  if (isShallowClone(config.repoPath)) {
+  const shallow = isShallowClone(config.repoPath);
+  if (shallow) {
     warn(
       `${config.repoPath} is a shallow clone, so most of its history is not present. ` +
         `Churn, coupling and authorship will all be understated. Run ` +
@@ -99,7 +107,7 @@ export async function runHistory(options: HistoryOptions): Promise<HistoryResult
     if (!reused) finishRun(db, run.id, 'ok');
     report(run.id, mined, metrics, config.history.since);
 
-    return { runId: run.id, reusedRun: reused, ...mined, ...metrics };
+    return { runId: run.id, reusedRun: reused, shallow, ...mined, ...metrics };
   } finally {
     db.close();
   }

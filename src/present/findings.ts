@@ -74,6 +74,44 @@ export interface RankedFindings {
   bySeverity: Array<{ severity: string; count: number }>;
 }
 
+/** Severities a `--fail-on` threshold can name, weakest first. */
+export const GATE_SEVERITIES = ['info', 'low', 'medium', 'high'] as const;
+
+export type GateSeverity = (typeof GATE_SEVERITIES)[number];
+
+export function isGateSeverity(value: string): value is GateSeverity {
+  return (GATE_SEVERITIES as readonly string[]).includes(value);
+}
+
+export interface GateResult {
+  threshold: GateSeverity;
+  /** Publishable findings at or above the threshold. */
+  offending: number;
+  /** Those counts broken out, strongest first. */
+  bySeverity: Array<{ severity: string; count: number }>;
+  failed: boolean;
+}
+
+/**
+ * Whether a run trips a `--fail-on` threshold.
+ *
+ * Deliberately here rather than in a module of its own, and deliberately over a
+ * `RankedFindings` rather than its own query: the thing being counted is
+ * *publishable* findings, and ADR-0021 puts that definition in this file. A
+ * gate with its own SELECT would be a second definition of publishable, free to
+ * drift from the report it is supposed to agree with — and a CI job passing
+ * while the report it uploads shows three high findings is a worse failure than
+ * either half alone.
+ */
+export function evaluateGate(ranked: RankedFindings, threshold: GateSeverity): GateResult {
+  const floor = SEVERITY_RANK[threshold] ?? 0;
+  const bySeverity = ranked.bySeverity
+    .filter((row) => (SEVERITY_RANK[row.severity] ?? 0) >= floor)
+    .sort((a, b) => (SEVERITY_RANK[b.severity] ?? 0) - (SEVERITY_RANK[a.severity] ?? 0));
+  const offending = bySeverity.reduce((total, row) => total + row.count, 0);
+  return { threshold, offending, bySeverity, failed: offending > 0 };
+}
+
 export interface FindingsOptions {
   /** Maximum findings returned. The counts above still describe everything. */
   top: number;
