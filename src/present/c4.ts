@@ -21,7 +21,7 @@ import {
   moduleAncestry,
   moduleOfNodeInPackage,
   packageInModule,
-  supportingEdges,
+  supportingEdgesForPairs,
   testOnlyPackage,
   DEPENDENCY_EDGE_KINDS,
   type PackageGraph,
@@ -703,13 +703,18 @@ function buildComponents(
   }
   elements.sort((a, b) => a.name.localeCompare(b.name));
 
+  const drawn = graph.dependencies.filter((d) => ids.has(d.src) && ids.has(d.dst));
+  const evidenceByPair = supportingEdgesForPairs(
+    db,
+    runId,
+    drawn.map((d) => [d.src, d.dst] as const),
+    EVIDENCE_LIMIT,
+  );
   const relationships: C4Relationship[] = [];
-  for (const dependency of graph.dependencies) {
-    const from = ids.get(dependency.src);
-    const to = ids.get(dependency.dst);
-    if (from === undefined || to === undefined) continue;
-
-    const supporting = supportingEdges(db, runId, dependency.src, dependency.dst, EVIDENCE_LIMIT);
+  for (const dependency of drawn) {
+    const from = ids.get(dependency.src) as string;
+    const to = ids.get(dependency.dst) as string;
+    const supporting = evidenceByPair.get(`${dependency.src} ${dependency.dst}`) ?? [];
     relationships.push({
       from,
       to,

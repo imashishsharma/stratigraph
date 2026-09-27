@@ -271,6 +271,81 @@ export interface SupportingEdge {
 }
 
 /**
+ * `supportingEdges` for many package pairs in one pass, keyed `"src dst"`.
+ *
+ * The ancestry walk is the expensive part and is the same for every pair, so a
+ * diagram with a hundred dependencies pays for it once rather than a hundred
+ * times — on a large Angular workspace that is minutes against a second.
+ */
+export function supportingEdgesForPairs(
+  db: Db,
+  runId: number,
+  pairs: ReadonlyArray<readonly [number, number]>,
+  limit: number,
+): Map<string, SupportingEdge[]> {
+  const out = new Map<string, SupportingEdge[]>();
+  if (pairs.length === 0) return out;
+  const kinds = DEPENDENCY_EDGE_KINDS.map((k) => `'${k}'`).join(', ');
+  const wanted = new Set(pairs.map(([src, dst]) => `${src} ${dst}`));
+  // Integers from the package graph, never user input: safe to inline, and an
+  // IN list lets the planner filter before joining where a joined parameter
+  // table did not.
+  const srcs = [...new Set(pairs.map(([src]) => src))].filter(Number.isInteger).join(', ');
+  const dsts = [...new Set(pairs.map(([, dst]) => dst))].filter(Number.isInteger).join(', ');
+  const rows = db
+    .prepare(
+      ancestorOfCte('package', DEPENDENCY_EDGE_KINDS, 'fact') +
+        /* sql */ `
+        SELECT sp.ancestor_id AS srcPackage,
+               dp.ancestor_id AS dstPackage,
+               e.id      AS edgeId,
+               e.kind    AS kind,
+               e.src_id  AS srcId,
+               e.dst_id  AS dstId,
+               e.file_id AS fileId,
+               e.line    AS line
+          FROM edge e
+          JOIN ancestor_of sp ON sp.node_id = e.src_id
+          JOIN ancestor_of dp ON dp.node_id = e.dst_id
+         WHERE e.run_id = @runId
+           AND e.kind IN (${kinds})
+           AND e.confidence = 'fact'
+           AND sp.ancestor_id IN (${srcs})
+           AND dp.ancestor_id IN (${dsts})
+         ORDER BY e.id`,
+    )
+    .all({ runId }) as Array<{
+    srcPackage: number;
+    dstPackage: number;
+    edgeId: number;
+    kind: string;
+    srcId: number;
+    dstId: number;
+    fileId: number | null;
+    line: number | null;
+  }>;
+
+  const fqn = db.prepare('SELECT fqn FROM node WHERE id = ?').pluck();
+  const path = db.prepare('SELECT path FROM source_file WHERE id = ?').pluck();
+  for (const row of rows) {
+    const key = `${row.srcPackage} ${row.dstPackage}`;
+    if (!wanted.has(key)) continue;
+    const list = out.get(key) ?? [];
+    if (list.length >= limit) continue;
+    list.push({
+      edgeId: row.edgeId,
+      kind: row.kind,
+      srcFqn: fqn.get(row.srcId) as string,
+      dstFqn: fqn.get(row.dstId) as string,
+      path: row.fileId === null ? null : ((path.get(row.fileId) as string | undefined) ?? null),
+      line: row.line,
+    });
+    out.set(key, list);
+  }
+  return out;
+}
+
+/**
  * The source-level edges that put `srcPackage` → `dstPackage` in the graph.
  *
  * This is the evidence half of a cycle finding: without it a report can say
