@@ -155,6 +155,10 @@ final class FactEmitter {
             this.fqn = fqn;
         }
 
+        String fqn() {
+            return fqn;
+        }
+
         Map<String, Object> toMap() {
             Map<String, Object> map = new LinkedHashMap<>();
             map.put("kind", kind);

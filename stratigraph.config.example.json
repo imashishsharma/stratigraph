@@ -3,7 +3,7 @@
   "db": ".stratigraph/monolith.db",
   "exclude": ["node_modules", "target", "generated"],
 
-  "java": { "home": null, "jar": null },
+  "java": { "home": null, "jar": null, "classpath": "auto" },
 
   "history": {
     "since": null,

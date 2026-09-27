@@ -50,6 +50,14 @@ final class JavaFactExtractor {
     /** The build module directory of the file being visited. */
     private Path currentModuleDir;
 
+    /** Dependency jars for type attribution; empty is source-only (ADR-0006, ADR-0039). */
+    private List<Path> classpath = List.of();
+
+    JavaFactExtractor withClasspath(List<Path> jars) {
+        this.classpath = List.copyOf(jars);
+        return this;
+    }
+
     JavaFactExtractor(Path repoRoot, FactEmitter emitter, SourceDiscovery discovery) {
         this.repoRoot = repoRoot;
         this.emitter = emitter;
@@ -105,6 +113,7 @@ final class JavaFactExtractor {
         if (!javaSources.isEmpty()) {
             parsed.addAll(JavaParser.fromJavaVersion()
                     .logCompilationWarningsAndErrors(false)
+                    .classpath(classpath)
                     .build()
                     .parse(javaSources, repoRoot, ctx)
                     .toList());
@@ -112,6 +121,7 @@ final class JavaFactExtractor {
         if (!kotlinSources.isEmpty()) {
             parsed.addAll(KotlinParser.builder()
                     .logCompilationWarningsAndErrors(false)
+                    .classpath(classpath)
                     .build()
                     .parse(kotlinSources, repoRoot, ctx)
                     .toList());
@@ -534,6 +544,8 @@ final class JavaFactExtractor {
                 }
             }
 
+            emitLombokInjection(context, self, declaration, constructors);
+
             for (J.MethodDeclaration constructor : constructors) {
                 boolean marked = resolveAll(constructor.getLeadingAnnotations())
                         .stream().anyMatch(a -> FrameworkAnnotations.INJECTION_MARKERS.contains(a.fqn));
@@ -555,6 +567,66 @@ final class JavaFactExtractor {
             }
         }
 
+        /**
+         * Lombok writes the constructor a bean is injected through
+         * (ADR-0039). {@code @RequiredArgsConstructor} takes every final or
+         * {@code @NonNull} instance field without an initializer;
+         * {@code @AllArgsConstructor} takes every instance field. Only for a
+         * stereotyped class with no hand-written constructor — the same
+         * sole-constructor rule Spring applies, with Lombok's constructor as
+         * the sole one.
+         */
+        private void emitLombokInjection(ClassContext context, NodeRef self, J.ClassDeclaration declaration,
+                                         List<J.MethodDeclaration> constructors) {
+            if (context.stereotype() == null || !constructors.isEmpty()) {
+                return;
+            }
+            boolean required = context.hasAny(Set.of(FrameworkAnnotations.LOMBOK_REQUIRED_ARGS));
+            boolean all = context.hasAny(Set.of(FrameworkAnnotations.LOMBOK_ALL_ARGS));
+            if (!required && !all) {
+                return;
+            }
+            for (Statement statement : declaration.getBody().getStatements()) {
+                if (!(statement instanceof J.VariableDeclarations)) {
+                    continue;
+                }
+                J.VariableDeclarations field = (J.VariableDeclarations) statement;
+                List<String> modifiers = modifiers(field.getModifiers());
+                if (modifiers.contains("static")) {
+                    continue;
+                }
+                boolean nonNull = resolveAll(field.getLeadingAnnotations()).stream()
+                        .anyMatch(a -> FrameworkAnnotations.LOMBOK_NON_NULL.equals(a.fqn));
+                for (J.VariableDeclarations.NamedVariable variable : field.getVariables()) {
+                    boolean initialised = variable.getInitializer() != null;
+                    boolean takes = all
+                            ? !(modifiers.contains("final") && initialised)
+                            : (modifiers.contains("final") || nonNull) && !initialised;
+                    if (takes) {
+                        emitInjection(self, field.getTypeExpression(),
+                                all ? "lombok-all-args" : "lombok-required-args",
+                                variable.getSimpleName(), line(field));
+                    }
+                }
+            }
+        }
+
+        /** A {@code @Bean} method's parameters are injected into its configuration class (ADR-0039). */
+        private void emitBeanMethodInjection(ClassContext owner, List<ResolvedAnnotation> annotations,
+                                             J.MethodDeclaration declaration) {
+            if (owner == null || annotations.stream()
+                    .noneMatch(a -> FrameworkAnnotations.SPRING_BEAN.equals(a.fqn))) {
+                return;
+            }
+            for (Statement parameter : declaration.getParameters()) {
+                if (parameter instanceof J.VariableDeclarations) {
+                    J.VariableDeclarations declared = (J.VariableDeclarations) parameter;
+                    emitInjection(new NodeRef(owner.kind, owner.fqn), declared.getTypeExpression(),
+                            "bean-method", declaration.getSimpleName(), line(declaration));
+                }
+            }
+        }
+
         private void emitInjection(NodeRef target, TypeTree declaredType, String via, String member, Integer line) {
             if (declaredType == null) {
                 return;
@@ -562,6 +634,13 @@ final class JavaFactExtractor {
             String asWritten = writtenName(declaredType);
             TypeResolver.Resolved answer = resolver.resolve(declaredType.getType(), asWritten);
             if (!answer.isResolved()) {
+                // Counted, so coverage can say how many injection points were
+                // resolved out of how many were seen (ADR-0039).
+                emitter.diagnostic("info",
+                        "injection point " + target.fqn() + (member == null ? "" : "." + member)
+                                + " (" + via + "): its type " + asWritten + " cannot be resolved: "
+                                + answer.whyAmbiguous() + "; no injects edge recorded",
+                        path, line);
                 return;
             }
             Map<String, Object> attrs = new LinkedHashMap<>();
@@ -618,6 +697,7 @@ final class JavaFactExtractor {
 
             emitEndpoints(owner, self, annotations, declaration);
             emitSetterInjection(owner, annotations, declaration);
+            emitBeanMethodInjection(owner, annotations, declaration);
             recordQuery(annotations, type);
             return super.visitMethodDeclaration(declaration, unused);
         }

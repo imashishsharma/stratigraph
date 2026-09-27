@@ -71,6 +71,11 @@ export interface JavaConfig {
    * (see `src/toolchain/extractor-jar.ts`).
    */
   jar: string | null;
+  /**
+   * `auto` resolves the classpath offline from the local Maven repository when
+   * it can, for type attribution; `off` keeps extraction source-only (ADR-0039).
+   */
+  classpath: 'auto' | 'off';
 }
 
 /**
@@ -221,7 +226,7 @@ const KNOWN_LLM_KEYS = new Set([
   'apiKeyEnv',
   'sendSource',
 ]);
-const KNOWN_JAVA_KEYS = new Set(['home', 'jar']);
+const KNOWN_JAVA_KEYS = new Set(['home', 'jar', 'classpath']);
 const KNOWN_HISTORY_KEYS = new Set([
   'since',
   'maxFilesPerCommit',
@@ -333,6 +338,7 @@ export function loadConfig(overrides: ConfigOverrides = {}): StratigraphConfig {
     java: {
       home: overrides.javaHome ?? file.java?.home ?? null,
       jar: overrides.extractorJar ?? file.java?.jar ?? null,
+      classpath: file.java?.classpath ?? 'auto',
     },
     history: {
       since: overrides.since ?? file.history?.since ?? DEFAULT_HISTORY.since,
@@ -435,7 +441,7 @@ interface ConfigFile {
     apiKeyEnv?: string;
     sendSource?: boolean;
   };
-  java?: { home?: string; jar?: string };
+  java?: { home?: string; jar?: string; classpath?: 'auto' | 'off' };
   history?: {
     since?: string;
     maxFilesPerCommit?: number;
@@ -537,6 +543,13 @@ function readConfigFile(path: string, options: { allowInlineKey: boolean }): Con
       out.java.home = expectString(path, 'java.home', javaObj['home']);
     if (isSet(javaObj['jar']))
       out.java.jar = expectString(path, 'java.jar', javaObj['jar']);
+    if (isSet(javaObj['classpath'])) {
+      const mode = javaObj['classpath'];
+      if (mode !== 'auto' && mode !== 'off') {
+        throw new ConfigError(`${path}: "java.classpath" must be "auto" or "off"`);
+      }
+      out.java.classpath = mode;
+    }
   }
 
   if (obj['history'] !== undefined) {

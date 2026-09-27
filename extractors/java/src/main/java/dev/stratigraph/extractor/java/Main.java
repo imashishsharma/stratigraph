@@ -38,6 +38,7 @@ public final class Main {
         Path repo = null;
         Set<String> excludes = new LinkedHashSet<>(DEFAULT_EXCLUDES);
         List<String> includes = new ArrayList<>();
+        Path classpathFile = null;
 
         for (int i = 0; i < args.length; i++) {
             switch (args[i]) {
@@ -49,6 +50,10 @@ public final class Main {
                     break;
                 case "--include":
                     includes.add(requireValue(args, ++i, "--include"));
+                    break;
+                case "--classpath-file":
+                    // ADR-0039: jars resolved offline by the core, one path per line.
+                    classpathFile = Path.of(requireValue(args, ++i, "--classpath-file"));
                     break;
                 case "--no-default-excludes":
                     excludes.removeAll(DEFAULT_EXCLUDES);
@@ -94,7 +99,18 @@ public final class Main {
         stderr.println("discovered " + describe(java, kotlin) + " in "
                 + found.modules.size() + " module(s)");
 
-        new JavaFactExtractor(repo, emitter, discovery).run(found);
+        List<Path> classpath = new ArrayList<>();
+        if (classpathFile != null && Files.isRegularFile(classpathFile)) {
+            for (String line : Files.readAllLines(classpathFile, StandardCharsets.UTF_8)) {
+                Path jar = Path.of(line.trim());
+                if (!line.isBlank() && Files.isRegularFile(jar)) {
+                    classpath.add(jar);
+                }
+            }
+            stderr.println("classpath: " + classpath.size() + " jar(s)");
+        }
+
+        new JavaFactExtractor(repo, emitter, discovery).withClasspath(classpath).run(found);
         facts.flush();
         stderr.println(emitter.summary());
         return 0;

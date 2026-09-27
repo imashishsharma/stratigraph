@@ -331,6 +331,57 @@ class RefusesToGuessTest {
     }
 
     @Test
+    void injectsThroughLombokConstructorsAndBeanMethods(@TempDir Path repo) throws Exception {
+        // ADR-0039: the constructor Lombok writes is the sole constructor of a
+        // bean, so its parameters are injected; a @Bean method's parameters
+        // are injected into its configuration class.
+        write(repo, "src/main/java/app/Repo.java", """
+                package app;
+                public interface Repo {}
+                """);
+        write(repo, "src/main/java/app/Clock.java", """
+                package app;
+                public class Clock {}
+                """);
+        write(repo, "src/main/java/app/Service.java", """
+                package app;
+                import lombok.RequiredArgsConstructor;
+                import org.springframework.stereotype.Service;
+                @Service
+                @RequiredArgsConstructor
+                public class OrderService {
+                    private final Repo repo;
+                    private final Clock clock = new Clock();
+                    private String notInjected;
+                    private static final String CONSTANT = "x";
+                }
+                """);
+        write(repo, "src/main/java/app/Config.java", """
+                package app;
+                import org.springframework.context.annotation.Bean;
+                import org.springframework.context.annotation.Configuration;
+                @Configuration
+                public class Config {
+                    @Bean
+                    Clock clock(Repo repo) { return new Clock(); }
+                }
+                """);
+
+        List<String> injections = extract(repo).stream()
+                .filter(node -> "edge".equals(node.path("type").asText())
+                        && "injects".equals(node.path("kind").asText()))
+                .map(node -> node.path("src").path("fqn").asText() + " -> "
+                        + node.path("dst").path("fqn").asText() + " "
+                        + node.path("attrs").path("via").asText())
+                .sorted()
+                .toList();
+
+        assertEquals(List.of(
+                "app.Config -> app.Repo bean-method",
+                "app.OrderService -> app.Repo lombok-required-args"), injections);
+    }
+
+    @Test
     void willNotNameATableUnderANamingStrategyItDoesNotKnow(@TempDir Path repo) throws Exception {
         // ADR-0036: a default-named entity's table is its name put through the
         // module's physical naming strategy. A custom strategy class could do

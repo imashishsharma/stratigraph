@@ -30,7 +30,7 @@ export function configTemplate(options: TemplateOptions): string {
   const template = {
     repo: options.repo,
     exclude: ['node_modules', 'target', 'build', 'dist', '.git', '.idea', '.gradle'],
-    java: { home: null, jar: null },
+    java: { home: null, jar: null, classpath: 'auto' },
     history: {
       since: DEFAULT_HISTORY.since,
       maxFilesPerCommit: DEFAULT_HISTORY.maxFilesPerCommit,

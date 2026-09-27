@@ -15,6 +15,7 @@ import {
   missingJarMessage,
   type ExtractorJar,
 } from '../toolchain/extractor-jar.js';
+import { resolveClasspath } from '../toolchain/classpath.js';
 import { findJava, MIN_JAVA_MAJOR } from '../toolchain/java.js';
 import { detectLanguages, LANGUAGES, type Language } from '../toolchain/languages.js';
 import {
@@ -104,10 +105,13 @@ export async function runExtract(options: ExtractOptions): Promise<ExtractResult
 
   // Resolve every toolchain before spawning anything, so every skip is known
   // before the first fact is written.
+  // What each extractor ran with, for the run record — e.g. whether Java was
+  // typed against a classpath or source-only (ADR-0039).
+  const notes = new Map<Language, string>();
   const resolve =
     options.resolveSpawner ??
     ((language: Language) =>
-      options.spawnExtractor ?? spawnerFor(language, options, config, env));
+      options.spawnExtractor ?? spawnerFor(language, options, config, env, notes));
   const runnable: Array<{ language: Language; spawn: SpawnExtractor }> = [];
   const skipped: ExtractResult['skipped'] = [];
   for (const language of selected) {
@@ -217,7 +221,7 @@ export async function runExtract(options: ExtractOptions): Promise<ExtractResult
         );
       }
 
-      recordExtractor(db, run.id, language, 'ok', null);
+      recordExtractor(db, run.id, language, 'ok', notes.get(language) ?? null);
       ran.push(language);
       accumulate(total, stats);
       info(`${language.padEnd(10)}  ${summarise(run.id, stats)}`);
@@ -281,8 +285,26 @@ function spawnerFor(
   options: ExtractOptions,
   config: StratigraphConfig,
   env: NodeJS.ProcessEnv,
+  notes: Map<Language, string>,
 ): SpawnExtractor {
-  if (language === 'java') return javaSpawner(options, config.java.home, config.java.jar, env);
+  if (language === 'java') {
+    const spawnJava = javaSpawner(options, config.java.home, config.java.jar, env);
+    if (config.java.classpath === 'off') {
+      notes.set('java', 'source-only: java.classpath is off');
+      return spawnJava;
+    }
+    const javaHome = findJava({ home: options.javaHome ?? config.java.home ?? undefined, env });
+    const classpath = resolveClasspath({
+      repoPath: config.repoPath,
+      javaHome: javaHome?.home ?? null,
+      env,
+    });
+    notes.set('java', classpath.statement);
+    info(`classpath   ${classpath.statement}`);
+    return classpath.file === null
+      ? spawnJava
+      : (lang, repoPath, args) => spawnJava(lang, repoPath, [...args, '--classpath-file', classpath.file as string]);
+  }
   return language === 'migrations' ? migrationsSpawner() : typescriptSpawner();
 }
 

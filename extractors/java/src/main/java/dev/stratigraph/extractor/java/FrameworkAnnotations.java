@@ -115,6 +115,15 @@ final class FrameworkAnnotations {
         }
     }
 
+    // ------------------------------------------------------------ Lombok
+
+    static final String LOMBOK_REQUIRED_ARGS = "lombok.RequiredArgsConstructor";
+    static final String LOMBOK_ALL_ARGS = "lombok.AllArgsConstructor";
+    static final String LOMBOK_NON_NULL = "lombok.NonNull";
+
+    /** A method that declares a bean; its parameters are injected (ADR-0039). */
+    static final String SPRING_BEAN = "org.springframework.context.annotation.Bean";
+
     // ------------------------------------------------------- Spring Data
 
     static final String SPRING_DATA_QUERY = "org.springframework.data.jpa.repository.Query";

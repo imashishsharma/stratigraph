@@ -155,6 +155,20 @@ export function runCoverage(
       `${fmt(tests)} test file(s) were parsed and are left out of this view (ADR-0034).`,
     ];
   }
+  // Injection points seen against injection points resolved (ADR-0039).
+  const resolved = count(db, `SELECT COUNT(*) AS n FROM edge WHERE run_id = ? AND kind = 'injects'`, runId);
+  const unresolved = count(
+    db,
+    `SELECT COUNT(*) AS n FROM diagnostic WHERE run_id = ? AND message LIKE 'injection point %'`,
+    runId,
+  );
+  if (resolved + unresolved > 0) {
+    structural.reasons = [
+      ...structural.reasons,
+      `${fmt(resolved)} of ${fmt(resolved + unresolved)} injection points resolved to a type` +
+        (unresolved > 0 ? '; the rest are counted in the diagnostics, not drawn.' : '.'),
+    ];
+  }
   const views = {} as Record<ViewId, ViewCoverage>;
   const bases: Record<ViewId, Basis> = {
     architecture: structural,
@@ -272,7 +286,8 @@ function describeExtractor(entry: ExtractorCoverage): string {
     case 'unrecorded':
       return `${head} — no ${entry.language} extractor is recorded for this run`;
     default:
-      return head;
+      // An ok extractor may still say how it ran — typed or source-only (ADR-0039).
+      return entry.reason === null ? head : `${head} — ${firstLine(entry.reason)}`;
   }
 }
 
