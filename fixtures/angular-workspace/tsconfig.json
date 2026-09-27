@@ -1,0 +1,8 @@
+{
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@shop/ui-kit": ["projects/ui-kit/src/public-api.ts"]
+    }
+  }
+}

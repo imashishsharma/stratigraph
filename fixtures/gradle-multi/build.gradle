@@ -1,0 +1,11 @@
+// Hand-written fixture (ADR-0040). The root declares the Boot plugin with
+// `apply false`, which applies it nowhere, and configures every subproject from
+// inside `subprojects {}`, which is build logic we do not run. Not a container.
+plugins {
+    id 'org.springframework.boot' version '3.3.0' apply false
+}
+
+subprojects {
+    apply plugin: 'java'
+    apply plugin: 'org.springframework.boot'
+}

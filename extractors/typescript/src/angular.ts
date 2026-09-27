@@ -19,7 +19,7 @@ import type { EdgeSpec, FactEmitter, NodeRef } from './protocol.js';
 /** Decorators whose metadata we understand, keyed by the package they live in. */
 const ANGULAR_PACKAGES = ['@angular/core', '@angular/common', '@angular/router'];
 
-const CLASS_DECORATORS = new Set(['Component', 'Directive', 'Injectable', 'NgModule', 'Pipe']);
+export const CLASS_DECORATORS = new Set(['Component', 'Directive', 'Injectable', 'NgModule', 'Pipe']);
 
 /** Members of an `@NgModule` or standalone `imports` that become edges. */
 const MODULE_ARRAYS = ['imports', 'declarations', 'exports', 'providers'] as const;
@@ -853,14 +853,14 @@ export async function loadTemplateParser(): Promise<boolean> {
   }
 }
 
-function isAngular(fqn: string): boolean {
+export function isAngular(fqn: string): boolean {
   return ANGULAR_PACKAGES.some(
     (pkg) => fqn.startsWith(`${pkg}:`) || fqn.startsWith(`${pkg}/`),
   );
 }
 
 /** `Component` from `@angular/core:Component`. */
-function exportedName(fqn: string): string {
+export function exportedName(fqn: string): string {
   return fqn.slice(fqn.lastIndexOf(':') + 1);
 }
 

@@ -1,6 +1,6 @@
 # ADR-0019: C4 levels are a projection of the fact graph, and refuse the boxes nothing supplies
 
-- Status: accepted
+- Status: accepted; level 2 amended by [ADR-0040](0040-containers-are-deployables.md)
 - Date: 2026-07-31
 - Milestone: M6 (before the code)
 

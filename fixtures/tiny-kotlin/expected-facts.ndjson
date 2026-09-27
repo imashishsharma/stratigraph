@@ -3,7 +3,7 @@
 {"v":1,"type":"file","path":"src/main/kotlin/com/example/shop/repo/OrderRepository.kt","language":"kotlin","loc":9}
 {"v":1,"type":"file","path":"src/main/kotlin/com/example/shop/service/OrderService.kt","language":"kotlin","loc":10}
 {"v":1,"type":"file","path":"src/main/kotlin/com/example/shop/web/OrderController.kt","language":"kotlin","loc":14}
-{"v":1,"type":"node","kind":"module","fqn":"com.example:tiny-kotlin","name":"tiny-kotlin"}
+{"v":1,"type":"node","kind":"module","fqn":"com.example:tiny-kotlin","name":"tiny-kotlin","attrs":{"root":".","buildFile":"pom.xml"}}
 {"v":1,"type":"node","kind":"package","fqn":"com.example.shop.domain","name":"domain","parent":{"kind":"module","fqn":"com.example:tiny-kotlin"}}
 {"v":1,"type":"node","kind":"class","fqn":"com.example.shop.domain.Order","name":"Order","parent":{"kind":"package","fqn":"com.example.shop.domain"},"file":"src/main/kotlin/com/example/shop/domain/Order.kt","startLine":7,"endLine":13,"attrs":{"modifiers":["final"]}}
 {"v":1,"type":"edge","kind":"annotated_with","src":{"kind":"class","fqn":"com.example.shop.domain.Order"},"dst":{"kind":"annotation","fqn":"jakarta.persistence.Entity"},"file":"src/main/kotlin/com/example/shop/domain/Order.kt","line":7,"attrs":{"resolution":"import"}}

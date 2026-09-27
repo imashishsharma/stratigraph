@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- A bill of materials: packaging pom, dependency management only. Not a container. -->
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>com.example.multi</groupId>
+    <artifactId>multi-parent</artifactId>
+    <version>0.0.1</version>
+  </parent>
+  <artifactId>multi-bom</artifactId>
+  <packaging>pom</packaging>
+
+  <dependencyManagement>
+    <dependencies>
+      <dependency>
+        <groupId>com.example.multi</groupId>
+        <artifactId>shared</artifactId>
+        <version>0.0.1</version>
+      </dependency>
+    </dependencies>
+  </dependencyManagement>
+</project>

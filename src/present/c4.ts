@@ -12,14 +12,20 @@
 
 import { basename } from 'node:path';
 
+import { loadModuleInfo, type ModuleInfo } from '../analysis/deployables.js';
 import { observedHttpCalls } from '../analysis/http-links.js';
 import {
   ancestorOfCte,
   buildPackageGraph,
   declaredInTest,
-  supportingEdges,
+  moduleAncestry,
+  moduleOfNodeInPackage,
+  packageEdgeFromTest,
+  packageInModule,
+  supportingEdgesForPairs,
   testOnlyPackage,
   DEPENDENCY_EDGE_KINDS,
+  type PackageGraph,
 } from '../analysis/package-graph.js';
 import type { Db } from '../db/database.js';
 import type { Confidence, EdgeKind } from '../facts/types.js';
@@ -121,17 +127,40 @@ interface ModuleRow {
  * next is following the same box.
  */
 export function buildC4Model(db: Db, runId: number, options: C4Options): C4Model {
-  const modules = loadModules(db, runId);
-  const externals = loadExternalSystems(db, runId, modules);
+  const modules = loadModuleInfo(db, runId);
+  // ADR-0040: a container is a deployable. With none proved, every module is
+  // drawn as before, and the diagram says why.
+  const deployables = modules.filter((module) => module.role === 'deployable');
+  const fallback = deployables.length === 0;
+  const containers = fallback ? modules : deployables;
+
+  const externals = loadExternalSystems(db, runId, containers);
   const tables = countTables(db, runId);
 
   const context = buildContext(db, runId, externals, tables);
-  const container = buildContainer(db, runId, modules, externals, tables);
-  const components = modules
-    .map((module) => buildComponents(db, runId, module, options))
-    .filter((diagram): diagram is C4Diagram => diagram !== null);
+  const container = buildContainer(db, runId, { containers, modules, fallback }, externals, tables);
+
+  const graph = containers.length > 0 ? buildPackageGraph(db, runId) : null;
+  const membership = loadPackageMembership(db, runId);
+  const containerIds = new Set(containers.map((module) => module.id));
+  const components =
+    graph === null
+      ? []
+      : containers
+          .map((module) =>
+            buildComponents(db, runId, module, { graph, membership, containerIds, modules }, options),
+          )
+          .filter((diagram): diagram is C4Diagram => diagram !== null);
 
   return { context, container, components };
+}
+
+/** Which modules a run's containers are drawn from, and what the rest are. */
+interface ContainerSet {
+  containers: ModuleInfo[];
+  modules: ModuleInfo[];
+  /** True when no module is a proved deployable and every module is a container. */
+  fallback: boolean;
 }
 
 // ------------------------------------------------------------------ level 1
@@ -222,18 +251,19 @@ function buildContext(
 function buildContainer(
   db: Db,
   runId: number,
-  modules: ModuleRow[],
+  set: ContainerSet,
   externals: ExternalSystem[],
   tables: TableSummary,
 ): C4Diagram {
   const run = loadRun(db, runId);
   const elements: C4Element[] = [];
   const notes: string[] = [];
+  const { containers, modules, fallback } = set;
 
   const languagesByModule = loadModuleLanguages(db, runId);
   const sizesByModule = loadModuleSizes(db, runId);
 
-  for (const module of modules) {
+  for (const module of containers) {
     const languages = languagesByModule.get(module.id) ?? [];
     const size = sizesByModule.get(module.id);
     elements.push({
@@ -248,7 +278,18 @@ function buildContainer(
       inference: false,
       group: null,
       groupInference: false,
-      evidence: [{ kind: 'node', label: module.fqn, path: null, line: null }],
+      evidence: [
+        { kind: 'node', label: module.fqn, path: null, line: null },
+        ...module.proofs.slice(0, EVIDENCE_LIMIT).map((proof) => ({
+          kind: proof.source,
+          label:
+            proof.subject === null
+              ? `${proof.kind}: ${proof.rule}`
+              : `${proof.kind}: @SpringBootApplication ${proof.subject}`,
+          path: proof.path,
+          line: proof.line,
+        })),
+      ],
     });
   }
 
@@ -257,25 +298,75 @@ function buildContainer(
       'No build module was observed, so this run has no containers. Run ' +
         '`stratigraph extract` — history alone cannot say what is deployed.',
     );
-  } else if (modules.length === 1) {
+  } else if (fallback) {
     notes.push(
-      'One container: this repository builds as a single module. Its internal ' +
-        'structure is the component diagram, not this one.',
+      'No module is a proved deployable — no @SpringBootApplication class, Spring Boot ' +
+        'plugin, WAR packaging, or Angular/Nx application project was found — so every ' +
+        'build module is drawn as a container, libraries and aggregators included ' +
+        '(ADR-0040).',
+    );
+    if (modules.length === 1) {
+      notes.push(
+        'One container: this repository builds as a single module. Its internal ' +
+          'structure is the component diagram, not this one.',
+      );
+    }
+  } else {
+    notes.push(
+      'A container is a deployable proved by a build file or a @SpringBootApplication ' +
+        'class; each cites its proof (ADR-0040).',
+    );
+    if (containers.length === 1) {
+      notes.push(
+        'One container: this repository deploys a single application. Its internal ' +
+          'structure is the component diagram, not this one.',
+      );
+    }
+    const byRole = (role: ModuleInfo['role']): string[] =>
+      modules.filter((module) => module.role === role).map((module) => module.name);
+    const aggregators = byRole('aggregator');
+    const libraries = byRole('library');
+    if (aggregators.length > 0) {
+      notes.push(
+        `Not containers — aggregator or BOM modules (packaging pom), which group the ` +
+          `build and deploy nothing: ${listed(aggregators)}.`,
+      );
+    }
+    if (libraries.length > 0) {
+      notes.push(
+        `Not containers — library modules, with no deployability proof: ${listed(libraries)}. ` +
+          'They are drawn inside the component diagram of each container that depends on them.',
+      );
+    }
+  }
+
+  const { relationships, fromLibraries } = containerRelationships(db, runId, containers, modules);
+  if (fromLibraries > 0) {
+    notes.push(
+      `${fromLibraries} reference(s) start or end in library or aggregator code and are not ` +
+        'container relationships: a library is compiled into the containers that use it.',
     );
   }
 
-  const relationships = containerRelationships(db, runId, modules);
-
   if (tables.count > 0) {
     elements.push(datastoreElement(tables));
-    for (const row of tableRelationshipsByModule(db, runId)) {
-      relationships.push(row);
+    const containerFqns = new Set(containers.map((module) => module.fqn));
+    const touching = tableRelationshipsByModule(db, runId);
+    for (const row of touching) {
+      if (containerFqns.has(row.moduleFqn)) relationships.push(row.relationship);
+    }
+    const elsewhere = [...new Set(touching.filter((row) => !containerFqns.has(row.moduleFqn)).map((row) => row.moduleName))];
+    if (elsewhere.length > 0) {
+      notes.push(
+        `Table mappings declared in ${listed(elsewhere)} are not drawn here: that code is not ` +
+          'a container, and which deployable uses it is not a fact in this run.',
+      );
     }
   }
   for (const external of externals) {
     elements.push(externalElement(external));
     for (const [moduleId, calls] of external.byModule) {
-      const module = modules.find((m) => m.id === moduleId);
+      const module = containers.find((m) => m.id === moduleId);
       if (module === undefined) continue;
       relationships.push({
         from: elementId('container', module.fqn),
@@ -306,6 +397,12 @@ function buildContainer(
   };
 }
 
+/** `a, b, c` — or the first few and a count, so a note stays a sentence. */
+function listed(names: string[]): string {
+  const shown = names.slice(0, 8).join(', ');
+  return names.length > 8 ? `${shown} and ${names.length - 8} more` : shown;
+}
+
 /**
  * Module-to-module edges, aggregated by (source, target, confidence).
  *
@@ -316,10 +413,12 @@ function buildContainer(
 function containerRelationships(
   db: Db,
   runId: number,
-  modules: ModuleRow[],
-): C4Relationship[] {
-  if (modules.length < 2) return [];
-  const byId = new Map(modules.map((module) => [module.id, module]));
+  containers: ModuleInfo[],
+  modules: ModuleInfo[],
+): { relationships: C4Relationship[]; fromLibraries: number } {
+  if (modules.length < 2) return { relationships: [], fromLibraries: 0 };
+  const byId = new Map(containers.map((module) => [module.id, module]));
+  const known = new Set(modules.map((module) => module.id));
   const kinds = CONTAINER_EDGE_KINDS.map((k) => `'${k}'`).join(', ');
 
   const rows = db
@@ -336,6 +435,7 @@ function containerRelationships(
           JOIN ancestor_of dm ON dm.node_id = e.dst_id
          WHERE e.run_id = @runId
            AND e.kind IN (${kinds})
+           AND NOT ${packageEdgeFromTest('e')}
            AND sm.ancestor_id <> dm.ancestor_id
          GROUP BY sm.ancestor_id, dm.ancestor_id, e.confidence, e.kind
          ORDER BY sm.ancestor_id, dm.ancestor_id, e.confidence, e.kind`,
@@ -349,10 +449,14 @@ function containerRelationships(
   }>;
 
   const merged = new Map<string, C4Relationship>();
+  let fromLibraries = 0;
   for (const row of rows) {
     const from = byId.get(row.src);
     const to = byId.get(row.dst);
-    if (from === undefined || to === undefined) continue;
+    if (from === undefined || to === undefined) {
+      if (known.has(row.src) && known.has(row.dst)) fromLibraries += row.weight;
+      continue;
+    }
 
     const key = `${row.src} ${row.dst} ${row.confidence}`;
     const existing = merged.get(key);
@@ -370,7 +474,7 @@ function containerRelationships(
       existing.count += row.weight;
     }
   }
-  return [...merged.values()];
+  return { relationships: [...merged.values()], fromLibraries };
 }
 
 /** Up to `EVIDENCE_LIMIT` of the source-level edges behind one container line. */
@@ -396,6 +500,7 @@ function moduleEdgeEvidence(
           LEFT JOIN source_file f ON f.id = e.file_id
          WHERE e.run_id = @runId
            AND e.kind IN (${kinds})
+           AND NOT ${packageEdgeFromTest('e')}
            AND e.confidence = @confidence
            AND sm.ancestor_id = @srcModule
            AND dm.ancestor_id = @dstModule
@@ -418,14 +523,17 @@ function moduleEdgeEvidence(
   }));
 }
 
-/** Which containers touch the data store, and how. */
-function tableRelationshipsByModule(db: Db, runId: number): C4Relationship[] {
+/** Which modules touch the data store, and how — one relationship per module. */
+function tableRelationshipsByModule(
+  db: Db,
+  runId: number,
+): Array<{ moduleFqn: string; moduleName: string; relationship: C4Relationship }> {
   const kinds = TABLE_EDGE_KINDS.map((k) => `'${k}'`).join(', ');
   const rows = db
     .prepare(
       ancestorOfCte('module', TABLE_EDGE_KINDS, 'fact') +
         /* sql */ `
-        SELECT m.fqn AS moduleFqn, e.kind AS kind, COUNT(*) AS n,
+        SELECT m.fqn AS moduleFqn, m.name AS moduleName, e.kind AS kind, COUNT(*) AS n,
                MIN(f.path) AS path, MIN(e.line) AS line,
                MIN(dn.fqn) AS tableFqn
           FROM edge e
@@ -439,6 +547,7 @@ function tableRelationshipsByModule(db: Db, runId: number): C4Relationship[] {
     )
     .all({ runId }) as Array<{
     moduleFqn: string;
+    moduleName: string;
     kind: string;
     n: number;
     path: string | null;
@@ -446,31 +555,34 @@ function tableRelationshipsByModule(db: Db, runId: number): C4Relationship[] {
     tableFqn: string;
   }>;
 
-  const merged = new Map<string, C4Relationship>();
+  const merged = new Map<string, { moduleFqn: string; moduleName: string; relationship: C4Relationship }>();
   for (const row of rows) {
     const from = elementId('container', row.moduleFqn);
+    const evidence: Evidence = {
+      kind: 'edge',
+      label: `${row.kind} → ${row.tableFqn}`,
+      path: row.path,
+      line: row.line,
+    };
     const existing = merged.get(from);
     if (existing === undefined) {
       merged.set(from, {
-        from,
-        to: 'datastore',
-        label: row.kind,
-        count: row.n,
-        confidence: 'fact',
-        evidence: [
-          { kind: 'edge', label: `${row.kind} → ${row.tableFqn}`, path: row.path, line: row.line },
-        ],
+        moduleFqn: row.moduleFqn,
+        moduleName: row.moduleName,
+        relationship: {
+          from,
+          to: 'datastore',
+          label: row.kind,
+          count: row.n,
+          confidence: 'fact',
+          evidence: [evidence],
+        },
       });
     } else {
-      existing.label += `, ${row.kind}`;
-      existing.count += row.n;
-      if (existing.evidence.length < EVIDENCE_LIMIT) {
-        existing.evidence.push({
-          kind: 'edge',
-          label: `${row.kind} → ${row.tableFqn}`,
-          path: row.path,
-          line: row.line,
-        });
+      existing.relationship.label += `, ${row.kind}`;
+      existing.relationship.count += row.n;
+      if (existing.relationship.evidence.length < EVIDENCE_LIMIT) {
+        existing.relationship.evidence.push(evidence);
       }
     }
   }
@@ -479,25 +591,42 @@ function tableRelationshipsByModule(db: Db, runId: number): C4Relationship[] {
 
 // ------------------------------------------------------------------ level 3
 
+/** What level 3 needs from the whole run, computed once rather than per container. */
+interface ComponentContext {
+  graph: PackageGraph;
+  /** Package id → the modules it belongs to (more than one when split, ADR-0041). */
+  membership: Map<number, number[]>;
+  containerIds: Set<number>;
+  modules: ModuleInfo[];
+}
+
 /**
- * One container's packages and the dependencies between them.
+ * One container's packages and the dependencies between them, plus the
+ * library packages it depends on directly (ADR-0040).
  *
  * `buildPackageGraph` is reused rather than reimplemented, so "depends on"
  * means exactly what it means to the cycle detector. Filtering afterwards keeps
- * the two definitions from drifting apart, which is worth one wasted whole-repo
- * aggregation per module.
+ * the two definitions from drifting apart.
+ *
+ * A library is compiled into the containers that use it, so its packages are
+ * drawn inside each such container, grouped under `library <name>`. A package
+ * that can appear in more than one diagram — a library package, or a package
+ * split across two containers — gets an identifier scoped by the container, so
+ * Structurizr, which nests components inside containers, never sees one
+ * declared twice.
  */
 function buildComponents(
   db: Db,
   runId: number,
-  module: ModuleRow,
+  module: ModuleInfo,
+  context: ComponentContext,
   options: C4Options,
 ): C4Diagram | null {
+  const { graph, membership, containerIds } = context;
   const packages = loadPackages(db, runId, module.id);
   if (packages.length === 0) return null;
-
-  const graph = buildPackageGraph(db, runId);
   const clusters = loadClusterNames(db, runId);
+  const moduleById = new Map(context.modules.map((m) => [m.id, m]));
 
   // Rank by how connected a package is, so a capped diagram keeps the packages
   // that carry the structure rather than the alphabetically luckiest ones.
@@ -510,7 +639,29 @@ function buildComponents(
     (a, b) => (degree.get(b.id) ?? 0) - (degree.get(a.id) ?? 0) || a.fqn.localeCompare(b.fqn),
   );
   const shown = ranked.slice(0, options.top);
-  const shownIds = new Set(shown.map((p) => p.id));
+  const ownIds = new Set(packages.map((p) => p.id));
+  const shownOwn = new Set(shown.map((p) => p.id));
+
+  // Library packages the shown packages depend on directly, heaviest first.
+  const libraryWeight = new Map<number, number>();
+  for (const dependency of graph.dependencies) {
+    if (!shownOwn.has(dependency.src) || ownIds.has(dependency.dst)) continue;
+    const owners = membership.get(dependency.dst) ?? [];
+    if (owners.length === 0 || owners.some((owner) => containerIds.has(owner))) continue;
+    libraryWeight.set(dependency.dst, (libraryWeight.get(dependency.dst) ?? 0) + dependency.weight);
+  }
+  const libraryAll = [...libraryWeight.entries()]
+    .map(([id, weight]) => ({ id, weight, pkg: graph.packages.get(id) }))
+    .filter((entry): entry is { id: number; weight: number; pkg: { id: number; fqn: string } } =>
+      entry.pkg !== undefined,
+    )
+    .sort((a, b) => b.weight - a.weight || a.pkg.fqn.localeCompare(b.pkg.fqn));
+  const libraries = libraryAll.slice(0, options.top);
+
+  const scoped = (pkgId: number, fqn: string): string => {
+    const shared = !ownIds.has(pkgId) || (membership.get(pkgId)?.length ?? 1) > 1;
+    return shared ? elementId('component', `${module.fqn} ${fqn}`) : elementId('component', fqn);
+  };
 
   // A partition of one is not a partition. When every package on the diagram
   // landed in the same cluster, the boundary box says nothing a reader can use,
@@ -520,36 +671,56 @@ function buildComponents(
   );
   const worthGrouping = distinctGroups.size > 1;
 
-  const elements: C4Element[] = shown
-    .map((pkg) => {
-      const cluster = worthGrouping ? clusters.get(pkg.id) : undefined;
-      return {
-        id: elementId('component', pkg.fqn),
-        name: pkg.fqn,
-        kind: 'component' as const,
-        technology: null,
-        description: null,
-        inference: false,
-        group: cluster?.label ?? null,
-        groupInference: cluster?.inference ?? false,
-        evidence: [{ kind: 'node' as const, label: pkg.fqn, path: null, line: null }],
-      };
-    })
-    .sort((a, b) => a.name.localeCompare(b.name));
+  const ids = new Map<number, string>();
+  const elements: C4Element[] = shown.map((pkg) => {
+    const cluster = worthGrouping ? clusters.get(pkg.id) : undefined;
+    const id = scoped(pkg.id, pkg.fqn);
+    ids.set(pkg.id, id);
+    return {
+      id,
+      name: pkg.fqn,
+      kind: 'component' as const,
+      technology: null,
+      description: null,
+      inference: false,
+      group: cluster?.label ?? null,
+      groupInference: cluster?.inference ?? false,
+      evidence: [{ kind: 'node' as const, label: pkg.fqn, path: null, line: null }],
+    };
+  });
+  for (const { id: pkgId, pkg } of libraries) {
+    const owners = (membership.get(pkgId) ?? []).map((owner) => moduleById.get(owner)?.name ?? '?');
+    const id = scoped(pkgId, pkg.fqn);
+    ids.set(pkgId, id);
+    elements.push({
+      id,
+      name: pkg.fqn,
+      kind: 'component',
+      technology: null,
+      description: null,
+      inference: false,
+      group: `library ${owners.join(', ')}`,
+      groupInference: false,
+      evidence: [{ kind: 'node', label: pkg.fqn, path: null, line: null }],
+    });
+  }
+  elements.sort((a, b) => a.name.localeCompare(b.name));
 
-  const byId = new Map(packages.map((pkg) => [pkg.id, pkg]));
+  const drawn = graph.dependencies.filter((d) => ids.has(d.src) && ids.has(d.dst));
+  const evidenceByPair = supportingEdgesForPairs(
+    db,
+    runId,
+    drawn.map((d) => [d.src, d.dst] as const),
+    EVIDENCE_LIMIT,
+  );
   const relationships: C4Relationship[] = [];
-  for (const dependency of graph.dependencies) {
-    if (!shownIds.has(dependency.src) || !shownIds.has(dependency.dst)) continue;
-    const src = byId.get(dependency.src);
-    const dst = byId.get(dependency.dst);
-    /* c8 ignore next */
-    if (src === undefined || dst === undefined) continue;
-
-    const supporting = supportingEdges(db, runId, dependency.src, dependency.dst, EVIDENCE_LIMIT);
+  for (const dependency of drawn) {
+    const from = ids.get(dependency.src) as string;
+    const to = ids.get(dependency.dst) as string;
+    const supporting = evidenceByPair.get(`${dependency.src} ${dependency.dst}`) ?? [];
     relationships.push({
-      from: elementId('component', src.fqn),
-      to: elementId('component', dst.fqn),
+      from,
+      to,
       label: [...new Set(supporting.map((edge) => edge.kind))].join(', ') || 'depends on',
       count: dependency.weight,
       confidence: 'fact',
@@ -568,6 +739,22 @@ function buildComponents(
     notes.push(
       `Showing ${shown.length} of ${packages.length} packages, the most connected ` +
         `first. Raise --top for more.`,
+    );
+  }
+  if (libraries.length > 0) {
+    notes.push(
+      'Packages grouped under "library" belong to library modules compiled into this ' +
+        'container; they are drawn because this container’s packages depend on them directly' +
+        (libraryAll.length > libraries.length
+          ? ` (${libraries.length} of ${libraryAll.length} shown).`
+          : '.'),
+    );
+  }
+  const split = shown.filter((pkg) => (membership.get(pkg.id)?.length ?? 1) > 1);
+  if (split.length > 0) {
+    notes.push(
+      `${listed(split.map((pkg) => pkg.fqn))}: split across modules (ADR-0041). A package ` +
+        'is one node, so its dependencies here are those of both halves.',
     );
   }
   if (elements.some((element) => element.groupInference)) {
@@ -647,7 +834,7 @@ function externalElement(external: ExternalSystem): C4Element {
  * because a relative URL that matched no endpoint is a gap in our reading of
  * this repository, not evidence of a system outside it.
  */
-function loadExternalSystems(db: Db, runId: number, modules: ModuleRow[]): ExternalSystem[] {
+function loadExternalSystems(db: Db, runId: number, modules: Array<{ id: number }>): ExternalSystem[] {
   const calls = observedHttpCalls(db, runId);
   const withHost = calls
     .map((call) => ({ call, host: hostOf(call.url) }))
@@ -716,7 +903,7 @@ export function hostOf(url: string): string | null {
   return host.includes('{') ? null : host.toLowerCase();
 }
 
-/** Resolve a specific set of nodes to their enclosing module. */
+/** Resolve a specific set of nodes to their enclosing module (ADR-0041's rule). */
 function modulesOfNodes(db: Db, runId: number, nodeIds: number[]): Map<number, number> {
   const unique = [...new Set(nodeIds)].filter((id) => Number.isInteger(id));
   if (unique.length === 0) return new Map();
@@ -725,18 +912,10 @@ function modulesOfNodes(db: Db, runId: number, nodeIds: number[]): Map<number, n
   const rows = db
     .prepare(
       /* sql */ `
-      WITH RECURSIVE ancestry(start_id, node_id, kind) AS (
-          SELECT n.id, n.id, n.kind FROM node n
-           WHERE n.run_id = @runId AND n.id IN (${list})
-        UNION ALL
-          SELECT a.start_id, p.id, p.kind
-            FROM ancestry a
-            JOIN node c ON c.id = a.node_id
-            JOIN node p ON p.id = c.parent_id
-           WHERE a.kind <> 'module'
-      )
-      SELECT start_id AS nodeId, node_id AS moduleId
-        FROM ancestry WHERE kind = 'module'`,
+      WITH RECURSIVE
+        seed(id) AS (SELECT id FROM node WHERE run_id = @runId AND id IN (${list})),
+        ${moduleAncestry('seed')}
+      SELECT node_id AS nodeId, ancestor_id AS moduleId FROM ancestor_of`,
     )
     .all({ runId }) as Array<{ nodeId: number; moduleId: number }>;
 
@@ -791,25 +970,56 @@ function countTables(db: Db, runId: number): TableSummary {
   };
 }
 
-function loadModules(db: Db, runId: number): ModuleRow[] {
-  return db
-    .prepare(
-      `SELECT id, fqn, name FROM node
-        WHERE run_id = ? AND kind = 'module' AND is_stub = 0 ORDER BY fqn`,
-    )
-    .all(runId) as ModuleRow[];
-}
-
+/** A module's packages: by `parent`, or by a `contains` edge when split (ADR-0041). */
 function loadPackages(db: Db, runId: number, moduleId: number): ModuleRow[] {
   return db
     .prepare(
       `SELECT id, fqn, name FROM node pkg
-        WHERE run_id = ? AND kind = 'package' AND is_stub = 0 AND parent_id = ?
+        WHERE run_id = @runId AND kind = 'package' AND is_stub = 0
+          AND ${packageInModule('pkg', '@moduleId')}
           AND NOT ${testOnlyPackage('pkg')}
         ORDER BY fqn`,
     )
-    .all(runId, moduleId) as ModuleRow[];
+    .all({ runId, moduleId }) as ModuleRow[];
 }
+
+/** Package id → every module it belongs to. */
+function loadPackageMembership(db: Db, runId: number): Map<number, number[]> {
+  const rows = db
+    .prepare(
+      /* sql */ `
+      SELECT c.dst_id AS pkg, c.src_id AS module
+        FROM edge c JOIN node m ON m.id = c.src_id AND m.kind = 'module'
+       WHERE c.run_id = @runId AND c.kind = 'contains'
+      UNION
+      SELECT pkg.id, pkg.parent_id
+        FROM node pkg
+       WHERE pkg.run_id = @runId AND pkg.kind = 'package' AND pkg.parent_id IS NOT NULL
+         AND NOT EXISTS (SELECT 1 FROM edge c WHERE c.run_id = pkg.run_id
+                          AND c.kind = 'contains' AND c.dst_id = pkg.id)
+       ORDER BY 1, 2`,
+    )
+    .all({ runId }) as Array<{ pkg: number; module: number }>;
+  const byPackage = new Map<number, number[]>();
+  for (const row of rows) {
+    const list = byPackage.get(row.pkg) ?? [];
+    list.push(row.module);
+    byPackage.set(row.pkg, list);
+  }
+  return byPackage;
+}
+
+/**
+ * The module each declared type belongs to, for sizes and languages. A type in
+ * a split package is placed by its file (ADR-0041); test code is left out
+ * (ADR-0034).
+ */
+const TYPES_BY_MODULE = /* sql */ `
+  SELECT ${moduleOfNodeInPackage('n', 'pkg')} AS moduleId, n.id AS typeId, n.file_id AS fileId
+    FROM node pkg
+    JOIN node n ON n.parent_id = pkg.id AND n.is_stub = 0
+   WHERE pkg.run_id = @runId AND pkg.kind = 'package' AND pkg.is_stub = 0
+     AND NOT ${declaredInTest('n')}`;
 
 /**
  * Languages per module, from the files of the types declared in its packages.
@@ -822,14 +1032,11 @@ function loadModuleLanguages(db: Db, runId: number): Map<number, string[]> {
   const rows = db
     .prepare(
       /* sql */ `
-      SELECT m.id AS moduleId, sf.language AS language, COUNT(*) AS n
-        FROM node pkg
-        JOIN node m  ON m.id = pkg.parent_id AND m.kind = 'module'
-        JOIN node n  ON n.parent_id = pkg.id
-        JOIN source_file sf ON sf.id = n.file_id
-       WHERE pkg.run_id = @runId AND pkg.kind = 'package' AND NOT ${declaredInTest('n')}
-       GROUP BY m.id, sf.language
-       ORDER BY m.id, n DESC, sf.language`,
+      SELECT t.moduleId AS moduleId, sf.language AS language, COUNT(*) AS n
+        FROM (${TYPES_BY_MODULE}) t
+        JOIN source_file sf ON sf.id = t.fileId
+       GROUP BY t.moduleId, sf.language
+       ORDER BY t.moduleId, n DESC, sf.language`,
     )
     .all({ runId }) as Array<{ moduleId: number; language: string; n: number }>;
 
@@ -843,21 +1050,30 @@ function loadModuleLanguages(db: Db, runId: number): Map<number, string[]> {
 }
 
 function loadModuleSizes(db: Db, runId: number): Map<number, { packages: number; types: number }> {
-  const rows = db
+  const packages = db
     .prepare(
       /* sql */ `
-      SELECT m.id AS moduleId,
-             COUNT(DISTINCT pkg.id) AS packages,
-             COUNT(n.id)            AS types
-        FROM node pkg
-        JOIN node m ON m.id = pkg.parent_id AND m.kind = 'module'
-        LEFT JOIN node n ON n.parent_id = pkg.id AND n.is_stub = 0 AND NOT ${declaredInTest('n')}
-       WHERE pkg.run_id = @runId AND pkg.kind = 'package' AND pkg.is_stub = 0
-         AND NOT ${testOnlyPackage('pkg')}
+      SELECT m.id AS moduleId, COUNT(*) AS n
+        FROM node m JOIN node pkg ON pkg.run_id = m.run_id AND pkg.kind = 'package'
+             AND pkg.is_stub = 0 AND ${packageInModule('pkg', 'm.id')}
+       WHERE m.run_id = @runId AND m.kind = 'module' AND NOT ${testOnlyPackage('pkg')}
        GROUP BY m.id`,
     )
-    .all({ runId }) as Array<{ moduleId: number; packages: number; types: number }>;
-  return new Map(rows.map((row) => [row.moduleId, { packages: row.packages, types: row.types }]));
+    .all({ runId }) as Array<{ moduleId: number; n: number }>;
+  const types = db
+    .prepare(
+      /* sql */ `
+      SELECT t.moduleId AS moduleId, COUNT(*) AS n
+        FROM (${TYPES_BY_MODULE}) t
+        JOIN node n ON n.id = t.typeId AND n.kind IN ('class','interface','enum','annotation','component','service')
+       GROUP BY t.moduleId`,
+    )
+    .all({ runId }) as Array<{ moduleId: number; n: number }>;
+
+  const typeCount = new Map(types.map((row) => [row.moduleId, row.n]));
+  return new Map(
+    packages.map((row) => [row.moduleId, { packages: row.n, types: typeCount.get(row.moduleId) ?? 0 }]),
+  );
 }
 
 /**

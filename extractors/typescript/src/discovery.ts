@@ -24,13 +24,34 @@ export interface ModuleId {
   name: string;
 }
 
+/**
+ * A module and what its build files say about it (ADR-0040): `root`,
+ * `buildFile`, `projectType`, and a deployability proof with its citation.
+ */
+export interface ModuleEntry {
+  root: string;
+  id: ModuleId;
+  attrs: Record<string, unknown>;
+}
+
+/** A complaint discovery has about the build files, emitted by the extractor. */
+export interface DiscoveryDiagnostic {
+  level: 'warn' | 'info';
+  message: string;
+  file: string;
+  line?: number;
+}
+
 export interface Discovery {
   /** Every source found, repo-relative and sorted, so output is deterministic. */
   sources: string[];
   /** Every template found, repo-relative and sorted. */
   templates: string[];
   /** Module root (repo-relative, `.` for the root) → identity, deepest first. */
-  modules: Array<{ root: string; id: ModuleId }>;
+  modules: ModuleEntry[];
+  /** Whether an `angular.json` or an Nx `project.json` was found (ADR-0042). */
+  workspace: boolean;
+  diagnostics: DiscoveryDiagnostic[];
   /** Path aliases from every `tsconfig.json`, merged. Absolute targets. */
   paths: PathAliases;
 }
@@ -54,7 +75,7 @@ export function discover(options: DiscoveryOptions): Discovery {
 
   walk(repoRoot, repoRoot, excludedDirectories, (absolute, name) => {
     const rel = toRepoRelative(repoRoot, absolute);
-    if (name === 'package.json' || name === 'project.json') {
+    if (name === 'package.json' || name === 'project.json' || name === 'angular.json') {
       manifests.push(rel);
     } else if (name === 'tsconfig.json' || (name.startsWith('tsconfig.') && name.endsWith('.json'))) {
       tsconfigs.push(rel);
@@ -76,23 +97,33 @@ export function discover(options: DiscoveryOptions): Discovery {
   manifests.sort();
   tsconfigs.sort();
 
+  const diagnostics: DiscoveryDiagnostic[] = [];
   return {
     sources,
     templates,
-    modules: identifyModules(repoRoot, manifests),
+    modules: identifyModules(repoRoot, manifests, diagnostics),
+    workspace: manifests.some((m) => m.endsWith('angular.json') || m.endsWith('project.json')),
+    diagnostics,
     paths: readPathAliases(repoRoot, tsconfigs),
   };
 }
 
 /** The module a file belongs to: the nearest module root above it. */
-export function moduleOf(discovery: Discovery, repoRelativePath: string): ModuleId {
-  for (const { root, id } of discovery.modules) {
+export function moduleOf(discovery: Discovery, repoRelativePath: string): ModuleEntry {
+  for (const entry of discovery.modules) {
+    const { root } = entry;
     if (root === '.' || repoRelativePath === root || repoRelativePath.startsWith(`${root}/`)) {
-      return id;
+      return entry;
     }
   }
   // Sources above every manifest still belong somewhere.
-  return discovery.modules[discovery.modules.length - 1]?.id ?? { fqn: '.', name: '.' };
+  return (
+    discovery.modules[discovery.modules.length - 1] ?? {
+      root: '.',
+      id: { fqn: '.', name: '.' },
+      attrs: { root: '.' },
+    }
+  );
 }
 
 function walk(
@@ -135,46 +166,208 @@ function included(repoRelativePath: string, includePrefixes: string[]): boolean 
  * Module identity from a manifest.
  *
  * `package.json`'s `name` where there is one; Nx's `project.json` `name` next,
- * because most Nx libraries have no `package.json` at all; otherwise the
- * directory. Deepest first, so a library inside a workspace wins over the
- * workspace root above it — the same rule the Java side applies to a nested
- * Maven module.
+ * because most Nx libraries have no `package.json` at all; then the project's
+ * key in `angular.json`; otherwise the directory. Deepest first, so a library
+ * inside a workspace wins over the workspace root above it — the same rule the
+ * Java side applies to a nested Maven module.
+ *
+ * `angular.json` and `project.json` also say whether a project is an
+ * `application` or a `library` (ADR-0040). Both are read with positions, so a
+ * deployability proof cites its line. Where both describe one root and
+ * disagree, `project.json` wins and the disagreement is reported: in an Nx
+ * workspace it is the project's own definition.
  */
-function identifyModules(repoRoot: string, manifests: string[]): Discovery['modules'] {
-  const byRoot = new Map<string, ModuleId>();
+function identifyModules(
+  repoRoot: string,
+  manifests: string[],
+  diagnostics: DiscoveryDiagnostic[],
+): ModuleEntry[] {
+  const byRoot = new Map<string, { id: ModuleId; buildFile: string | null }>();
+  const nx = new Map<string, ProjectType>();
+  const ng = new Map<string, ProjectType & { project: string }>();
+  const angularProjects: ReturnType<typeof readAngularProjects> = [];
+
+  const directoryName = (root: string): string =>
+    root === '.' ? (repoRoot.split(sep).pop() ?? '.') : (root.split('/').pop() ?? root);
 
   for (const manifest of manifests) {
     const slash = manifest.lastIndexOf('/');
     const root = slash === -1 ? '.' : manifest.slice(0, slash);
-    const directory = root === '.' ? (repoRoot.split(sep).pop() ?? '.') : (root.split('/').pop() ?? root);
 
+    if (manifest.endsWith('angular.json')) {
+      angularProjects.push(...readAngularProjects(repoRoot, manifest));
+      continue;
+    }
+
+    const directory = directoryName(root);
+    const json = readJson(repoRoot, manifest);
     let name: string | null = null;
-    try {
-      const parsed: unknown = JSON.parse(readFileSync(join(repoRoot, manifest), 'utf8'));
-      if (typeof parsed === 'object' && parsed !== null) {
-        const candidate = (parsed as Record<string, unknown>)['name'];
-        if (typeof candidate === 'string' && candidate.length > 0) name = candidate;
-      }
-    } catch {
-      // An unreadable manifest costs us a module name, not the analysis.
+    const candidate = json?.['name'];
+    if (typeof candidate === 'string' && candidate.length > 0) name = candidate;
+
+    if (manifest.endsWith('project.json')) {
+      const type = readProjectType(repoRoot, manifest);
+      if (type !== null) nx.set(root, type);
     }
 
     const existing = byRoot.get(root);
     // `package.json` sorts before `project.json`, so the first name found for a
     // root wins and the Nx file is only consulted when there was no npm one.
-    if (existing === undefined || (existing.fqn === directory && name !== null)) {
-      byRoot.set(root, { fqn: name ?? directory, name: name ?? directory });
+    if (existing === undefined || (existing.id.fqn === directory && name !== null)) {
+      byRoot.set(root, { id: { fqn: name ?? directory, name: name ?? directory }, buildFile: manifest });
     }
+  }
+
+  // After the npm and Nx manifests, so their names win: an angular.json key
+  // names only a project root no manifest named.
+  for (const project of angularProjects) {
+    if (!byRoot.has(project.root)) {
+      byRoot.set(project.root, { id: { fqn: project.project, name: project.project }, buildFile: project.file });
+    }
+    if (project.projectType !== null) ng.set(project.root, { ...project, projectType: project.projectType });
   }
 
   if (byRoot.size === 0) {
     const name = repoRoot.split(sep).pop() ?? '.';
-    byRoot.set('.', { fqn: name, name });
+    byRoot.set('.', { id: { fqn: name, name }, buildFile: null });
   }
 
   return [...byRoot.entries()]
-    .map(([root, id]) => ({ root, id }))
+    .map(([root, { id, buildFile }]) => {
+      const attrs: Record<string, unknown> = { root };
+      if (buildFile !== null) attrs['buildFile'] = buildFile;
+
+      const fromNx = nx.get(root);
+      const fromNg = ng.get(root);
+      if (fromNx !== undefined && fromNg !== undefined && fromNx.projectType !== fromNg.projectType) {
+        diagnostics.push({
+          level: 'warn',
+          message:
+            `angular.json declares project "${fromNg.project}" an ${fromNg.projectType}, but ` +
+            `${fromNx.file} declares it a ${fromNx.projectType}; project.json is taken as the ` +
+            `project's own definition (ADR-0040)`,
+          file: fromNg.file,
+          line: fromNg.line,
+        });
+      }
+      const decided = fromNx ?? fromNg;
+      if (decided !== undefined) {
+        attrs['projectType'] = decided.projectType;
+        if (decided.projectType === 'application') {
+          // `angular-app` when angular.json agrees it is an application:
+          // that is the file that says the project is built by Angular.
+          const proof = fromNg?.projectType === 'application' ? fromNg : decided;
+          attrs['deployable'] = proof === fromNg ? 'angular-app' : 'nx-app';
+          attrs['deployableFile'] = proof.file;
+          attrs['deployableLine'] = proof.line;
+          attrs['deployableRule'] =
+            proof === fromNg
+              ? `angular.json:projects.${fromNg.project}.projectType=application`
+              : 'project.json:projectType=application';
+        }
+      }
+      return { root, id, attrs };
+    })
     .sort((a, b) => depth(b.root) - depth(a.root) || (a.root < b.root ? -1 : 1));
+}
+
+interface ProjectType {
+  projectType: string;
+  file: string;
+  line: number;
+}
+
+function readJson(repoRoot: string, manifest: string): Record<string, unknown> | null {
+  try {
+    const parsed: unknown = JSON.parse(readFileSync(join(repoRoot, manifest), 'utf8'));
+    return typeof parsed === 'object' && parsed !== null ? (parsed as Record<string, unknown>) : null;
+  } catch {
+    // An unreadable manifest costs us a module name, not the analysis.
+    return null;
+  }
+}
+
+/**
+ * A JSON file parsed with positions. `ts.parseJsonText` is the TypeScript
+ * compiler's own JSON reader: it tolerates comments, and every property keeps
+ * its offset, which is what a citation needs.
+ */
+function readJsonWithPositions(
+  repoRoot: string,
+  manifest: string,
+): { source: ts.JsonSourceFile; root: ts.ObjectLiteralExpression } | null {
+  let text: string;
+  try {
+    text = readFileSync(join(repoRoot, manifest), 'utf8');
+  } catch {
+    return null;
+  }
+  const source = ts.parseJsonText(manifest, text);
+  const statement = source.statements[0];
+  if (statement === undefined || !ts.isObjectLiteralExpression(statement.expression)) return null;
+  return { source, root: statement.expression };
+}
+
+function jsonProperty(object: ts.ObjectLiteralExpression, name: string): ts.PropertyAssignment | null {
+  for (const property of object.properties) {
+    if (!ts.isPropertyAssignment(property)) continue;
+    const key = property.name;
+    if ((ts.isStringLiteral(key) || ts.isIdentifier(key)) && key.text === name) return property;
+  }
+  return null;
+}
+
+function jsonString(object: ts.ObjectLiteralExpression, name: string): { value: string; node: ts.Node } | null {
+  const property = jsonProperty(object, name);
+  if (property === null || !ts.isStringLiteral(property.initializer)) return null;
+  return { value: property.initializer.text, node: property };
+}
+
+function lineIn(source: ts.SourceFile, node: ts.Node): number {
+  return source.getLineAndCharacterOfPosition(node.getStart(source)).line + 1;
+}
+
+function readProjectType(repoRoot: string, manifest: string): ProjectType | null {
+  const parsed = readJsonWithPositions(repoRoot, manifest);
+  if (parsed === null) return null;
+  const type = jsonString(parsed.root, 'projectType');
+  if (type === null) return null;
+  return { projectType: type.value, file: manifest, line: lineIn(parsed.source, type.node) };
+}
+
+/** Every project an `angular.json` declares: its root, and its type where stated. */
+function readAngularProjects(
+  repoRoot: string,
+  manifest: string,
+): Array<{ project: string; root: string; projectType: string | null; file: string; line: number }> {
+  const parsed = readJsonWithPositions(repoRoot, manifest);
+  if (parsed === null) return [];
+  const projects = jsonProperty(parsed.root, 'projects');
+  if (projects === null || !ts.isObjectLiteralExpression(projects.initializer)) return [];
+
+  const slash = manifest.lastIndexOf('/');
+  const base = slash === -1 ? '' : manifest.slice(0, slash);
+  const out = [];
+  for (const property of projects.initializer.properties) {
+    if (!ts.isPropertyAssignment(property) || !ts.isObjectLiteralExpression(property.initializer)) continue;
+    const key = property.name;
+    if (!ts.isStringLiteral(key) && !ts.isIdentifier(key)) continue;
+
+    const declaredRoot = jsonString(property.initializer, 'root')?.value ?? '';
+    const joined = [base, declaredRoot]
+      .filter((part) => part.length > 0)
+      .join('/')
+      .replace(/\/+$/, '');
+    const type = jsonString(property.initializer, 'projectType');
+    out.push({
+      project: key.text,
+      root: joined.length === 0 ? '.' : joined,
+      projectType: type?.value ?? null,
+      file: manifest,
+      line: lineIn(parsed.source, type?.node ?? property),
+    });
+  }
+  return out;
 }
 
 function depth(root: string): number {

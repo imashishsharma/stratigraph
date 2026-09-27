@@ -1,0 +1,16 @@
+{
+  "$schema": "./node_modules/@angular/cli/lib/config/schema.json",
+  "version": 1,
+  "projects": {
+    "shop": {
+      "projectType": "application",
+      "root": "projects/shop",
+      "sourceRoot": "projects/shop/src"
+    },
+    "ui-kit": {
+      "projectType": "application",
+      "root": "projects/ui-kit",
+      "sourceRoot": "projects/ui-kit/src"
+    }
+  }
+}

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  A Boot application with no plugin in its own build: proved only by its
+  @SpringBootApplication class, which the core joins from the annotated_with edge.
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>com.example.multi</groupId>
+    <artifactId>multi-parent</artifactId>
+    <version>0.0.1</version>
+  </parent>
+  <artifactId>billing-app</artifactId>
+</project>

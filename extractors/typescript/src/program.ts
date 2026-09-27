@@ -213,6 +213,38 @@ export class Resolver {
     return null;
   }
 
+  /**
+   * The class method a call invokes, when the checker can name it (ADR-0042).
+   *
+   * Only `receiver.method(…)` where the property resolves to a method declared
+   * on a top-level class in the source set — the same classes the extractor
+   * emits nodes for, so the edge never mints a stub. A callee that is an
+   * interface member, a function-typed property, a library method or nothing
+   * resolvable returns null: the receiver's type is exactly what we would be
+   * guessing.
+   */
+  resolveCall(call: ts.CallExpression): NodeRef | null {
+    const callee = call.expression;
+    if (!ts.isPropertyAccessExpression(callee)) return null;
+    const symbol = this.symbolAt(callee.name);
+    const declarations = symbol?.getDeclarations();
+    if (declarations === undefined) return null;
+    const method = declarations.find(ts.isMethodDeclaration);
+    if (method === undefined || !ts.isIdentifier(method.name)) return null;
+    const owner = method.parent;
+    if (!ts.isClassDeclaration(owner) || !ts.isSourceFile(owner.parent)) return null;
+
+    const fileName = normalise(owner.getSourceFile().fileName);
+    if (!this.internal.has(fileName)) return null;
+    const className =
+      owner.name?.text ??
+      (ts.getModifiers(owner)?.some((m) => m.kind === ts.SyntaxKind.DefaultKeyword) ? 'default' : null);
+    if (className === null) return null;
+
+    const module = modulePath(relative(this.repoRoot, fileName).split(sep).join('/'));
+    return { kind: 'method', fqn: methodFqn(typeFqn(module, className), method.name.text) };
+  }
+
   private symbolAt(node: ts.Node): ts.Symbol | undefined {
     const target = rootTarget(node);
     let symbol = this.checker.getSymbolAtLocation(target);

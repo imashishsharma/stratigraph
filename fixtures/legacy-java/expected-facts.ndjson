@@ -4,7 +4,7 @@
 {"v":1,"type":"file","path":"src/com/example/legacy/service/ReportService.java","language":"java","loc":18}
 {"v":1,"type":"file","path":"src/com/example/legacy/web/ReportController.java","language":"java","loc":37}
 {"v":1,"type":"diagnostic","level":"info","message":"XML configuration not parsed — bean wiring, servlet mappings and O/R mappings defined here are absent from the graph","file":"WEB-INF/applicationContext.xml"}
-{"v":1,"type":"node","kind":"module","fqn":"legacy-java","name":"legacy-java"}
+{"v":1,"type":"node","kind":"module","fqn":"legacy-java","name":"legacy-java","attrs":{"root":"."}}
 {"v":1,"type":"node","kind":"package","fqn":"com.example.legacy.domain","name":"domain","parent":{"kind":"module","fqn":"legacy-java"}}
 {"v":1,"type":"node","kind":"class","fqn":"com.example.legacy.domain.Report","name":"Report","parent":{"kind":"package","fqn":"com.example.legacy.domain"},"file":"src/com/example/legacy/domain/Report.java","startLine":12,"endLine":33,"attrs":{"modifiers":["public"]}}
 {"v":1,"type":"edge","kind":"annotated_with","src":{"kind":"class","fqn":"com.example.legacy.domain.Report"},"dst":{"kind":"annotation","fqn":"javax.persistence.Entity"},"file":"src/com/example/legacy/domain/Report.java","line":12,"attrs":{"resolution":"import"}}

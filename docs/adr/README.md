@@ -47,6 +47,9 @@ the code when it is incidental. Either way, before the commit.
 | [0037](0037-the-schema-as-migrations-define-it.md) | A migrations extractor reads Liquibase/Flyway/DDL; the ER model overlays schema and mapping; drift is a finding | accepted |
 | [0038](0038-complete-package-listings.md) | Shipped complete package listings let a known or first-party wildcard import be ruled out | accepted |
 | [0039](0039-classpath-lombok-and-spring-wiring.md) | Offline Maven classpath when available; Lombok constructors and @Bean parameters inject; unresolved points counted | accepted |
+| [0040](0040-containers-are-deployables.md) | A C4 container is a deployable, proved by a build file or a main class | accepted |
+| [0041](0041-split-packages.md) | A split package is one node with a `contains` edge from each module | accepted |
+| [0042](0042-angular-structure.md) | An Angular package is a structural boundary, not a directory; service calls are edges | accepted |
 
 Format: context, decision, alternatives considered (with why each was rejected),
 consequences — including the costs, not only the benefits.

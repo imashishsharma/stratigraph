@@ -61,6 +61,23 @@ export function declaredInTest(alias: string): string {
 }
 
 /**
+ * SQL: true for an edge a test file makes on behalf of a package.
+ *
+ * A TypeScript import is attributed to the importing file's package, not to a
+ * declaration (ADR-0017), so its source node has no file for
+ * `declaredInTest` to look at; the test file is only on the edge. Without
+ * this, a `*.spec.ts` sitting beside a component gives the component's package
+ * every dependency the spec has.
+ */
+export function packageEdgeFromTest(edgeAlias: string): string {
+  return /* sql */ `(
+    EXISTS (SELECT 1 FROM node sx WHERE sx.id = ${edgeAlias}.src_id AND sx.kind = 'package')
+    AND EXISTS (SELECT 1 FROM source_file tf
+                  JOIN file_role tr ON tr.run_id = tf.run_id AND tr.path = tf.path AND tr.role = 'test'
+                 WHERE tf.id = ${edgeAlias}.file_id))`;
+}
+
+/**
  * SQL: true for a package that declares at least one type, all of them test
  * code. A package mixing main and test types is a main package; one declaring
  * no types at all is kept, since nothing says it is test code.
@@ -110,13 +127,15 @@ export function ancestorOfCte(
 ): string {
   const kinds = edgeKinds.map((k) => `'${k}'`).join(', ');
   const factsOnly = confidence === 'fact' ? `AND confidence = 'fact'` : '';
-  return /* sql */ `
-  WITH RECURSIVE
+  const seed = /* sql */ `
     endpoint_node(id) AS (
       SELECT src_id FROM edge WHERE run_id = @runId AND kind IN (${kinds}) ${factsOnly}
       UNION
       SELECT dst_id FROM edge WHERE run_id = @runId AND kind IN (${kinds}) ${factsOnly}
-    ),
+    ),`;
+  if (kind === 'module') return `WITH RECURSIVE ${seed}${moduleAncestry('endpoint_node')}`;
+  return /* sql */ `
+  WITH RECURSIVE ${seed}
     ancestry(start_id, node_id, kind) AS (
         SELECT e.id, n.id, n.kind
           FROM endpoint_node e JOIN node n ON n.id = e.id
@@ -132,6 +151,82 @@ export function ancestorOfCte(
       SELECT a.start_id, a.node_id
         FROM ancestry a JOIN node p ON p.id = a.node_id
        WHERE a.kind = '${kind}' AND p.is_stub = 0
+    )
+`;
+}
+
+/**
+ * SQL: the module a node declared in `pkg` belongs to (ADR-0041).
+ *
+ * A package declared in one module has that module as its `parent`. A split
+ * package has a `contains` edge from each module declaring it, and a node in
+ * it belongs to the one whose `root` is the nearest directory above the node's
+ * file — the nearest-root rule the extractor used to pick the module in the
+ * first place. A node with no file (the package itself, as the source of a
+ * TypeScript `imports` edge) falls back to `parent`.
+ */
+export function moduleOfNodeInPackage(nodeAlias: string, pkgAlias: string): string {
+  return /* sql */ `COALESCE(
+    (SELECT c.src_id
+       FROM edge c
+       JOIN node m ON m.id = c.src_id AND m.kind = 'module'
+       JOIN source_file f ON f.id = ${nodeAlias}.file_id
+      WHERE c.run_id = ${pkgAlias}.run_id AND c.kind = 'contains' AND c.dst_id = ${pkgAlias}.id
+        AND ${underRoot('f.path', `json_extract(m.attrs, '$.root')`)}
+      ORDER BY length(json_extract(m.attrs, '$.root')) DESC
+      LIMIT 1),
+    ${pkgAlias}.parent_id)`;
+}
+
+/**
+ * SQL: true when package `pkgAlias` belongs to the module whose id is `moduleExpr`
+ * — by a `contains` edge when it is split, by `parent` when it is not.
+ */
+export function packageInModule(pkgAlias: string, moduleExpr: string): string {
+  return /* sql */ `(
+    EXISTS (SELECT 1 FROM edge c WHERE c.run_id = ${pkgAlias}.run_id AND c.kind = 'contains'
+             AND c.dst_id = ${pkgAlias}.id AND c.src_id = ${moduleExpr})
+    OR (${pkgAlias}.parent_id = ${moduleExpr}
+        AND NOT EXISTS (SELECT 1 FROM edge c WHERE c.run_id = ${pkgAlias}.run_id
+                         AND c.kind = 'contains' AND c.dst_id = ${pkgAlias}.id)))`;
+}
+
+/** SQL: `path` lies under the module directory `root` (`.` is the repository). */
+function underRoot(path: string, root: string): string {
+  return `(${root} = '.' OR substr(${path}, 1, length(${root}) + 1) = ${root} || '/')`;
+}
+
+/**
+ * The CTE body resolving every node in relation `seed(id)` to its module,
+ * exposing `ancestor_of(node_id, ancestor_id)`. Test code is left out, as for
+ * packages (ADR-0034).
+ */
+export function moduleAncestry(seed: string): string {
+  return /* sql */ `
+    ancestry(start_id, node_id, kind) AS (
+        SELECT e.id, n.id, n.kind
+          FROM ${seed} e JOIN node n ON n.id = e.id
+         WHERE NOT ${declaredInTest('n')}
+      UNION ALL
+        SELECT a.start_id, p.id, p.kind
+          FROM ancestry a
+          JOIN node c ON c.id = a.node_id
+          JOIN node p ON p.id = c.parent_id
+         WHERE a.kind NOT IN ('package', 'module')
+    ),
+    module_candidate(node_id, ancestor_id) AS (
+        SELECT a.start_id, ${moduleOfNodeInPackage('s', 'pkg')}
+          FROM ancestry a
+          JOIN node pkg ON pkg.id = a.node_id
+          JOIN node s   ON s.id = a.start_id
+         WHERE a.kind = 'package'
+      UNION ALL
+        SELECT a.start_id, a.node_id FROM ancestry a WHERE a.kind = 'module'
+    ),
+    ancestor_of(node_id, ancestor_id) AS (
+      SELECT mc.node_id, mc.ancestor_id
+        FROM module_candidate mc JOIN node p ON p.id = mc.ancestor_id
+       WHERE p.kind = 'module' AND p.is_stub = 0
     )
 `;
 }
@@ -158,6 +253,7 @@ export function buildPackageGraph(db: Db, runId: number): PackageGraph {
          WHERE e.run_id = @runId
            AND e.kind IN (${kinds})
            AND e.confidence = 'fact'
+           AND NOT ${packageEdgeFromTest('e')}
            AND sp.ancestor_id <> dp.ancestor_id
          GROUP BY sp.ancestor_id, dp.ancestor_id`,
     )
@@ -173,14 +269,18 @@ export function buildPackageGraph(db: Db, runId: number): PackageGraph {
     packages.set(row.id, row);
   }
 
+  // A test-only package is not a node (ADR-0034), so no dependency may name
+  // one — including one lifted from an edge whose source is the package itself.
+  const dependencies = rows.filter((row) => packages.has(row.src) && packages.has(row.dst));
+
   const adjacency = new Map<number, number[]>();
-  for (const row of rows) {
+  for (const row of dependencies) {
     const existing = adjacency.get(row.src);
     if (existing) existing.push(row.dst);
     else adjacency.set(row.src, [row.dst]);
   }
 
-  return { packages, dependencies: rows, adjacency };
+  return { packages, dependencies, adjacency };
 }
 
 export interface SupportingEdge {
@@ -190,6 +290,82 @@ export interface SupportingEdge {
   dstFqn: string;
   path: string | null;
   line: number | null;
+}
+
+/**
+ * `supportingEdges` for many package pairs in one pass, keyed `"src dst"`.
+ *
+ * The ancestry walk is the expensive part and is the same for every pair, so a
+ * diagram with a hundred dependencies pays for it once rather than a hundred
+ * times — on a large Angular workspace that is minutes against a second.
+ */
+export function supportingEdgesForPairs(
+  db: Db,
+  runId: number,
+  pairs: ReadonlyArray<readonly [number, number]>,
+  limit: number,
+): Map<string, SupportingEdge[]> {
+  const out = new Map<string, SupportingEdge[]>();
+  if (pairs.length === 0) return out;
+  const kinds = DEPENDENCY_EDGE_KINDS.map((k) => `'${k}'`).join(', ');
+  const wanted = new Set(pairs.map(([src, dst]) => `${src} ${dst}`));
+  // Integers from the package graph, never user input: safe to inline, and an
+  // IN list lets the planner filter before joining where a joined parameter
+  // table did not.
+  const srcs = [...new Set(pairs.map(([src]) => src))].filter(Number.isInteger).join(', ');
+  const dsts = [...new Set(pairs.map(([, dst]) => dst))].filter(Number.isInteger).join(', ');
+  const rows = db
+    .prepare(
+      ancestorOfCte('package', DEPENDENCY_EDGE_KINDS, 'fact') +
+        /* sql */ `
+        SELECT sp.ancestor_id AS srcPackage,
+               dp.ancestor_id AS dstPackage,
+               e.id      AS edgeId,
+               e.kind    AS kind,
+               e.src_id  AS srcId,
+               e.dst_id  AS dstId,
+               e.file_id AS fileId,
+               e.line    AS line
+          FROM edge e
+          JOIN ancestor_of sp ON sp.node_id = e.src_id
+          JOIN ancestor_of dp ON dp.node_id = e.dst_id
+         WHERE e.run_id = @runId
+           AND e.kind IN (${kinds})
+           AND e.confidence = 'fact'
+           AND NOT ${packageEdgeFromTest('e')}
+           AND sp.ancestor_id IN (${srcs})
+           AND dp.ancestor_id IN (${dsts})
+         ORDER BY e.id`,
+    )
+    .all({ runId }) as Array<{
+    srcPackage: number;
+    dstPackage: number;
+    edgeId: number;
+    kind: string;
+    srcId: number;
+    dstId: number;
+    fileId: number | null;
+    line: number | null;
+  }>;
+
+  const fqn = db.prepare('SELECT fqn FROM node WHERE id = ?').pluck();
+  const path = db.prepare('SELECT path FROM source_file WHERE id = ?').pluck();
+  for (const row of rows) {
+    const key = `${row.srcPackage} ${row.dstPackage}`;
+    if (!wanted.has(key)) continue;
+    const list = out.get(key) ?? [];
+    if (list.length >= limit) continue;
+    list.push({
+      edgeId: row.edgeId,
+      kind: row.kind,
+      srcFqn: fqn.get(row.srcId) as string,
+      dstFqn: fqn.get(row.dstId) as string,
+      path: row.fileId === null ? null : ((path.get(row.fileId) as string | undefined) ?? null),
+      line: row.line,
+    });
+    out.set(key, list);
+  }
+  return out;
 }
 
 /**
@@ -226,6 +402,7 @@ export function supportingEdges(
          WHERE e.run_id = @runId
            AND e.kind IN (${kinds})
            AND e.confidence = 'fact'
+           AND NOT ${packageEdgeFromTest('e')}
            AND sp.ancestor_id = @srcPackage
            AND dp.ancestor_id = @dstPackage
          ORDER BY e.id

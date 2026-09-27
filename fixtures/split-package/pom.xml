@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Hand-written fixture (ADR-0041): com.example.split.util is declared in both
+  modules. One package node, a contains edge from each module.
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+  <modelVersion>4.0.0</modelVersion>
+
+  <groupId>com.example.split</groupId>
+  <artifactId>split-parent</artifactId>
+  <version>0.0.1</version>
+  <packaging>pom</packaging>
+
+  <modules>
+    <module>core</module>
+    <module>extra</module>
+  </modules>
+</project>

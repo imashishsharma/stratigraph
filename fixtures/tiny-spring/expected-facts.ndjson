@@ -7,7 +7,7 @@
 {"v":1,"type":"file","path":"src/main/java/com/example/shop/web/DailySummaryController.java","language":"java","loc":18}
 {"v":1,"type":"file","path":"src/main/java/com/example/shop/web/LegacyReportController.java","language":"java","loc":19}
 {"v":1,"type":"file","path":"src/main/java/com/example/shop/web/OrderController.java","language":"java","loc":37}
-{"v":1,"type":"node","kind":"module","fqn":"com.example:tiny-spring","name":"tiny-spring"}
+{"v":1,"type":"node","kind":"module","fqn":"com.example:tiny-spring","name":"tiny-spring","attrs":{"root":".","buildFile":"pom.xml","packaging":"jar"}}
 {"v":1,"type":"node","kind":"package","fqn":"com.example.shop.domain","name":"domain","parent":{"kind":"module","fqn":"com.example:tiny-spring"}}
 {"v":1,"type":"node","kind":"class","fqn":"com.example.shop.domain.Customer","name":"Customer","parent":{"kind":"package","fqn":"com.example.shop.domain"},"file":"src/main/java/com/example/shop/domain/Customer.java","startLine":9,"endLine":26,"attrs":{"modifiers":["public"]}}
 {"v":1,"type":"edge","kind":"annotated_with","src":{"kind":"class","fqn":"com.example.shop.domain.Customer"},"dst":{"kind":"annotation","fqn":"jakarta.persistence.Entity"},"file":"src/main/java/com/example/shop/domain/Customer.java","line":9,"attrs":{"resolution":"import"}}
