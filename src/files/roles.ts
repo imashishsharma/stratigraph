@@ -184,7 +184,7 @@ export function classifyPath(
   const migrationDir = underDir(dir, MIGRATION_DIRS);
   if (migrationDir !== null) return role('migration', `path:${migrationDir}`);
   // Standalone DDL defines the schema as a migration does (ADR-0037).
-  if (/^(?:(?:schema|ddl)(?:[-_.][\w.-]*)?\.sql|[\w.-]+\.ddl)$/i.test(name) && underDir(dir, TEST_DIRS) === null) {
+  if (/^(?:[\w.-]*schema[\w.-]*\.sql|ddl(?:[-_.][\w.-]*)?\.sql|[\w.-]+\.ddl)$/i.test(name) && underDir(dir, TEST_DIRS) === null) {
     return role('migration', 'name:schema*.sql');
   }
 

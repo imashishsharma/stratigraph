@@ -3,7 +3,7 @@ import { join, resolve } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { isMigrationPath, MIGRATION_DIRS, run, type Streams } from '../extractors/typescript/src/migrations/main.js';
+import { DDL_NAME, isMigrationPath, MIGRATION_DIRS, run, type Streams } from '../extractors/typescript/src/migrations/main.js';
 import { statements } from '../extractors/typescript/src/migrations/sql.js';
 
 const FIXTURE = resolve(import.meta.dirname, '..', 'fixtures', 'migrations');
@@ -82,7 +82,13 @@ describe('the migrations extractor (ADR-0037)', () => {
     expect(isMigrationPath('src/main/resources/db/changelog/master.xml')).toBe(true);
     expect(isMigrationPath('src/test/resources/db/changelog/master.xml')).toBe(false);
     expect(isMigrationPath('src/main/resources/schema-postgres.sql')).toBe(true);
+    expect(isMigrationPath('src/main/resources/META-INF/mysql-schema.sql')).toBe(true);
     expect(isMigrationPath('src/main/resources/data.sql')).toBe(false);
+    // All three copies of the rule must agree (roles, language detection, extractor).
+    const languages = readFileSync(resolve(import.meta.dirname, '..', 'src', 'toolchain', 'languages.ts'), 'utf8');
+    const rule = DDL_NAME.source;
+    expect(roles).toContain(rule);
+    expect(languages).toContain(rule);
   });
 
   it('splits statements on semicolons outside quotes and comments, keeping line numbers', () => {

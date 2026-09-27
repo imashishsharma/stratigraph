@@ -72,7 +72,7 @@ labelling error, not a disagreement about taste.
 | `vendored` | third-party code checked in, including minified bundles (`*.min.js`) and `vendor/` trees |
 | `lockfile` | a resolved dependency lock (`package-lock.json`, `yarn.lock`, …) |
 | `manifest` | build and dependency declarations **and build wrappers** (`mvnw`, `gradlew`, `.mvn/wrapper/*`, `gradle/wrapper/*` including the wrapper jar), `tsconfig*.json`, `angular.json` |
-| `migration` | schema migrations: Liquibase/Flyway files under `db/changelog/`, `db/migration(s)/`, `liquibase/`, `flyway/`, and standalone DDL (`schema*.sql`, `ddl.sql`, `*.ddl`) |
+| `migration` | schema migrations: Liquibase/Flyway files under `db/changelog/`, `db/migration(s)/`, `liquibase/`, `flyway/`, and standalone DDL (any `.sql` named `*schema*`, `ddl*.sql`, `*.ddl`) |
 | `config` | JSON, YAML, XML, properties **and dotfiles** (`.gitignore`, `.editorconfig`) not covered above — i18n/locale JSON included |
 | `docs` | prose (`*.md`, `*.adoc`, `README`, `LICENSE`) |
 | `asset` | images, **fonts**, archives, media |

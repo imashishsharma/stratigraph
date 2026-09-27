@@ -42,7 +42,7 @@ const JAVA_EXTENSIONS = ['.java', '.kt'];
  * application's schema.
  */
 const MIGRATION_DIRS = ['db/changelog/', 'db/migration/', 'db/migrations/', 'liquibase/', 'flyway/'];
-const DDL_NAME = /^(?:(?:schema|ddl)(?:[-_.][\w.-]*)?\.sql|[\w.-]+\.ddl)$/i;
+const DDL_NAME = /^(?:[\w.-]*schema[\w.-]*\.sql|ddl(?:[-_.][\w.-]*)?\.sql|[\w.-]+\.ddl)$/i;
 const TEST_SEGMENT = /(^|\/)(src\/test|src\/it|src\/integrationTest|test|tests|__tests__)\//;
 
 function isMigration(path: string): boolean {

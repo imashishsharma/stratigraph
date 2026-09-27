@@ -21,7 +21,7 @@ a separate process like the others, ADR-0001). It reads:
   and `includeAll` (relative to the changelog or to the resources root) from the
   changelogs no other changelog includes, in changelog order;
 - Flyway `V<version>__*.sql` in version order (V10 after V2), then `R__` scripts;
-- standalone DDL: `schema*.sql`, `ddl.sql`, `*.ddl`.
+- standalone DDL: any `.sql` whose name contains `schema` (`schema.sql`, `mysql-schema.sql`), `ddl*.sql`, `*.ddl`.
 
 Files under test roots are not the application's schema and are skipped. It
 applies `createTable`/`CREATE TABLE`, add/drop/rename column, rename/drop table,

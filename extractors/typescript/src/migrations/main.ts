@@ -27,7 +27,7 @@ const DEFAULT_EXCLUDES = ['node_modules', 'target', 'build', 'dist', '.git', '.i
 export const MIGRATION_DIRS = ['db/changelog/', 'db/migration/', 'db/migrations/', 'liquibase/', 'flyway/'];
 
 /** Standalone DDL: `schema.sql`, `schema-postgres.sql`, `ddl.sql`, `x.ddl`. */
-export const DDL_NAME = /^(?:(?:schema|ddl)(?:[-_.][\w.-]*)?\.sql|[\w.-]+\.ddl)$/i;
+export const DDL_NAME = /^(?:[\w.-]*schema[\w.-]*\.sql|ddl(?:[-_.][\w.-]*)?\.sql|[\w.-]+\.ddl)$/i;
 
 const TEST_SEGMENT = /(^|\/)(src\/test|src\/it|src\/integrationTest|test|tests|__tests__)\//;
 
