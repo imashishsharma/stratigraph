@@ -681,16 +681,22 @@ function classSection(diagram: ClassDiagram, id: string, palette?: DiagramPalett
 
 // ------------------------------------------------------------- data model
 
+function countBy(entities: ErModel['entities'], source: ErModel['entities'][number]['source']): number {
+  return entities.filter((entity) => entity.source === source).length;
+}
+
 function erSection(model: ErModel, palette?: DiagramPalette): string {
   if (model.entities.length === 0) {
-    return `<p class="empty">No O/R mapping was read in this run.</p>\n${notes(model.notes)}`;
+    return `<p class="empty">No O/R mapping and no migration was read in this run.</p>\n${notes(model.notes)}`;
   }
 
   const { nodes, links } = erLayoutInput(model);
   const placed = layoutGraph(nodes, links);
   const parts = [
     `<p class="caption">${escapeText(
-      `${model.entities.length} table(s) declared by an O/R mapping, and the ` +
+      `${model.entities.length} table(s) — ${countBy(model.entities, 'both')} created by a migration and mapped, ` +
+        `${countBy(model.entities, 'migration')} created by a migration only, ` +
+        `${countBy(model.entities, 'jpa')} declared by an O/R mapping only — and the ` +
         `${model.relationships.length} relationship(s) between them that could be read.`,
     )}</p>`,
     '<figure>',
@@ -706,15 +712,18 @@ function erSection(model: ErModel, palette?: DiagramPalette): string {
       '<th>Declared at</th></tr></thead>',
     '<tbody>',
     ...model.entities.flatMap((entity) =>
-      entity.columns.map((column) =>
+      [...entity.columns, ...entity.unbacked.map((column) => ({ ...column, unbacked: true }))].map((column) =>
         [
           '<tr>',
-          `<td>${escapeText(entity.table)}</td>`,
+          `<td>${escapeText(entity.table)} <span class="tag">${escapeText(
+            entity.source === 'both' ? 'migration + mapping' : entity.source === 'migration' ? 'migration' : 'mapping',
+          )}</span></td>`,
           `<td>${escapeText(column.name)}</td>`,
           `<td>${escapeText(column.type)}</td>`,
           `<td>${column.primaryKey ? '<span class="tag">PK</span>' : ''}</td>`,
           `<td>${escapeText(column.field)}` +
-            `${column.inherited ? ' <span class="tag">inherited</span>' : ''}</td>`,
+            `${column.inherited ? ' <span class="tag">inherited</span>' : ''}` +
+            `${'unbacked' in column ? ' <span class="tag sev">mapped, no migration creates it</span>' : ''}</td>`,
           `<td>${location(column.path, column.line)}</td>`,
           '</tr>',
         ].join(''),
