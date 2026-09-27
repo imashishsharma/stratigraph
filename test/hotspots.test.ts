@@ -454,13 +454,31 @@ describe('recordHistoryFindings', () => {
     });
 
     const [finding] = findings(BUS_FACTOR_RULE);
-    // Medium: whether one owner is a risk depends on the file mattering, which
-    // this rule cannot see (ADR-0031).
-    expect(finding?.['severity']).toBe('medium');
+    // Low: one owner is a risk only when the file matters — a hotspot, or much
+    // of the code depends on it — and nothing depends on this one.
+    expect(finding?.['severity']).toBe('low');
     expect(finding?.['detail']).toMatch(/not about the author/);
+    expect(finding?.['detail']).toMatch(/0 other file\(s\) depend on what it declares/);
     expect(
       db.prepare('SELECT COUNT(*) AS n FROM citation WHERE finding_id = ?').get(finding?.['id']),
     ).toEqual({ n: 5 });
+  });
+
+  it('rates a one-owner file medium when it is also a hotspot', () => {
+    metric('owned.java', { churn: 50, complexity: 10, commits: 6, authors: 1 });
+    for (let i = 0; i < 6; i += 1) commit('ada', ['owned.java']);
+    const busFactor = busFactorRisks(db, runId, 10, 5);
+
+    recordHistoryFindings(db, runId, {
+      pairs: [],
+      hotspots: busFactor,
+      busFactor,
+      staticGraph: true,
+    });
+
+    const [finding] = findings(BUS_FACTOR_RULE);
+    expect(finding?.['severity']).toBe('medium');
+    expect(finding?.['detail']).toMatch(/one of the ranked hotspots/);
   });
 
   it('replaces its own findings rather than appending', () => {

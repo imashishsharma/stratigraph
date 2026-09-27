@@ -219,7 +219,33 @@ export function recordHistoryFindings(
       counts.hotspots += 1;
     }
 
+    // Importance (product plan, Phase A): one owner is a risk when the file
+    // matters — it is a hotspot, or much of the code depends on it. Fan-in is
+    // distinct files with an observed dependency on what this file declares.
+    const fanIn = new Map(
+      (
+        db
+          .prepare(
+            /* sql */ `
+            SELECT df.path AS path, COUNT(DISTINCT sf.id) AS n
+              FROM edge e
+              JOIN node d ON d.id = e.dst_id
+              JOIN source_file df ON df.id = d.file_id
+              JOIN source_file sf ON sf.id = e.file_id
+             WHERE e.run_id = ? AND e.kind IN ('calls','injects','imports','extends','implements')
+               AND e.confidence = 'fact' AND sf.id <> df.id
+             GROUP BY df.path`,
+          )
+          .all(runId) as Array<{ path: string; n: number }>
+      ).map((row) => [row.path, row.n]),
+    );
+    const sortedFanIn = [...fanIn.values()].sort((a, b) => a - b);
+    const highFanIn = Math.max(5, sortedFanIn[Math.floor(sortedFanIn.length * 0.9)] ?? 0);
+    const hotspotPaths = new Set(input.hotspots.map((hotspot) => hotspot.path));
+
     for (const file of input.busFactor) {
+      const dependents = fanIn.get(file.path) ?? 0;
+      const important = hotspotPaths.has(file.path) || dependents >= highFanIn;
       const shas =
         file.topAuthor === null
           ? []
@@ -238,11 +264,17 @@ export function recordHistoryFindings(
         [
           `  ${Math.round(file.topAuthorShare * 100)}% of its ${file.commits} commits come from ` +
             `one author, out of ${file.authors} who have touched it.`,
+          `  ${
+            hotspotPaths.has(file.path)
+              ? 'It is also one of the ranked hotspots.'
+              : `${dependents} other file(s) depend on what it declares` +
+                (dependents >= highFanIn ? ` — among the most depended-on (threshold ${highFanIn}).` : '.')
+          }`,
           `  This is a statement about where knowledge is concentrated, not about the author.`,
         ].join('\n'),
-        // Medium at most: whether one owner is a risk depends on the file
-        // mattering, which this rule cannot see (ADR-0031).
-        file.authors === 1 ? 'medium' : 'low',
+        // Medium at most (ADR-0031), and only when the file matters: a
+        // hotspot, or high fan-in. A one-owner file nobody depends on is low.
+        important && file.authors === 1 ? 'medium' : 'low',
         shas,
       );
       counts.busFactor += 1;
