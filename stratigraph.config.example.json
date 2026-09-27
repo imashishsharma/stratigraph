@@ -18,6 +18,11 @@
     "maxClusters": 25
   },
 
+  "coverage": {
+    "minRatio": 0.5,
+    "views": {}
+  },
+
   "llm": {
     "enabled": true,
     "model": "claude-opus-5",

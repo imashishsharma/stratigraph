@@ -494,3 +494,44 @@ describe('report.brand', () => {
     expect(config.report.brand?.logo).toBe(join(dir, 'assets', 'logo.png'));
   });
 });
+
+describe('loadConfig coverage', () => {
+  it('withholds below 50% by default, with no per-view overrides', () => {
+    const { dir, repo } = sandbox();
+    expect(loadConfig({ repo, cwd: dir, env: NO_USER_CONFIG }).coverage).toEqual({
+      minRatio: 0.5,
+      views: {},
+    });
+  });
+
+  it('reads a default and per-view overrides, and merges views key by key', () => {
+    const { dir, repo } = sandbox();
+    writeFileSync(
+      join(dir, CONFIG_FILENAME),
+      JSON.stringify({ repo, coverage: { minRatio: 0.8, views: { hotspots: 0.2 } } }),
+    );
+    writeFileSync(
+      join(dir, LOCAL_CONFIG_FILENAME),
+      JSON.stringify({ coverage: { views: { data: 0 } } }),
+    );
+    expect(loadConfig({ cwd: dir, env: NO_USER_CONFIG }).coverage).toEqual({
+      minRatio: 0.8,
+      views: { hotspots: 0.2, data: 0 },
+    });
+  });
+
+  it('rejects a ratio outside 0..1 and a view that does not exist', () => {
+    const { dir, repo } = sandbox();
+    writeFileSync(join(dir, CONFIG_FILENAME), JSON.stringify({ repo, coverage: { minRatio: 50 } }));
+    expect(() => loadConfig({ cwd: dir, env: NO_USER_CONFIG })).toThrow(
+      /"coverage.minRatio" must be a number from 0 to 1/,
+    );
+    writeFileSync(
+      join(dir, CONFIG_FILENAME),
+      JSON.stringify({ repo, coverage: { views: { architecure: 0.5 } } }),
+    );
+    expect(() => loadConfig({ cwd: dir, env: NO_USER_CONFIG })).toThrow(
+      /unknown view "coverage.views.architecure"/,
+    );
+  });
+});

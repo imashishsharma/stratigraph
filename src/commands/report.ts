@@ -96,7 +96,7 @@ export function runReport(options: ReportOptions): ReportResult {
     assertSchemaCurrent(db);
 
     const runId = resolveRun(db, options.run, config.dbPath);
-    const summary = describeRun(db, runId);
+    const summary = describeRun(db, runId, config.coverage);
     if (summary === null) {
       /* c8 ignore next 2 */
       throw new ReportError(`run ${runId} is not in ${config.dbPath}`);

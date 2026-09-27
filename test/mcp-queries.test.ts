@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { runInit } from '../src/commands/init.js';
 import { openDatabase, type Db } from '../src/db/database.js';
-import { createRun } from '../src/db/run.js';
+import { createRun, recordExtractor } from '../src/db/run.js';
 import { parseFact } from '../src/facts/ndjson.js';
 import type { Fact } from '../src/facts/types.js';
 import { SqliteFactWriter } from '../src/facts/writer.js';
@@ -220,7 +220,7 @@ describe('describeRun', () => {
     });
     expect(summary?.extractors).toEqual(['java']);
     expect(summary?.languages).toEqual(['java']);
-    expect(summary?.coverage).toEqual({
+    expect(summary?.coverage).toMatchObject({
       facts: true,
       staticGraph: true,
       history: false,
@@ -242,6 +242,28 @@ describe('describeRun', () => {
 
     expect(summary?.coverage.facts).toBe(false);
     expect(summary?.gaps[0]).toContain('nothing was parsed, not because nothing is there');
+  });
+
+  it('names a skipped extractor and the views it leaves below threshold', () => {
+    // ADR-0032/0033: an agent must hear "the Java half was never read", not
+    // infer "this codebase has no Java" from empty answers.
+    db.prepare(
+      `INSERT INTO file_role (run_id, path, role, rule) VALUES (?, 'src/A.java', 'source', 'ext:.java')`,
+    ).run(runId);
+    recordExtractor(db, runId, 'java', 'skipped', 'no JDK found.\nset JAVA_HOME');
+
+    const summary = describeRun(db, runId);
+
+    expect(summary?.coverage.extractors).toEqual([
+      { language: 'java', status: 'skipped', reason: 'no JDK found.\nset JAVA_HOME', found: 1, parsed: 0, testsParsed: 0 },
+    ]);
+    expect(summary?.coverage.views.architecture).toMatchObject({ ratio: 0, withheld: true });
+    expect(summary?.gaps[0]).toBe(
+      '1 Java/Kotlin source file(s) found; the java extractor did not run: no JDK found. ' +
+        'Nothing it would have extracted is in this run, so its absence from any answer means ' +
+        'unknown, not none.',
+    );
+    expect(summary?.gaps[1]).toMatch(/^Coverage is below threshold for: architecture \(C4\), class diagrams/);
   });
 
   it('returns null for a run id that does not exist', () => {

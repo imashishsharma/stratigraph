@@ -8,6 +8,7 @@
  * drift apart.
  */
 
+import { DEFAULT_MIN_RATIO } from './analysis/coverage.js';
 import { DEFAULT_API_KEY_ENV, DEFAULT_HISTORY, DEFAULT_INTERPRET, DEFAULT_MODEL } from './config.js';
 
 export interface TemplateOptions {
@@ -41,6 +42,7 @@ export function configTemplate(options: TemplateOptions): string {
       minClusterSize: DEFAULT_INTERPRET.minClusterSize,
       maxClusters: DEFAULT_INTERPRET.maxClusters,
     },
+    coverage: { minRatio: DEFAULT_MIN_RATIO, views: {} },
     llm: {
       enabled: true,
       model: DEFAULT_MODEL,

@@ -2,6 +2,7 @@ import { existsSync, readFileSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, isAbsolute, join, resolve, sep } from 'node:path';
 
+import { DEFAULT_MIN_RATIO, VIEWS, type CoverageThresholds, type ViewId } from './analysis/coverage.js';
 import { loadDotenv } from './dotenv.js';
 
 export const CONFIG_FILENAME = 'stratigraph.config.json';
@@ -136,6 +137,12 @@ export interface ReportConfig {
   } | null;
 }
 
+/**
+ * When a view is withheld for want of coverage (ADR-0033). `minRatio` applies
+ * to every view; `views` overrides it for one.
+ */
+export type CoverageConfig = CoverageThresholds;
+
 export interface StratigraphConfig {
   /** Absolute path to the repository under analysis. */
   repoPath: string;
@@ -149,6 +156,7 @@ export interface StratigraphConfig {
   history: HistoryConfig;
   interpret: InterpretConfig;
   report: ReportConfig;
+  coverage: CoverageConfig;
   /** The shared config file, if one was found. */
   source: string | null;
   /** The per-project, per-machine overrides file, if one was found. */
@@ -203,6 +211,7 @@ const KNOWN_KEYS = new Set([
   'history',
   'interpret',
   'report',
+  'coverage',
 ]);
 const KNOWN_LLM_KEYS = new Set([
   'enabled',
@@ -361,6 +370,10 @@ export function loadConfig(overrides: ConfigOverrides = {}): StratigraphConfig {
             }
           : null,
     },
+    coverage: {
+      minRatio: file.coverage?.minRatio ?? DEFAULT_MIN_RATIO,
+      views: file.coverage?.views ?? {},
+    },
     source: sharedPath,
     localSource: localPath,
     userSource: userConfig,
@@ -389,6 +402,11 @@ function mergeConfigFiles(...files: ConfigFile[]): ConfigFile {
     java: { ...merged.java, ...file.java },
     history: { ...merged.history, ...file.history },
     interpret: { ...merged.interpret, ...file.interpret },
+    coverage: {
+      ...merged.coverage,
+      ...file.coverage,
+      views: { ...merged.coverage?.views, ...file.coverage?.views },
+    },
     report: {
       ...merged.report,
       ...file.report,
@@ -433,6 +451,7 @@ interface ConfigFile {
   report?: {
     brand?: { name?: string; logo?: string; accent?: string };
   };
+  coverage?: { minRatio?: number; views?: Partial<Record<ViewId, number>> };
 }
 
 function readConfigFile(path: string, options: { allowInlineKey: boolean }): ConfigFile {
@@ -635,6 +654,37 @@ function readConfigFile(path: string, options: { allowInlineKey: boolean }): Con
     }
   }
 
+  if (obj['coverage'] !== undefined) {
+    const coverage = obj['coverage'];
+    if (typeof coverage !== 'object' || coverage === null || Array.isArray(coverage)) {
+      throw new ConfigError(`${path}: "coverage" must be an object`);
+    }
+    const coverageObj = coverage as Record<string, unknown>;
+    for (const key of Object.keys(coverageObj)) {
+      if (key !== 'minRatio' && key !== 'views') {
+        throw new ConfigError(`${path}: unknown key "coverage.${key}"`);
+      }
+    }
+    out.coverage = {};
+    if (isSet(coverageObj['minRatio']))
+      out.coverage.minRatio = expectRatio(path, 'coverage.minRatio', coverageObj['minRatio']);
+    if (isSet(coverageObj['views'])) {
+      const views = coverageObj['views'];
+      if (typeof views !== 'object' || views === null || Array.isArray(views)) {
+        throw new ConfigError(`${path}: "coverage.views" must be an object`);
+      }
+      out.coverage.views = {};
+      for (const [key, value] of Object.entries(views as Record<string, unknown>)) {
+        if (!(VIEWS as readonly string[]).includes(key)) {
+          throw new ConfigError(
+            `${path}: unknown view "coverage.views.${key}" (expected ${VIEWS.join(', ')})`,
+          );
+        }
+        out.coverage.views[key as ViewId] = expectRatio(path, `coverage.views.${key}`, value);
+      }
+    }
+  }
+
   return out;
 }
 
@@ -654,6 +704,13 @@ function isSet(value: unknown): boolean {
 function expectNonNegativeNumber(path: string, key: string, value: unknown): number {
   if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
     throw new ConfigError(`${path}: "${key}" must be a number of at least 0`);
+  }
+  return value;
+}
+
+function expectRatio(path: string, key: string, value: unknown): number {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0 || value > 1) {
+    throw new ConfigError(`${path}: "${key}" must be a number from 0 to 1`);
   }
   return value;
 }

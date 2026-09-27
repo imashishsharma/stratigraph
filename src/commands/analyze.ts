@@ -287,7 +287,7 @@ export async function runAnalyze(options: AnalyzeOptions): Promise<AnalyzeResult
     result.ranked = rankFindings(db, runId, { top });
     result.gate =
       options.failOn === undefined ? null : evaluateGate(result.ranked, options.failOn);
-    result.summary = describeRun(db, runId);
+    result.summary = describeRun(db, runId, config.coverage);
 
     if (outputFormat() === 'json' && result.summary !== null) {
       printJson(

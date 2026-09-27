@@ -1,6 +1,6 @@
 # ADR-0026: Coverage describes what the store holds, not which commands were run
 
-- Status: accepted
+- Status: accepted; its reader-facing coverage statement is superseded by ADR-0033
 - Date: 2026-08-13
 - Milestone: M8 (a bug, and what it exposed)
 

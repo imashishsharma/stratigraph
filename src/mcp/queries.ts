@@ -17,6 +17,16 @@
  *   there is nothing" from "no extractor ever parsed that".
  */
 
+import {
+  DEFAULT_THRESHOLDS,
+  runCoverage,
+  VIEW_TITLES,
+  VIEWS,
+  type CoverageThresholds,
+  type ExtractorCoverage,
+  type ViewCoverage,
+  type ViewId,
+} from '../analysis/coverage.js';
 import type { Db } from '../db/database.js';
 import { busFactorRisks, explainHotspots, topHotspots, type Hotspot } from '../analysis/hotspots.js';
 import {
@@ -82,6 +92,10 @@ export interface Coverage {
   analysis: boolean;
   /** Any model-authored cluster names or findings. */
   interpretation: boolean;
+  /** What became of each extractor, and how much it read (ADR-0032, ADR-0033). */
+  extractors: ExtractorCoverage[];
+  /** Each view's ratio, threshold and whether it is withheld (ADR-0033). */
+  views: Record<ViewId, ViewCoverage>;
 }
 
 export interface RunSummary {
@@ -120,7 +134,11 @@ export interface RunSummary {
  * repository gets an empty list, and without this it has no way to tell that
  * from "this codebase has no Angular in it" (ADR-0015).
  */
-export function describeRun(db: Db, runId: number): RunSummary | null {
+export function describeRun(
+  db: Db,
+  runId: number,
+  thresholds: CoverageThresholds = DEFAULT_THRESHOLDS,
+): RunSummary | null {
   const run = db
     .prepare(
       `SELECT id, repo_path AS repoPath, repo_head AS repoHead, tool_version AS toolVersion,
@@ -156,6 +174,7 @@ export function describeRun(db: Db, runId: number): RunSummary | null {
     clusters: count(db, 'SELECT COUNT(*) AS n FROM cluster WHERE run_id = ?', runId),
   };
 
+  const ratios = runCoverage(db, runId, thresholds);
   const coverage: Coverage = {
     facts: counts.nodes > 0,
     staticGraph: dependencyEdgeCount(db, runId) > 0,
@@ -171,9 +190,31 @@ export function describeRun(db: Db, runId: number): RunSummary | null {
         `SELECT COUNT(*) AS n FROM cluster WHERE run_id = ? AND authored_by = 'model'`,
         runId,
       ) > 0,
+    extractors: ratios.extractors,
+    views: ratios.views,
   };
 
   const gaps: string[] = [];
+  // A skipped or failed extractor first: it explains most of what follows.
+  for (const entry of ratios.extractors) {
+    if (entry.status === 'skipped' || entry.status === 'failed') {
+      const what = entry.status === 'skipped' ? 'did not run' : 'failed';
+      gaps.push(
+        `${entry.found.toLocaleString('en-US')} ${entry.language === 'java' ? 'Java/Kotlin' : 'TypeScript'} ` +
+          `source file(s) found; the ${entry.language} extractor ${what}: ` +
+          `${(entry.reason ?? 'no reason recorded').split('\n')[0]!.replace(/\.$/, '')}. ` +
+          'Nothing it would have ' +
+          'extracted is in this run, so its absence from any answer means unknown, not none.',
+      );
+    }
+  }
+  const withheld = VIEWS.filter((view) => ratios.views[view].withheld);
+  if (withheld.length > 0) {
+    gaps.push(
+      `Coverage is below threshold for: ${withheld.map((view) => VIEW_TITLES[view]).join(', ')}. ` +
+        'The report withholds these views; answers drawn from them are partial.',
+    );
+  }
   if (!coverage.facts) {
     gaps.push(
       'No code was extracted into this run — every structural answer will be empty ' +

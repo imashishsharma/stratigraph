@@ -66,19 +66,26 @@ export function detectLanguages(
       if (entry.isDirectory()) {
         if (!excluded.has(entry.name)) queue.push(join(dir, entry.name));
       } else if (entry.isFile()) {
-        if (JAVA_EXTENSIONS.some((ext) => entry.name.endsWith(ext))) {
-          found.add('java');
-        } else if (
-          !entry.name.endsWith('.d.ts') &&
-          TYPESCRIPT_EXTENSIONS.some((ext) => entry.name.endsWith(ext))
-        ) {
-          found.add('typescript');
-        }
+        const language = extractorFor(entry.name);
+        if (language !== null) found.add(language);
       }
     }
   }
 
   return found;
+}
+
+/**
+ * Which extractor would parse a file, by name alone; null for neither. The same
+ * test decides detection and the denominator of an extractor's coverage
+ * (ADR-0033), so the two cannot disagree about what counts as a source.
+ */
+export function extractorFor(path: string): Language | null {
+  if (JAVA_EXTENSIONS.some((ext) => path.endsWith(ext))) return 'java';
+  if (!path.endsWith('.d.ts') && TYPESCRIPT_EXTENSIONS.some((ext) => path.endsWith(ext))) {
+    return 'typescript';
+  }
+  return null;
 }
 
 /** What a user may type for a language, and which extractor it selects. */
