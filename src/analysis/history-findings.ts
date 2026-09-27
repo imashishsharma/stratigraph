@@ -200,10 +200,14 @@ export function recordHistoryFindings(
         HOTSPOT_RULE,
         `${file.path} is changed often and is structurally dense`,
         [
-          `  ${file.commits} commits, ${file.churn} lines changed, indentation ${file.complexity}.`,
+          `  ${file.recentCommits} commits in the hotspot window (${file.commits} all-time, ` +
+            `${file.churn} lines changed); indentation ${file.complexity}.`,
+          `  Changed at least as often as ${percent(file.recentPercentile)}, and at least as deeply ` +
+            `indented as ${percent(file.complexityPercentile)}, of the ranked source files.`,
           `  ${file.authors} author(s); the most frequent wrote ` +
             `${Math.round(file.topAuthorShare * 100)}% of the commits.`,
-          `  Indentation is a proxy for nesting, not a parsed measure of complexity.`,
+          `  Only source files are ranked; sweeping commits and .git-blame-ignore-revs are ` +
+            `not counted. Indentation is a proxy for nesting, not a parsed measure of complexity.`,
         ].join('\n'),
         // Capped at medium on purpose — see `couplingSeverity` and ADR-0028.
         // Rank position is relative to this repository, so a pristine one would
@@ -236,7 +240,9 @@ export function recordHistoryFindings(
             `one author, out of ${file.authors} who have touched it.`,
           `  This is a statement about where knowledge is concentrated, not about the author.`,
         ].join('\n'),
-        file.authors === 1 ? 'high' : 'medium',
+        // Medium at most: whether one owner is a risk depends on the file
+        // mattering, which this rule cannot see (ADR-0031).
+        file.authors === 1 ? 'medium' : 'low',
         shas,
       );
       counts.busFactor += 1;
@@ -244,4 +250,9 @@ export function recordHistoryFindings(
   })();
 
   return counts;
+}
+
+/** A 0..1 share as a whole percentage, for evidence text. */
+function percent(share: number): string {
+  return `${Math.round(share * 100)}%`;
 }

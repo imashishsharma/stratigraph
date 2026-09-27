@@ -736,11 +736,12 @@ function reportCoupling(result: AnalyzeResult, top: number): void {
 function reportHotspots(hotspots: Hotspot[], top: number): void {
   if (hotspots.length === 0) return;
   print('');
-  print(`Hotspots — churn x complexity (top ${top}):`);
+  print(`Hotspots — recent change x complexity, source files only (top ${top}):`);
   for (const [n, file] of hotspots.entries()) {
     print(
       `${String(n + 1).padStart(3)}. ${file.path}` +
-        `\n     ${file.commits} commits, ${file.churn} lines changed, indentation ${file.complexity}, ` +
+        `\n     ${file.recentCommits} recent commits (${file.commits} all-time), ` +
+        `indentation ${file.complexity}, score ${file.score.toFixed(2)}, ` +
         `${file.authors} author(s), bus factor ${file.busFactor}`,
     );
   }

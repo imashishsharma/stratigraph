@@ -1,3 +1,6 @@
+import { existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
 import { loadConfig, type ConfigOverrides } from '../config.js';
 import { assertSchemaCurrent, openDatabase, requireStore, type Db } from '../db/database.js';
 import { createRun, finishRun, findRun, latestRun, readHead, type Run } from '../db/run.js';
@@ -8,7 +11,8 @@ import {
   listTrackedFiles,
   type SpawnGit,
 } from '../history/git-log.js';
-import { computeFileMetrics, type MetricsStats } from '../history/metrics.js';
+import { assignFileRoles, type FileRole } from '../files/roles.js';
+import { computeFileMetrics, readIgnoreRevs, type MetricsStats } from '../history/metrics.js';
 import { mineHistory, type MineStats } from '../history/mine.js';
 import { inScope, pathScope } from '../history/paths.js';
 import { info, warn } from '../log.js';
@@ -38,6 +42,8 @@ export interface HistoryResult extends MineStats, MetricsStats {
    * and every number in this result is understated when it is true.
    */
   shallow: boolean;
+  /** Tracked files per role (ADR-0030). */
+  roles: Partial<Record<FileRole, number>>;
 }
 
 /**
@@ -84,6 +90,7 @@ export async function runHistory(options: HistoryOptions): Promise<HistoryResult
     const scope = pathScope(config.exclude, config.include);
     let mined: MineStats;
     let metrics: MetricsStats;
+    let roles: Partial<Record<FileRole, number>>;
     try {
       mined = await mineHistory({
         db,
@@ -98,16 +105,21 @@ export async function runHistory(options: HistoryOptions): Promise<HistoryResult
       });
 
       const tracked = listTrackedFiles(config.repoPath).filter((path) => inScope(path, scope));
-      metrics = computeFileMetrics(db, run.id, config.repoPath, tracked);
+      roles = assignFileRoles(db, run.id, config.repoPath, tracked);
+      metrics = computeFileMetrics(db, run.id, config.repoPath, tracked, {
+        windowMonths: config.history.hotspotMonths,
+        maxFilesPerCommit: config.history.maxFilesPerCommit,
+        ignoreRevs: readIgnoreRevs(readOptional(join(toplevel, '.git-blame-ignore-revs'))),
+      });
     } catch (err) {
       if (!reused) finishRun(db, run.id, 'failed');
       throw err;
     }
 
     if (!reused) finishRun(db, run.id, 'ok');
-    report(run.id, mined, metrics, config.history.since);
+    report(run.id, mined, metrics, roles, config.history.since, config.history.hotspotMonths);
 
-    return { runId: run.id, reusedRun: reused, shallow, ...mined, ...metrics };
+    return { runId: run.id, reusedRun: reused, shallow, roles, ...mined, ...metrics };
   } finally {
     db.close();
   }
@@ -166,7 +178,9 @@ function report(
   runId: number,
   mined: MineStats,
   metrics: MetricsStats,
+  roles: Partial<Record<FileRole, number>>,
   since: string | null,
+  hotspotMonths: number,
 ): void {
   const window = since === null ? 'full history' : `since ${since}`;
   info(
@@ -180,12 +194,34 @@ function report(
     info(`run ${runId}: ${mined.outOfScope} file changes outside include/exclude`);
   }
 
+  const byRole = Object.entries(roles)
+    .sort((a, b) => b[1] - a[1])
+    .map(([role, n]) => `${n} ${role}`)
+    .join(', ');
+  info(`run ${runId}: tracked files by role — ${byRole || 'none'}; only source is ranked`);
+
+  if (metrics.windowStart !== null) {
+    info(
+      `run ${runId}: hotspot window is the ${hotspotMonths} months from ` +
+        `${metrics.windowStart.slice(0, 10)}; ${metrics.excludedBulk} sweeping commit(s) and ` +
+        `${metrics.excludedIgnored} .git-blame-ignore-revs commit(s) in it are not counted`,
+    );
+  }
+
   const unmeasured = metrics.files - metrics.measured;
   if (unmeasured > 0) {
     warn(
       `${unmeasured} of ${metrics.files} files have no complexity score ` +
         `(${metrics.skippedBinary} binary, ${metrics.skippedTooLarge} too large, ` +
-        `${metrics.skippedUnreadable} unreadable) — they are ranked by churn alone`,
+        `${metrics.skippedUnreadable} unreadable) — they are left out of the hotspot ranking`,
     );
+  }
+}
+
+function readOptional(path: string): string | null {
+  try {
+    return existsSync(path) ? readFileSync(path, 'utf8') : null;
+  } catch {
+    return null;
   }
 }

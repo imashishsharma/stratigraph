@@ -143,6 +143,7 @@ describe('history config', () => {
       maxFilesPerCommit: 50,
       minShared: 5,
       minCommits: 5,
+      hotspotMonths: 12,
     });
   });
 
@@ -157,6 +158,7 @@ describe('history config', () => {
       maxFilesPerCommit: 20,
       minShared: 5,
       minCommits: 5,
+      hotspotMonths: 12,
     });
   });
 

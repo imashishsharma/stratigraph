@@ -383,9 +383,9 @@ function summarySection(data: ReportData, context: ReportContext): string {
   if (data.hotspots.bars.length > 0) {
     parts.push(
       '<h3>Hottest files</h3>',
-      `<p class="caption">Churn &times; complexity, the first ` +
-        `${Math.min(5, data.hotspots.bars.length)} of ${data.hotspots.total} with ` +
-        'history — the Coupling tab has the full table.</p>',
+      `<p class="caption">Recent change &times; complexity, the first ` +
+        `${Math.min(5, data.hotspots.bars.length)} of ${data.hotspots.total} ranked source ` +
+        'files — the Coupling tab has the full table.</p>',
       '<table class="hotspots">',
       '<tbody>',
       ...data.hotspots.bars.slice(0, 5).map((bar) =>
@@ -393,7 +393,7 @@ function summarySection(data: ReportData, context: ReportContext): string {
           '<tr>',
           `<td><code>${escapeText(bar.path)}</code></td>`,
           `<td class="bar-cell"><span class="bar" style="width:${(bar.relative * 100).toFixed(1)}%">` +
-            `</span><span class="bar-value">${Math.round(bar.score).toLocaleString('en-US')}</span></td>`,
+            `</span><span class="bar-value">${bar.score.toFixed(2)}</span></td>`,
           '</tr>',
         ].join(''),
       ),
@@ -743,22 +743,22 @@ function hotspotSection(chart: HotspotChart): string {
 
   return [
     `<p class="caption">${escapeText(
-      `The ${chart.bars.length} files with the highest churn x complexity, of ${chart.total} with history.`,
+      `The ${chart.bars.length} source files where recent change and complexity meet, of ${chart.total} ranked.`,
     )}</p>`,
     '<table class="hotspots">',
-    '<thead><tr><th>File</th><th class="num">Commits</th><th class="num">Churn</th>' +
+    '<thead><tr><th>File</th><th class="num">Recent commits</th><th class="num">All-time</th>' +
       '<th>Score</th><th class="num">Authors</th><th class="num">Top author</th></tr></thead>',
     '<tbody>',
     ...chart.bars.map((bar) =>
       [
         '<tr>',
         `<td><code>${escapeText(bar.path)}</code></td>`,
+        `<td class="num">${bar.recentCommits}</td>`,
         `<td class="num">${bar.commits}</td>`,
-        `<td class="num">${bar.churn}</td>`,
         // A bar rather than a number: the ratio between the first row and the
         // tenth is the thing a list of integers hides.
         `<td class="bar-cell"><span class="bar" style="width:${(bar.relative * 100).toFixed(1)}%">` +
-          `</span><span class="bar-value">${Math.round(bar.score).toLocaleString('en-US')}</span></td>`,
+          `</span><span class="bar-value">${bar.score.toFixed(2)}</span></td>`,
         `<td class="num">${bar.authors}</td>`,
         `<td class="num">${Math.round(bar.topAuthorShare * 100)}%</td>`,
         '</tr>',

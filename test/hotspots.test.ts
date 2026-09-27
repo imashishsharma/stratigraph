@@ -23,19 +23,27 @@ beforeEach(() => {
 });
 
 function metric(path: string, values: Partial<Record<string, number | string | null>>): void {
+  const commits = (values['commits'] as number | undefined) ?? 1;
   db.prepare(
     `INSERT INTO file_metric
-       (run_id, path, commits, churn, complexity, authors, top_author_share, last_change_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+       (run_id, path, commits, churn, complexity, authors, top_author_share, last_change_at,
+        recent_commits)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     runId,
     path,
-    values['commits'] ?? 1,
+    commits,
     values['churn'] ?? 1,
     values['complexity'] === undefined ? 1 : values['complexity'],
     values['authors'] ?? 1,
     values['topAuthorShare'] ?? 1,
     values['lastChangeAt'] ?? '2024-01-01T00:00:00.000Z',
+    values['recent'] ?? commits,
+  );
+  db.prepare(`INSERT INTO file_role (run_id, path, role, rule) VALUES (?, ?, ?, 'test')`).run(
+    runId,
+    path,
+    values['role'] ?? 'source',
   );
 }
 
@@ -62,34 +70,53 @@ function commit(author: string, files: string[], churn = 1): string {
 }
 
 describe('topHotspots', () => {
-  it('ranks by churn times complexity, not by either alone', () => {
-    // Churned but flat, and complicated but untouched, are both uninteresting.
-    metric('churned-but-flat.java', { churn: 1000, complexity: 1 });
-    metric('deep-but-still.java', { churn: 1, complexity: 1000 });
-    metric('hotspot.java', { churn: 200, complexity: 200 });
+  it('ranks by recent change and complexity together, not by either alone', () => {
+    // Changed often but flat, and complicated but untouched, are both uninteresting.
+    metric('busy-but-flat.java', { recent: 40, complexity: 1 });
+    metric('deep-but-still.java', { recent: 1, complexity: 1000 });
+    metric('hotspot.java', { recent: 30, complexity: 800 });
 
-    expect(topHotspots(db, runId, 10).map((h) => h.path)).toEqual([
-      'hotspot.java',
-      'churned-but-flat.java',
-      'deep-but-still.java',
-    ]);
+    expect(topHotspots(db, runId, 10).map((h) => h.path)[0]).toBe('hotspot.java');
+  });
+
+  it('does not let a much larger file win on size alone', () => {
+    // ADR-0031: v1 scored churn-in-lines x total indentation, which grows with
+    // size squared, and a lockfile outranked every hand-written file.
+    metric('Giant.java', { recent: 3, complexity: 50_000, churn: 900_000 });
+    metric('Busy.java', { recent: 30, complexity: 800, churn: 2_000 });
+    metric('Mid.java', { recent: 10, complexity: 400, churn: 900 });
+    metric('Quiet.java', { recent: 1, complexity: 100, churn: 20 });
+
+    const ranked = topHotspots(db, runId, 10);
+    expect(ranked.map((h) => h.path)).toEqual(['Busy.java', 'Giant.java', 'Mid.java', 'Quiet.java']);
+    expect(ranked[0]).toMatchObject({ recentPercentile: 1, complexityPercentile: 0.75, score: 0.75 });
+  });
+
+  it('ranks only source files', () => {
+    metric('package-lock.json', { recent: 500, complexity: 90_000, role: 'lockfile' });
+    metric('package.json', { recent: 400, complexity: 200, role: 'manifest' });
+    metric('src/test/BigTest.java', { recent: 300, complexity: 9_000, role: 'test' });
+    metric('src/api/Generated.java', { recent: 300, complexity: 9_000, role: 'generated' });
+    metric('src/Real.java', { recent: 2, complexity: 20 });
+
+    expect(topHotspots(db, runId, 10).map((h) => h.path)).toEqual(['src/Real.java']);
   });
 
   it('excludes a file with no complexity score rather than ranking it last', () => {
     // Unmeasured is not simple, and ranking it last would say it was.
-    metric('binary.bin', { churn: 5000, complexity: null });
-    metric('real.java', { churn: 10, complexity: 10 });
+    metric('binary.java', { recent: 50, complexity: null });
+    metric('real.java', { recent: 10, complexity: 10 });
 
     expect(topHotspots(db, runId, 10).map((h) => h.path)).toEqual(['real.java']);
   });
 
-  it('excludes a file that never changed', () => {
-    metric('untouched.java', { churn: 0, complexity: 100 });
+  it('excludes a file not changed within the window', () => {
+    metric('untouched.java', { commits: 90, recent: 0, complexity: 100 });
     expect(topHotspots(db, runId, 10)).toEqual([]);
   });
 
   it('honours the limit', () => {
-    for (let i = 0; i < 10; i += 1) metric(`f${i}.java`, { churn: i + 1, complexity: 10 });
+    for (let i = 0; i < 10; i += 1) metric(`f${i}.java`, { recent: i + 1, complexity: 10 });
     expect(topHotspots(db, runId, 3)).toHaveLength(3);
   });
 
@@ -141,22 +168,31 @@ describe('busFactorRisks', () => {
     expect(busFactorRisks(db, runId, 10, 5)).toEqual([]);
   });
 
-  it('ranks by churn, so the risk that matters most comes first', () => {
-    metric('big.java', { churn: 900, complexity: 10, commits: 8, authors: 1 });
-    metric('small.java', { churn: 9, complexity: 10, commits: 8, authors: 1 });
-    for (let i = 0; i < 8; i += 1) commit('ada', ['big.java', 'small.java']);
+  it('ranks by recent commits, so the knowledge in use comes first', () => {
+    metric('active.java', { churn: 9, complexity: 10, commits: 8, recent: 8, authors: 1 });
+    metric('dormant.java', { churn: 900, complexity: 10, commits: 8, recent: 1, authors: 1 });
+    for (let i = 0; i < 8; i += 1) commit('ada', ['active.java', 'dormant.java']);
 
     expect(busFactorRisks(db, runId, 10, 5).map((f) => f.path)).toEqual([
-      'big.java',
-      'small.java',
+      'active.java',
+      'dormant.java',
     ]);
   });
 
-  it('includes a file with no complexity score, because ownership does not need one', () => {
-    metric('config.xml', { churn: 40, complexity: null, commits: 7, authors: 1 });
-    for (let i = 0; i < 7; i += 1) commit('ada', ['config.xml']);
+  it('ignores a file nobody has touched within the window', () => {
+    metric('fossil.java', { commits: 8, recent: 0, authors: 1 });
+    for (let i = 0; i < 8; i += 1) commit('ada', ['fossil.java']);
 
-    expect(busFactorRisks(db, runId, 10, 5).map((f) => f.path)).toEqual(['config.xml']);
+    expect(busFactorRisks(db, runId, 10, 5)).toEqual([]);
+  });
+
+  it('considers source files only', () => {
+    // One person bumping dependencies is not concentrated knowledge.
+    metric('package-lock.json', { commits: 40, authors: 1, role: 'lockfile' });
+    metric('config.xml', { commits: 7, authors: 1, role: 'config', complexity: null });
+    for (let i = 0; i < 7; i += 1) commit('ada', ['package-lock.json', 'config.xml']);
+
+    expect(busFactorRisks(db, runId, 10, 5)).toEqual([]);
   });
 });
 
@@ -364,7 +400,9 @@ describe('recordHistoryFindings', () => {
     });
 
     const [finding] = findings(BUS_FACTOR_RULE);
-    expect(finding?.['severity']).toBe('high');
+    // Medium: whether one owner is a risk depends on the file mattering, which
+    // this rule cannot see (ADR-0031).
+    expect(finding?.['severity']).toBe('medium');
     expect(finding?.['detail']).toMatch(/not about the author/);
     expect(
       db.prepare('SELECT COUNT(*) AS n FROM citation WHERE finding_id = ?').get(finding?.['id']),

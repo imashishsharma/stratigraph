@@ -1,10 +1,11 @@
 /**
  * Hotspots and bus factor.
  *
- * A hotspot is a file that is both changed a lot and complicated — the two
- * together, because neither alone is interesting. A file nobody touches can be
- * as tangled as it likes, and a file everyone touches can be trivial. The
- * product is where effort and difficulty meet.
+ * A hotspot is a source file that is both changed a lot lately and
+ * complicated — the two together, because neither alone is interesting. A
+ * file nobody touches can be as tangled as it likes, and a file everyone
+ * touches can be trivial. ADR-0031 fixes what "a lot", "lately" and "source"
+ * mean, and why the two terms are combined as percentiles.
  *
  * Bus factor is the smallest number of people whose commits account for more
  * than half of a file's history. One is a risk; it is not a judgement about
@@ -15,11 +16,18 @@ import type { Db } from '../db/database.js';
 
 export interface Hotspot {
   path: string;
+  /** All-time non-merge commits. */
   commits: number;
+  /** Commits in the hotspot window, sweeps and ignored revisions excluded. */
+  recentCommits: number;
   churn: number;
-  /** Total indentation. Null files are not ranked — see `complexity.ts`. */
+  /** Total indentation in the file's own unit. Null files are not ranked. */
   complexity: number;
-  /** `churn × complexity`. */
+  /** Share of ranked files with no more recent commits than this one, 0..1. */
+  recentPercentile: number;
+  /** Share of ranked files no more deeply indented than this one, 0..1. */
+  complexityPercentile: number;
+  /** `recentPercentile × complexityPercentile`. */
   score: number;
   authors: number;
   /** Share of commits by the most frequent author, 0..1. */
@@ -31,36 +39,77 @@ export interface Hotspot {
   lastChangeAt: string | null;
 }
 
+type Row = Omit<Hotspot, 'busFactor' | 'topAuthor' | 'recentPercentile' | 'complexityPercentile' | 'score'>;
+
+const COLUMNS = /* sql */ `
+  m.path, m.commits, m.recent_commits AS recentCommits, m.churn,
+  COALESCE(m.complexity, 0) AS complexity, m.authors,
+  COALESCE(m.top_author_share, 0) AS topAuthorShare, m.last_change_at AS lastChangeAt`;
+
 /**
- * The files where change and complexity meet, highest first.
+ * The source files where recent change and complexity meet, highest first.
  *
  * Files with no complexity score are excluded rather than ranked at zero: an
  * unmeasured file is not a simple one, and putting it last would say it was.
- * `history` already warns how many there are.
  */
 export function topHotspots(db: Db, runId: number, limit: number): Hotspot[] {
   const rows = db
     .prepare(
       /* sql */ `
-      SELECT path, commits, churn, complexity, authors, top_author_share AS topAuthorShare,
-             last_change_at AS lastChangeAt,
-             churn * complexity AS score
-        FROM file_metric
-       WHERE run_id = @runId AND complexity IS NOT NULL AND churn > 0
-       ORDER BY score DESC, churn DESC, path
-       LIMIT @limit`,
+      SELECT ${COLUMNS}
+        FROM file_metric m
+        JOIN file_role r ON r.run_id = m.run_id AND r.path = m.path AND r.role = 'source'
+       WHERE m.run_id = @runId AND m.complexity IS NOT NULL AND m.recent_commits > 0`,
     )
-    .all({ runId, limit }) as Array<Omit<Hotspot, 'busFactor' | 'topAuthor'>>;
+    .all({ runId }) as Row[];
 
-  return withOwnership(db, runId, rows);
+  const recent = percentiles(rows.map((row) => row.recentCommits));
+  const complexity = percentiles(rows.map((row) => row.complexity));
+  const ranked = rows
+    .map((row) => {
+      const recentPercentile = recent(row.recentCommits);
+      const complexityPercentile = complexity(row.complexity);
+      return {
+        ...row,
+        recentPercentile,
+        complexityPercentile,
+        score: recentPercentile * complexityPercentile,
+      };
+    })
+    .sort(
+      (a, b) =>
+        b.score - a.score ||
+        b.recentCommits - a.recentCommits ||
+        (a.path < b.path ? -1 : a.path > b.path ? 1 : 0),
+    )
+    .slice(0, limit);
+
+  return withOwnership(db, runId, ranked);
+}
+
+/** How many files `topHotspots` ranks among: source, measured, changed in the window. */
+export function hotspotCandidates(db: Db, runId: number): number {
+  return (
+    db
+      .prepare(
+        /* sql */ `
+        SELECT COUNT(*) AS n
+          FROM file_metric m
+          JOIN file_role r ON r.run_id = m.run_id AND r.path = m.path AND r.role = 'source'
+         WHERE m.run_id = ? AND m.complexity IS NOT NULL AND m.recent_commits > 0`,
+      )
+      .get(runId) as { n: number }
+  ).n;
 }
 
 /**
- * Files whose history is concentrated in one person.
+ * Source files whose history is concentrated in one person, most recently
+ * active first.
  *
  * `minCommits` keeps out files that only one person has touched because only
  * one person has ever touched them — two commits by one author is not a bus
- * factor, it is a new file.
+ * factor, it is a new file. A file nobody has touched within the window is left
+ * out too: its knowledge is not in use.
  */
 export function busFactorRisks(
   db: Db,
@@ -71,18 +120,42 @@ export function busFactorRisks(
   const rows = db
     .prepare(
       /* sql */ `
-      SELECT path, commits, churn, COALESCE(complexity, 0) AS complexity, authors,
-             top_author_share AS topAuthorShare, last_change_at AS lastChangeAt,
-             churn * COALESCE(complexity, 0) AS score
-        FROM file_metric
-       WHERE run_id = @runId AND commits >= @minCommits
-       ORDER BY churn DESC, path`,
+      SELECT ${COLUMNS}
+        FROM file_metric m
+        JOIN file_role r ON r.run_id = m.run_id AND r.path = m.path AND r.role = 'source'
+       WHERE m.run_id = @runId AND m.commits >= @minCommits AND m.recent_commits > 0
+       ORDER BY m.recent_commits DESC, m.commits DESC, m.path`,
     )
-    .all({ runId, minCommits }) as Array<Omit<Hotspot, 'busFactor' | 'topAuthor'>>;
+    .all({ runId, minCommits }) as Row[];
 
-  return withOwnership(db, runId, rows)
+  const unranked = rows.map((row) => ({
+    ...row,
+    recentPercentile: 0,
+    complexityPercentile: 0,
+    score: 0,
+  }));
+  return withOwnership(db, runId, unranked)
     .filter((file) => file.busFactor <= 1)
     .slice(0, limit);
+}
+
+/**
+ * Cumulative percentile: the share of values less than or equal to `v`. Ties
+ * share a percentile, and the largest value is always 1.
+ */
+function percentiles(values: readonly number[]): (v: number) => number {
+  const sorted = [...values].sort((a, b) => a - b);
+  const n = sorted.length;
+  return (v) => {
+    let lo = 0;
+    let hi = n;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if ((sorted[mid] as number) <= v) lo = mid + 1;
+      else hi = mid;
+    }
+    return n === 0 ? 0 : lo / n;
+  };
 }
 
 /**

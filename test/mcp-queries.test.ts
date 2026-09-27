@@ -178,9 +178,10 @@ function seedHistory(): void {
      VALUES (?, ?, ?, ?, 4, 2, 'M')`,
   );
   const metric = db.prepare(
-    `INSERT INTO file_metric (run_id, path, commits, churn, complexity, authors, top_author_share, first_change_at, last_change_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, '2024-01-01T00:00:00.000Z', '2024-02-01T00:00:00.000Z')`,
+    `INSERT INTO file_metric (run_id, path, commits, churn, complexity, authors, top_author_share, first_change_at, last_change_at, recent_commits)
+     VALUES (@runId, @path, @commits, @churn, @complexity, @authors, @share, '2024-01-01T00:00:00.000Z', '2024-02-01T00:00:00.000Z', @commits)`,
   );
+  const role = db.prepare(`INSERT INTO file_role (run_id, path, role, rule) VALUES (?, ?, 'source', 'ext:.java')`);
 
   for (const [n, path] of [
     'src/shop/web/OrderController.java',
@@ -197,8 +198,10 @@ function seedHistory(): void {
     );
     file.run(runId, id, path, path);
   }
-  metric.run(runId, 'src/shop/web/OrderController.java', 40, 900, 12, 1, 1);
-  metric.run(runId, 'src/shop/service/OrderService.java', 5, 30, 3, 3, 0.4);
+  metric.run({ runId, path: 'src/shop/web/OrderController.java', commits: 40, churn: 900, complexity: 12, authors: 1, share: 1 });
+  metric.run({ runId, path: 'src/shop/service/OrderService.java', commits: 5, churn: 30, complexity: 3, authors: 3, share: 0.4 });
+  role.run(runId, 'src/shop/web/OrderController.java');
+  role.run(runId, 'src/shop/service/OrderService.java');
 }
 
 describe('describeRun', () => {
@@ -487,7 +490,7 @@ describe('describeModule', () => {
 });
 
 describe('findHotspots', () => {
-  it('ranks by churn x complexity and carries the ownership numbers', () => {
+  it('ranks by recent change x complexity and carries the ownership numbers', () => {
     seedShop();
     seedHistory();
 
@@ -497,9 +500,10 @@ describe('findHotspots', () => {
     expect(result.files[0]).toMatchObject({
       path: 'src/shop/web/OrderController.java',
       commits: 40,
+      recentCommits: 40,
       churn: 900,
       complexity: 12,
-      score: 10800,
+      score: 1,
       busFactor: 1,
       topAuthor: 'ada@example.invalid',
     });

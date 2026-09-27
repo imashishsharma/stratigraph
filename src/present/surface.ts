@@ -10,6 +10,7 @@
  */
 
 import { buildPackageGraph } from '../analysis/package-graph.js';
+import { hotspotCandidates, topHotspots } from '../analysis/hotspots.js';
 import type { Db } from '../db/database.js';
 
 // ------------------------------------------------------------- HTTP surface
@@ -179,10 +180,13 @@ export function buildDependencyMatrix(db: Db, runId: number, limit: number): Dep
 
 export interface HotspotBar {
   path: string;
+  /** Commits in the hotspot window (ADR-0031). */
+  recentCommits: number;
+  /** All-time commits, for context. */
   commits: number;
   churn: number;
   complexity: number;
-  /** churn x complexity, the ranking `analyze` uses. */
+  /** Percentile product, 0..1 — the ranking `analyze` uses. */
   score: number;
   authors: number;
   topAuthorShare: number;
@@ -192,6 +196,7 @@ export interface HotspotBar {
 
 export interface HotspotChart {
   bars: HotspotBar[];
+  /** Files ranked among: source, measured, changed within the window. */
   total: number;
   notes: string[];
 }
@@ -199,44 +204,37 @@ export interface HotspotChart {
 /**
  * The hotspot ranking with a width per row.
  *
- * Same arithmetic as `analyze`'s list; the only thing added is the ratio
- * against the top row, so a reader can see that the first file is twenty times
- * the second rather than reading two numbers and doing it themselves.
+ * The same ranking `analyze` uses, not a second one: a report that ranked
+ * differently from the findings beside it would be two answers to one question.
  */
 export function buildHotspotChart(db: Db, runId: number, limit: number): HotspotChart {
-  const rows = db
-    .prepare(
-      /* sql */ `
-      SELECT path, commits, churn, COALESCE(complexity, 0) AS complexity,
-             authors, COALESCE(top_author_share, 0) AS topAuthorShare,
-             churn * COALESCE(complexity, 0) AS score
-        FROM file_metric
-       WHERE run_id = @runId AND commits > 0
-       ORDER BY score DESC, path
-       LIMIT @limit`,
-    )
-    .all({ runId, limit }) as Array<Omit<HotspotBar, 'relative'>>;
-
-  const total = (
-    db.prepare(`SELECT COUNT(*) AS n FROM file_metric WHERE run_id = ?`).get(runId) as { n: number }
-  ).n;
+  const rows = topHotspots(db, runId, limit);
+  const total = hotspotCandidates(db, runId);
 
   const highest = rows[0]?.score ?? 0;
   const bars = rows.map((row) => ({
-    ...row,
+    path: row.path,
+    recentCommits: row.recentCommits,
+    commits: row.commits,
+    churn: row.churn,
+    complexity: row.complexity,
+    score: row.score,
+    authors: row.authors,
+    topAuthorShare: row.topAuthorShare,
     relative: highest === 0 ? 0 : row.score / highest,
   }));
 
   const notes: string[] = [];
   if (bars.length > 0) {
     notes.push(
-      'Churn is lines changed across the mined history; complexity is an ' +
-        'indentation proxy, not a parsed measure. The product ranks files that ' +
-        'are both changed often and structurally dense.',
+      'Only source files are ranked — lockfiles, manifests, tests, generated and vendored ' +
+        'code are not. Change is commits in the hotspot window, without sweeping commits; ' +
+        'complexity is an indentation proxy, not a parsed measure. The score multiplies the ' +
+        'two percentiles, so a file ranks high only when it is both busy and dense.',
     );
   }
   if (total > bars.length) {
-    notes.push(`Showing ${bars.length} of ${total} files with history. Raise --top for more.`);
+    notes.push(`Showing ${bars.length} of ${total} ranked source files. Raise --top for more.`);
   }
   return { bars, total, notes };
 }

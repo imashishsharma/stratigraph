@@ -27,6 +27,7 @@ describe('indentationComplexity', () => {
     expect(indentationComplexity('package a;\nclass A {}\n')).toEqual({
       complexity: 0,
       lines: 2,
+      indentUnit: null,
     });
   });
 
@@ -34,15 +35,19 @@ describe('indentationComplexity', () => {
     const text = ['no indent', '    one', '        two', '      one and a half'].join('\n');
     // 0 + 1 + 2 + 1: a continuation line lined up under a bracket must not
     // score as deeply as a real nesting level.
-    expect(indentationComplexity(text)).toEqual({ complexity: 4, lines: 4 });
+    expect(indentationComplexity(text)).toEqual({ complexity: 4, lines: 4, indentUnit: 4 });
   });
 
   it('counts one level per tab', () => {
-    expect(indentationComplexity('a\n\tb\n\t\t\tc\n')).toEqual({ complexity: 4, lines: 3 });
+    expect(indentationComplexity('a\n\tb\n\t\t\tc\n')).toEqual({
+      complexity: 4,
+      lines: 3,
+      indentUnit: null,
+    });
   });
 
   it('adds tabs and spaces together on a mixed line', () => {
-    expect(indentationComplexity('\t\t    x')).toEqual({ complexity: 3, lines: 1 });
+    expect(indentationComplexity('\t\t    x')).toEqual({ complexity: 3, lines: 1, indentUnit: 4 });
   });
 
   it('ignores blank and whitespace-only lines', () => {
@@ -50,17 +55,22 @@ describe('indentationComplexity', () => {
     expect(indentationComplexity('a\n\n        \n\t\t\n    b\n')).toEqual({
       complexity: 1,
       lines: 2,
+      indentUnit: 4,
     });
   });
 
   it('is not fooled by CRLF line endings', () => {
     // The bare CR must not count as content, or every blank line in a
     // Windows-authored file becomes a counted line.
-    expect(indentationComplexity('a\r\n\r\n    b\r\n')).toEqual({ complexity: 1, lines: 2 });
+    expect(indentationComplexity('a\r\n\r\n    b\r\n')).toEqual({
+      complexity: 1,
+      lines: 2,
+      indentUnit: 4,
+    });
   });
 
   it('handles an empty file', () => {
-    expect(indentationComplexity('')).toEqual({ complexity: 0, lines: 0 });
+    expect(indentationComplexity('')).toEqual({ complexity: 0, lines: 0, indentUnit: null });
   });
 
   it('counts comments like any other line', () => {
@@ -69,25 +79,48 @@ describe('indentationComplexity', () => {
     expect(indentationComplexity('    // a comment\n    code();')).toEqual({
       complexity: 2,
       lines: 2,
+      indentUnit: 4,
     });
   });
 
-  it('uses the documented indent width', () => {
+  it('measures a 2-space file in its own unit, so it is not halved against Java', () => {
+    // ADR-0031: the v1 proxy floored everything by four spaces.
+    const twoSpace = ['a {', '  b {', '    c;', '  }', '}'].join('\n');
+    const fourSpace = ['a {', '    b {', '        c;', '    }', '}'].join('\n');
+    expect(indentationComplexity(twoSpace)).toEqual({ complexity: 4, lines: 5, indentUnit: 2 });
+    expect(indentationComplexity(fourSpace)).toEqual({ complexity: 4, lines: 5, indentUnit: 4 });
+  });
+
+  it('takes the most common step, so aligned continuation lines do not set the unit', () => {
+    const text = [
+      'a(',
+      '    b,',            // +4
+      '    call(x,',
+      '         y);',      // +5, lined up under the bracket
+      '    if (c) {',
+      '        d();',      // +4
+      '    }',
+    ].join('\n');
+    expect(indentationComplexity(text).indentUnit).toBe(4);
+  });
+
+  it('falls back to the documented width when no step can be seen', () => {
     expect(SPACES_PER_INDENT).toBe(4);
+    expect(indentationComplexity('\t\t    x').indentUnit).toBe(SPACES_PER_INDENT);
   });
 });
 
 describe('measureFile', () => {
   it('measures a text file', () => {
     const path = write('A.java', 'class A {\n    void run() {\n        go();\n    }\n}\n');
-    expect(measureFile(path)).toEqual({ complexity: 4, lines: 5, skipped: null });
+    expect(measureFile(path)).toEqual({ complexity: 4, lines: 5, indentUnit: 4, skipped: null });
   });
 
   it('refuses to score a binary file rather than calling it simple', () => {
     // Scoring it zero would rank a jar as the least complex thing in the
     // repository. Null says "not measured", which is the truth.
     const path = write('blob.bin', Buffer.from([0x7f, 0x45, 0x4c, 0x46, 0x00, 0x01, 0x02]));
-    expect(measureFile(path)).toEqual({ complexity: null, lines: 0, skipped: 'binary' });
+    expect(measureFile(path)).toEqual({ complexity: null, lines: 0, indentUnit: null, skipped: 'binary' });
   });
 
   it('measures a file whose NUL byte is beyond the sniff window', () => {
@@ -98,7 +131,7 @@ describe('measureFile', () => {
 
   it('refuses to score a file too large to be hand-written', () => {
     const path = write('generated.ts', 'x\n'.repeat(MAX_FILE_BYTES));
-    expect(measureFile(path)).toEqual({ complexity: null, lines: 0, skipped: 'too-large' });
+    expect(measureFile(path)).toEqual({ complexity: null, lines: 0, indentUnit: null, skipped: 'too-large' });
   });
 
   it('reports a missing file as unreadable rather than throwing', () => {
@@ -108,6 +141,7 @@ describe('measureFile', () => {
     expect(measureFile(join(scratch(), 'nope.java'))).toEqual({
       complexity: null,
       lines: 0,
+      indentUnit: null,
       skipped: 'unreadable',
     });
   });

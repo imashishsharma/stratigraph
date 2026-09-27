@@ -88,6 +88,8 @@ export interface HistoryConfig {
   minShared: number;
   /** Each file must have changed at least this often, or the ratio is an artefact. */
   minCommits: number;
+  /** Hotspot window, in months back from the newest commit (ADR-0031). */
+  hotspotMonths: number;
 }
 
 export const DEFAULT_HISTORY: HistoryConfig = {
@@ -95,6 +97,7 @@ export const DEFAULT_HISTORY: HistoryConfig = {
   maxFilesPerCommit: 50,
   minShared: 5,
   minCommits: 5,
+  hotspotMonths: 12,
 };
 
 /**
@@ -210,7 +213,13 @@ const KNOWN_LLM_KEYS = new Set([
   'sendSource',
 ]);
 const KNOWN_JAVA_KEYS = new Set(['home', 'jar']);
-const KNOWN_HISTORY_KEYS = new Set(['since', 'maxFilesPerCommit', 'minShared', 'minCommits']);
+const KNOWN_HISTORY_KEYS = new Set([
+  'since',
+  'maxFilesPerCommit',
+  'minShared',
+  'minCommits',
+  'hotspotMonths',
+]);
 const KNOWN_INTERPRET_KEYS = new Set(['couplingWeight', 'minClusterSize', 'maxClusters']);
 const KNOWN_BRAND_KEYS = new Set(['name', 'logo', 'accent']);
 
@@ -324,6 +333,7 @@ export function loadConfig(overrides: ConfigOverrides = {}): StratigraphConfig {
         DEFAULT_HISTORY.maxFilesPerCommit,
       minShared: file.history?.minShared ?? DEFAULT_HISTORY.minShared,
       minCommits: file.history?.minCommits ?? DEFAULT_HISTORY.minCommits,
+      hotspotMonths: file.history?.hotspotMonths ?? DEFAULT_HISTORY.hotspotMonths,
     },
     interpret: {
       couplingWeight:
@@ -413,6 +423,7 @@ interface ConfigFile {
     maxFilesPerCommit?: number;
     minShared?: number;
     minCommits?: number;
+    hotspotMonths?: number;
   };
   interpret?: {
     couplingWeight?: number;
@@ -540,6 +551,12 @@ function readConfigFile(path: string, options: { allowInlineKey: boolean }): Con
         path,
         'history.minCommits',
         historyObj['minCommits'],
+      );
+    if (isSet(historyObj['hotspotMonths']))
+      out.history.hotspotMonths = expectPositiveInteger(
+        path,
+        'history.hotspotMonths',
+        historyObj['hotspotMonths'],
       );
   }
 

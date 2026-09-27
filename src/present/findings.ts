@@ -29,7 +29,7 @@ const RULE_TITLES: Record<string, string> = {
   'package-cycle': 'Package cycle',
   'intent-mismatch': 'Name and edges disagree',
   'logical-coupling': 'Changes together, with no dependency',
-  hotspot: 'Hotspot — churn × complexity',
+  hotspot: 'Hotspot — recent change × complexity',
   'bus-factor': 'History is one person',
   'unbounded-subscription': 'Subscription with no way to unsubscribe',
   'cluster-responsibility': 'Cluster responsibility (model-authored)',

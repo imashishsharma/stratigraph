@@ -324,14 +324,15 @@ export function createServer(context: McpContext): McpServer {
     {
       title: 'Find hotspots and bus-factor risks',
       description:
-        'Files where change and complexity meet (churn x indentation complexity), or files ' +
-        'whose history is concentrated in one author. Both are arithmetic over git log, not ' +
-        'judgements.',
+        'Source files where recent change and complexity meet (percentile of commits in the ' +
+        'hotspot window x percentile of indentation complexity), or source files whose history ' +
+        'is concentrated in one author. Lockfiles, manifests, tests, generated and vendored code ' +
+        'are never ranked. Both are arithmetic over git log, not judgements.',
       inputSchema: {
         ranking: z
-          .enum(['churn-complexity', 'bus-factor'])
+          .enum(['change-complexity', 'bus-factor'])
           .optional()
-          .describe('default "churn-complexity"'),
+          .describe('default "change-complexity"'),
         limit: limitArg,
       },
       annotations: readOnly,
@@ -344,7 +345,7 @@ export function createServer(context: McpContext): McpServer {
       }
       const lines = result.files.map(
         (file) =>
-          `  ${file.path} — ${file.commits} commits, ${file.churn} lines changed, ` +
+          `  ${file.path} — ${file.recentCommits} recent commits (${file.commits} all-time), ` +
           `indentation ${file.complexity}, ${file.authors} author(s), bus factor ${file.busFactor}` +
           `${file.topAuthor === null ? '' : `, mostly ${file.topAuthor}`}`,
       );

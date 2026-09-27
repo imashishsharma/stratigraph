@@ -5,6 +5,7 @@ import { basename, dirname, join } from 'node:path';
 
 import { beforeAll, describe, expect, it } from 'vitest';
 
+import { topHotspots } from '../src/analysis/hotspots.js';
 import { HistoryError, runHistory } from '../src/commands/history.js';
 import { runInit } from '../src/commands/init.js';
 import { openDatabase } from '../src/db/database.js';
@@ -270,5 +271,57 @@ describe.skipIf(!GIT)('runHistory against a real repository', () => {
         result.runId,
       ).map((r) => r.path),
     ).toEqual(['Keep.java', 'New.java']);
+  });
+
+  it('never ranks a lockfile, however large and busy (the v1 failure)', async () => {
+    // v1.6.1 on a real Spring + Angular repository ranked package-lock.json
+    // first and package.json second. Rebuilt here: a lockfile rewritten
+    // wholesale on every commit, a manifest bumped alongside it, and one small
+    // source file changed a few times (ADR-0030, ADR-0031).
+    const mono = mkdtempSync(join(tmpdir(), 'stratigraph-lock-'));
+    git(['init', '-q'], mono);
+    for (let i = 0; i < 6; i += 1) {
+      const lock = Array.from({ length: 400 }, (_, n) => `    "pkg-${n}": { "version": "1.${i}.${n}" },`).join('\n');
+      write(mono, 'package-lock.json', `{\n  "packages": {\n${lock}\n  }\n}\n`);
+      write(mono, 'package.json', `{\n  "version": "1.${i}.0"\n}\n`);
+      if (i % 2 === 0) {
+        write(mono, 'src/app/order.service.ts', `export class OrderService {\n  total() {\n    return ${i};\n  }\n}\n`);
+      }
+      write(mono, 'src/app/order.service.spec.ts', `describe('x', () => {\n  it('${i}', () => {});\n});\n`);
+      commit(mono, `bump ${i}`, `2024-0${i + 1}-01T10:00:00+00:00`);
+    }
+    const { cwd, dbPath } = freshStore(mono);
+
+    const result = await runHistory({ repo: mono, cwd });
+
+    expect(result.roles).toMatchObject({ lockfile: 1, manifest: 1, source: 1, test: 1 });
+    const db = openDatabase(dbPath, { mustExist: true, readonly: true });
+    try {
+      expect(topHotspots(db, result.runId, 10).map((h) => h.path)).toEqual([
+        'src/app/order.service.ts',
+      ]);
+    } finally {
+      db.close();
+    }
+  });
+
+  it('does not count revisions listed in .git-blame-ignore-revs', async () => {
+    const fmt = mkdtempSync(join(tmpdir(), 'stratigraph-ignore-'));
+    git(['init', '-q'], fmt);
+    write(fmt, 'src/A.java', 'class A {\n    void a() {}\n}\n');
+    commit(fmt, 'initial', '2024-01-01T10:00:00+00:00');
+    write(fmt, 'src/A.java', 'class A {\n  void a() {}\n}\n');
+    commit(fmt, 'reformat', '2024-01-02T10:00:00+00:00');
+    const reformat = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: fmt, encoding: 'utf8' }).trim();
+    write(fmt, '.git-blame-ignore-revs', `# formatting\n${reformat}\n`);
+    commit(fmt, 'ignore the reformat', '2024-01-03T10:00:00+00:00');
+    const { cwd, dbPath } = freshStore(fmt);
+
+    const result = await runHistory({ repo: fmt, cwd });
+
+    expect(result.excludedIgnored).toBe(1);
+    expect(
+      read(dbPath, 'SELECT commits, recent_commits FROM file_metric WHERE run_id = ? AND path = ?', result.runId, 'src/A.java'),
+    ).toEqual([{ commits: 2, recent_commits: 1 }]);
   });
 });

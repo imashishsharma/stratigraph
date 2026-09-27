@@ -91,7 +91,7 @@ describe('stratigraph init', () => {
     const dir = scratch();
     const result = runInit({ repo: FIXTURE, cwd: dir });
     expect(result.schemaVersion).toBe(SCHEMA_VERSION);
-    expect(result.applied).toEqual([1]);
+    expect(result.applied).toEqual([1, 2]);
     expect(result.dbPath).toBe(join(dir, '.stratigraph', 'tiny-java.db'));
   });
 

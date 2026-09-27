@@ -86,8 +86,12 @@ function commit(files: string[], author = 'ada'): void {
        VALUES (?, ?, ?, ?, 5, 5)`,
     ).run(runId, commitId, path, path);
     db.prepare(
-      `INSERT OR IGNORE INTO file_metric (run_id, path, commits, churn, complexity, authors, top_author_share)
-       VALUES (?, ?, 10, 100, 20, 1, 1.0)`,
+      `INSERT OR IGNORE INTO file_metric
+         (run_id, path, commits, churn, complexity, authors, top_author_share, recent_commits)
+       VALUES (?, ?, 10, 100, 20, 1, 1.0, 10)`,
+    ).run(runId, path);
+    db.prepare(
+      `INSERT OR IGNORE INTO file_role (run_id, path, role, rule) VALUES (?, ?, 'source', 'test')`,
     ).run(runId, path);
   }
 }
@@ -169,7 +173,7 @@ describe('runAnalyze with both facts and history', () => {
     expect(out).toMatch(/1 package cycle/);
     expect(out).toMatch(/Files that change together with no dependency between them/);
     expect(out).toMatch(/OrderService\.java/);
-    expect(out).toMatch(/Hotspots — churn x complexity/);
+    expect(out).toMatch(/Hotspots — recent change x complexity/);
   });
 
   it('prints the numbers a coupling claim rests on', async () => {

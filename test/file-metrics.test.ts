@@ -201,6 +201,65 @@ describe('computeFileMetrics', () => {
     );
   });
 
+  it('records the indent unit the file was measured in', () => {
+    writeFile('src/app.ts', 'a {\n  b {\n    c;\n  }\n}\n');
+    commit({ author: 'ada', at: '2024-01-01T00:00:00.000Z', files: [{ path: 'src/app.ts' }] });
+
+    computeFileMetrics(db, runId, repo, ['src/app.ts']);
+
+    expect(metrics('src/app.ts')).toMatchObject({ complexity: 4, indent_unit: 2 });
+  });
+
+  describe('recent_commits (ADR-0031)', () => {
+    it('counts commits in the window ending at the newest commit, not at the wall clock', () => {
+      writeFile('src/A.java', 'class A {}\n');
+      commit({ author: 'ada', at: '2020-01-01T00:00:00.000Z', files: [{ path: 'src/A.java' }] });
+      commit({ author: 'ada', at: '2022-06-01T00:00:00.000Z', files: [{ path: 'src/A.java' }] });
+      commit({ author: 'ada', at: '2023-01-01T00:00:00.000Z', files: [{ path: 'src/A.java' }] });
+
+      const stats = computeFileMetrics(db, runId, repo, ['src/A.java'], { windowMonths: 12 });
+
+      expect(stats.windowStart).toBe('2022-01-01T00:00:00.000Z');
+      expect(metrics('src/A.java')).toMatchObject({ commits: 3, recent_commits: 2 });
+    });
+
+    it('ignores merge commits when finding the end of the window', () => {
+      writeFile('src/A.java', 'class A {}\n');
+      commit({ author: 'ada', at: '2020-01-01T00:00:00.000Z', files: [{ path: 'src/A.java' }] });
+      commit({ author: 'ada', at: '2030-01-01T00:00:00.000Z', files: [], merge: true });
+
+      const stats = computeFileMetrics(db, runId, repo, ['src/A.java'], { windowMonths: 12 });
+
+      expect(stats.windowStart).toBe('2019-01-01T00:00:00.000Z');
+      expect(metrics('src/A.java')?.['recent_commits']).toBe(1);
+    });
+
+    it('excludes bulk commits, which still count toward all-time commits', () => {
+      // A sweep is evidence about a script, not about the file (ADR-0011).
+      writeFile('src/A.java', 'class A {}\n');
+      const sweep = Array.from({ length: 4 }, (_, i) => ({ path: i === 0 ? 'src/A.java' : `src/B${i}.java` }));
+      commit({ author: 'ada', at: '2024-01-01T00:00:00.000Z', files: sweep });
+      commit({ author: 'ada', at: '2024-02-01T00:00:00.000Z', files: [{ path: 'src/A.java' }] });
+
+      const stats = computeFileMetrics(db, runId, repo, ['src/A.java'], { maxFilesPerCommit: 3 });
+
+      expect(stats.excludedBulk).toBe(1);
+      expect(metrics('src/A.java')).toMatchObject({ commits: 2, recent_commits: 1 });
+    });
+
+    it('excludes revisions listed in .git-blame-ignore-revs', () => {
+      writeFile('src/A.java', 'class A {}\n');
+      commit({ author: 'ada', at: '2024-01-01T00:00:00.000Z', files: [{ path: 'src/A.java' }] });
+      commit({ author: 'ada', at: '2024-02-01T00:00:00.000Z', files: [{ path: 'src/A.java' }] });
+      const formatter = `sha${sha}`;
+
+      const stats = computeFileMetrics(db, runId, repo, ['src/A.java'], { ignoreRevs: [formatter] });
+
+      expect(stats.excludedIgnored).toBe(1);
+      expect(metrics('src/A.java')?.['recent_commits']).toBe(1);
+    });
+  });
+
   it('produces nothing when no tracked file has history', () => {
     expect(computeFileMetrics(db, runId, repo, []).files).toBe(0);
   });

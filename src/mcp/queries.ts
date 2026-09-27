@@ -680,7 +680,7 @@ export function describeModule(
 
 export interface HotspotsResult {
   covered: boolean;
-  ranking: 'churn-complexity' | 'bus-factor';
+  ranking: 'change-complexity' | 'bus-factor';
   files: Hotspot[];
   note: string | null;
 }
@@ -697,13 +697,13 @@ export function findHotspots(
   db: Db,
   runId: number,
   options: {
-    ranking?: 'churn-complexity' | 'bus-factor' | undefined;
+    ranking?: 'change-complexity' | 'bus-factor' | undefined;
     limit?: number | undefined;
     minCommits?: number | undefined;
   } = {},
 ): HotspotsResult {
   const limit = options.limit ?? DEFAULT_LIMIT;
-  const ranking = options.ranking ?? 'churn-complexity';
+  const ranking = options.ranking ?? 'change-complexity';
   const covered = count(db, 'SELECT COUNT(*) AS n FROM file_metric WHERE run_id = ?', runId) > 0;
 
   const files = covered
