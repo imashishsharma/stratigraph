@@ -9,6 +9,7 @@ import { runConfigPaths, runConfigSetKey } from './commands/config.js';
 import { runDoctor } from './commands/doctor.js';
 import { DiffError, runDiff } from './commands/diff.js';
 import { runBench } from './commands/bench.js';
+import { runScan } from './commands/scan.js';
 import { ExtractError, runExtract } from './commands/extract.js';
 import { runFetchExtractor } from './commands/fetch-extractor.js';
 import { HistoryError, runHistory } from './commands/history.js';
@@ -155,6 +156,15 @@ export function buildProgram(): Command {
         }
       },
     );
+
+  program
+    .command('scan [repo]')
+    .description('extract, mine history, analyse and report in one go, then say what was and was not seen')
+    .option('--out <dir>', 'report directory (default: ./stratigraph-report)')
+    .action(async (repo: string | undefined, options: { out?: string }) => {
+      const global = overrides(program);
+      await runScan({ ...global, repo: repo ?? global.repo, out: options.out });
+    });
 
   program
     .command('bench')

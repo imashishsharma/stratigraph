@@ -428,3 +428,36 @@ describe('a repository with Java sources and no JDK', () => {
     expect(markdown).toContain('the java extractor did not run: no JDK found');
   });
 });
+
+describe('stratigraph scan', () => {
+  it('runs the pipeline on a repository and ends with its coverage, gaps included', async () => {
+    const { runScan } = await import('../src/commands/scan.js');
+    const repo = mkdtempSync(join(tmpdir(), 'stratigraph-scan-'));
+    mkdirSync(join(repo, 'src', 'main', 'java'), { recursive: true });
+    writeFileSync(join(repo, 'src', 'main', 'java', 'App.java'), 'class App {}');
+    const dir = mkdtempSync(join(tmpdir(), 'stratigraph-scan-store-'));
+    const printed: string[] = [];
+    const spy = vi.spyOn(process.stdout, 'write').mockImplementation((chunk) => {
+      printed.push(String(chunk));
+      return true;
+    });
+
+    // No JDK is the case scan must survive: the Java half is recorded as not
+    // read, and the report is still written.
+    const result = await runScan({
+      repo,
+      cwd: dir,
+      llm: false,
+      resolveSpawner: () => {
+        throw new ExtractError('no JDK found. The Java extractor needs a JDK 17+.');
+      },
+    });
+    spy.mockRestore();
+
+    expect(readdirSync(result.outDir)).toContain('index.html');
+    const output = printed.join('');
+    expect(output).toContain('What this report could see:');
+    expect(output).toMatch(/java\s+NOT RUN\s+0 of 1 source files/);
+    expect(output).toMatch(/architecture \(C4\)\s+WITHHELD/);
+  }, 60_000);
+});
