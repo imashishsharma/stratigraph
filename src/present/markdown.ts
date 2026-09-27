@@ -7,6 +7,7 @@
  * project is written against.
  */
 
+import { VIEW_TITLES, VIEWS, type ViewCoverage, type ViewId } from '../analysis/coverage.js';
 import type { FindingEvidence, RankedFindings } from './findings.js';
 
 export interface MarkdownContext {
@@ -25,6 +26,12 @@ export interface MarkdownContext {
   analysisStored: boolean;
   /** What this run could not answer, and the command that would fix it. */
   gaps?: string[] | undefined;
+  /**
+   * Each view's coverage (ADR-0033). Findings are never withheld, but an
+   * absent finding is evidence only over what was read, and this file travels
+   * without the report that says how much that was.
+   */
+  views?: Record<ViewId, ViewCoverage> | undefined;
 }
 
 export function toMarkdown(ranked: RankedFindings, context: MarkdownContext): string {
@@ -108,8 +115,20 @@ export function toMarkdown(ranked: RankedFindings, context: MarkdownContext): st
  */
 function limits(context: MarkdownContext): string[] {
   const gaps = context.gaps ?? [];
-  if (gaps.length === 0) return [];
-  return ['## Limits of this run', '', ...gaps.map((gap) => `- ${gap}`), ''];
+  const lines: string[] = [];
+  if (context.views !== undefined) {
+    const views = context.views;
+    lines.push(
+      '## Coverage',
+      '',
+      ...VIEWS.map((view) => `- **${VIEW_TITLES[view]}** — ${views[view].statement}`),
+      '',
+    );
+  }
+  if (gaps.length > 0) {
+    lines.push('## Limits of this run', '', ...gaps.map((gap) => `- ${gap}`), '');
+  }
+  return lines;
 }
 
 function summary(ranked: RankedFindings): string {

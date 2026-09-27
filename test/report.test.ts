@@ -1,10 +1,11 @@
-import { mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { ExtractError, runExtract } from '../src/commands/extract.js';
 import { runInit } from '../src/commands/init.js';
 import { ReportError, runReport } from '../src/commands/report.js';
 import { openDatabase, type Db } from '../src/db/database.js';
@@ -380,5 +381,45 @@ describe('a branded report (ADR-0025)', () => {
       JSON.stringify({ report: { brand: { logo: 'missing.png' } } }),
     );
     expect(() => report()).toThrow(/cannot be read/);
+  });
+});
+
+describe('a repository with Java sources and no JDK', () => {
+  // The M10 acceptance case, through the real commands: extract records the
+  // skip (ADR-0032), and the report says so and withholds the views that
+  // needed the Java facts (ADR-0033).
+  it('says so on the Summary and withholds the architecture', async () => {
+    const repo = mkdtempSync(join(tmpdir(), 'stratigraph-nojdk-'));
+    mkdirSync(join(repo, 'src', 'main', 'java'), { recursive: true });
+    writeFileSync(join(repo, 'src', 'main', 'java', 'App.java'), 'class App {}');
+    writeFileSync(join(repo, 'src', 'main', 'java', 'Repo.java'), 'class Repo {}');
+    const dir = mkdtempSync(join(tmpdir(), 'stratigraph-nojdk-store-'));
+    runInit({ repo, cwd: dir });
+
+    await runExtract({
+      repo,
+      cwd: dir,
+      resolveSpawner: () => {
+        throw new ExtractError('no JDK found. The Java extractor needs a JDK 17+.');
+      },
+    });
+    const result = runReport({ repo, cwd: dir, out: 'arch' });
+
+    const html = readFileSync(join(result.outDir, 'index.html'), 'utf8');
+    expect(html).toContain('ok, partial — the java extractor did not run');
+    expect(html).toContain('no JDK found. The Java extractor needs a JDK 17+.');
+    expect(html).toMatch(
+      /<div class="coverage withheld" data-view="architecture"><p class="coverage-statement">Withheld: built from only 0 of 2 main source files parsed \(0%\), below the 50% this view needs\.<\/p>/,
+    );
+    expect(html).toContain('Withheld for low coverage: architecture (C4), class diagrams');
+
+    const written = readdirSync(result.outDir).sort();
+    expect(written).toEqual(['findings.md', 'index.html']);
+
+    const markdown = readFileSync(join(result.outDir, 'findings.md'), 'utf8');
+    expect(markdown).toContain(
+      '- **architecture (C4)** — Withheld: built from only 0 of 2 main source files parsed (0%)',
+    );
+    expect(markdown).toContain('the java extractor did not run: no JDK found');
   });
 });

@@ -17,6 +17,7 @@
  * diagrams, in the prose, and in the legend that explains the difference.
  */
 
+import { VIEW_TITLES, VIEWS, type ViewCoverage } from '../analysis/coverage.js';
 import type { RunSummary } from '../mcp/queries.js';
 import { TOOL_VERSION } from '../version.js';
 import { paletteFrom, type DiagramPalette, type ResolvedBrand } from './brand.js';
@@ -70,19 +71,33 @@ export function toHtml(data: ReportData, context: ReportContext): string {
   // Built as a list so the tab bar and the page cannot disagree about what is
   // on it. A panel whose section has nothing to say is omitted along with its
   // tab, rather than shipping an empty page.
+  // Every view opens with its coverage, and one below its threshold is
+  // replaced by the statement of why (ADR-0033). The tab stays: a withheld
+  // view that vanished would be an absence nobody notices.
+  const views = context.run.coverage.views;
   const panels: Panel[] = [
     panel('summary', 'Summary', 'Summary', summarySection(data, context)),
     panel(
       'findings',
       'Findings',
       'Findings, ranked',
-      findingsSection(data.ranked, context.run.coverage.analysis),
+      findingsCoverage(context.run) + findingsSection(data.ranked, context.run.coverage.analysis),
     ),
-    panel('architecture', 'Architecture', 'Architecture — C4 levels 1 to 3', architecturePanel(data, palette)),
-    panel('code', 'Code', 'Code — one class diagram per package', codePanel(data, palette)),
-    panel('data', 'Data model', 'Data model', erSection(data.er, palette)),
-    panel('api', 'HTTP API', 'HTTP surface', apiSection(data.surface)),
-    panel('coupling', 'Coupling', 'Dependency matrix and hotspots', couplingPanel(data)),
+    panel(
+      'architecture',
+      'Architecture',
+      'Architecture — C4 levels 1 to 3',
+      gated(views.architecture, () => architecturePanel(data, palette)),
+    ),
+    panel(
+      'code',
+      'Code',
+      'Code — one class diagram per package',
+      gated(views.code, () => codePanel(data, palette)),
+    ),
+    panel('data', 'Data model', 'Data model', gated(views.data, () => erSection(data.er, palette))),
+    panel('api', 'HTTP API', 'HTTP surface', gated(views.api, () => apiSection(data.surface))),
+    panel('coupling', 'Coupling', 'Dependency matrix and hotspots', couplingPanel(data, views)),
     panel('limits', 'Limits', 'What this report did not see', limitsSection(context, data)),
   ].filter((entry) => entry.html !== '');
 
@@ -353,10 +368,12 @@ function summarySection(data: ReportData, context: ReportContext): string {
     '<dl class="meta">',
     row('Repository', run.repoPath),
     row('Commit', run.repoHead ?? 'not recorded'),
-    row('Extractors', run.extractors.join(', ') || 'none'),
+    row('Run status', runStatus(run)),
     row('Languages', run.languages.join(', ') || 'none'),
     row('Extracted by', `stratigraph ${run.toolVersion}`),
     '</dl>',
+    extractorTable(run),
+    withheldSummary(run),
     tilesHtml(data, context),
   ];
 
@@ -380,7 +397,7 @@ function summarySection(data: ReportData, context: ReportContext): string {
     );
   }
 
-  if (data.hotspots.bars.length > 0) {
+  if (data.hotspots.bars.length > 0 && !run.coverage.views.hotspots.withheld) {
     parts.push(
       '<h3>Hottest files</h3>',
       `<p class="caption">Recent change &times; complexity, the first ` +
@@ -431,14 +448,111 @@ function codePanel(data: ReportData, palette: DiagramPalette | undefined): strin
     .join('\n');
 }
 
-function couplingPanel(data: ReportData): string {
-  const matrix = matrixSection(data.matrix);
-  const hotspots = hotspotSection(data.hotspots);
+function couplingPanel(data: ReportData, views: RunSummary['coverage']['views']): string {
+  const matrix = gated(views.matrix, () => matrixSection(data.matrix));
+  const hotspots = gated(views.hotspots, () => hotspotSection(data.hotspots));
   if (matrix === '' && hotspots === '') return '';
   const parts: string[] = [];
   if (matrix !== '') parts.push(subheading('Dependency matrix'), matrix);
   if (hotspots !== '') parts.push(subheading('Hotspots'), hotspots);
   return parts.join('\n');
+}
+
+// ---------------------------------------------------------------- coverage
+
+/**
+ * A view's body behind its coverage (ADR-0033): the statement and the body,
+ * or, below threshold, the statement and the reasons in the body's place.
+ * An empty body stays empty — there is no view to qualify.
+ */
+function gated(coverage: ViewCoverage, body: () => string): string {
+  if (coverage.withheld) return coverageBlock(coverage);
+  const html = body();
+  return html === '' ? '' : `${coverageBlock(coverage)}\n${html}`;
+}
+
+function coverageBlock(coverage: ViewCoverage): string {
+  const reasons =
+    coverage.reasons.length === 0
+      ? ''
+      : `<ul class="coverage-reasons">${coverage.reasons
+          .map((reason) => `<li>${escapeText(reason)}</li>`)
+          .join('')}</ul>`;
+  return (
+    `<div class="coverage${coverage.withheld ? ' withheld' : ''}" data-view="${escapeAttr(coverage.view)}">` +
+    `<p class="coverage-statement">${escapeText(coverage.statement)}</p>${reasons}</div>`
+  );
+}
+
+/** "ok", or ok with the extractors that did not run named. */
+function runStatus(run: RunSummary): string {
+  const missing = run.coverage.extractors.filter(
+    (entry) => entry.status === 'skipped' || entry.status === 'failed',
+  );
+  if (run.status !== 'ok') {
+    return `${run.status} — this run did not complete; its facts are incomplete`;
+  }
+  if (missing.length === 0) return 'ok';
+  return `ok, partial — ${missing
+    .map((entry) => `the ${entry.language} extractor ${entry.status === 'skipped' ? 'did not run' : 'failed'}`)
+    .join('; ')}`;
+}
+
+function extractorTable(run: RunSummary): string {
+  const rows = run.coverage.extractors;
+  if (rows.length === 0) return '';
+  return [
+    '<table class="extractors">',
+    '<thead><tr><th>Extractor</th><th>Status</th><th class="num">Main source files parsed</th>' +
+      '<th class="num">Test files</th><th>Reason</th></tr></thead>',
+    '<tbody>',
+    ...rows.map(
+      (entry) =>
+        `<tr class="extractor-${escapeAttr(entry.status)}">` +
+        `<td>${escapeText(entry.language)}</td>` +
+        `<td>${escapeText(entry.status === 'unrecorded' ? 'not recorded' : entry.status)}</td>` +
+        `<td class="num">${entry.parsed.toLocaleString('en-US')} of ${entry.found.toLocaleString('en-US')}</td>` +
+        `<td class="num">${entry.testsParsed.toLocaleString('en-US')}</td>` +
+        `<td>${entry.reason === null ? '' : escapeText(entry.reason.split('\n')[0] as string)}</td>` +
+        '</tr>',
+    ),
+    '</tbody>',
+    '</table>',
+  ].join('\n');
+}
+
+function withheldSummary(run: RunSummary): string {
+  const withheld = VIEWS.filter((view) => run.coverage.views[view].withheld);
+  if (withheld.length === 0) return '';
+  return (
+    '<p class="warn coverage-withheld">' +
+    escapeText(
+      `Withheld for low coverage: ${withheld.map((view) => VIEW_TITLES[view]).join(', ')}. ` +
+        'Each tab says what was read and why the rest was not.',
+    ) +
+    '</p>'
+  );
+}
+
+/**
+ * Findings are never withheld — each is cited, and true as far as it goes —
+ * but an absent finding is only evidence over what was read. Say how much.
+ */
+function findingsCoverage(run: RunSummary): string {
+  const { views } = run.coverage;
+  const families: Array<[string, ViewCoverage]> = [
+    ['Package cycles', views.cycles],
+    ['Co-change coupling', views.coupling],
+    ['Hotspots and ownership', views.hotspots],
+  ];
+  return (
+    '<div class="coverage" data-view="findings">' +
+    '<p class="coverage-statement">Findings are shown whatever the coverage; an absent ' +
+    'finding is evidence only over what was read.</p>' +
+    `<ul class="coverage-reasons">${families
+      .map(([name, coverage]) => `<li>${escapeText(`${name}: ${coverage.statement}`)}</li>`)
+      .join('')}</ul></div>\n`
+  );
 }
 
 function subheading(title: string): string {
@@ -1092,6 +1206,13 @@ svg.diagram { display: block; max-width: 100%; height: auto; margin: 0 auto; }
 .caption { color: var(--muted); font-size: 13.5px; }
 .empty { color: var(--faint); font-style: italic; }
 .warn { color: var(--warn); }
+
+.coverage { margin: 8px 0 16px; padding: 10px 14px; border: 1px solid var(--line);
+            border-radius: 8px; font-size: 13.5px; color: var(--muted); }
+.coverage.withheld { border-color: var(--warn); color: inherit; }
+.coverage.withheld .coverage-statement { color: var(--warn); font-weight: 600; }
+.coverage-statement { margin: 0; }
+.coverage-reasons { margin: 6px 0 0; padding-left: 20px; }
 
 .notes { color: var(--muted); font-size: 13.5px; padding-left: 20px; }
 .notes li { margin: 6px 0; }

@@ -17,6 +17,7 @@ import { resolveBrand, type ResolvedBrand } from '../present/brand.js';
 import { assertSchemaCurrent, openDatabase, type Db } from '../db/database.js';
 import { findRun, latestRun, noCompletedRunMessage } from '../db/run.js';
 import { info, outputFormat, print, printJson, warn } from '../log.js';
+import { VIEW_TITLES, VIEWS, type ViewCoverage, type ViewId } from '../analysis/coverage.js';
 import { describeRun } from '../mcp/queries.js';
 import { GateError } from './analyze.js';
 import { reportDocument } from '../present/json.js';
@@ -135,7 +136,9 @@ export function runReport(options: ReportOptions): ReportResult {
         startedAt: summary.startedAt,
         analysisStored: summary.coverage.analysis,
         gaps: summary.gaps,
+        views: summary.coverage.views,
       }),
+      summary.coverage.views,
     );
 
     const containers = data.model.container.elements.filter(
@@ -153,6 +156,10 @@ export function runReport(options: ReportOptions): ReportResult {
     // like a clean repository — the one misreading this whole project exists to
     // prevent. It is a warning rather than an error because the diagrams, the
     // HTTP surface and the data model are all real and worth having.
+    for (const view of VIEWS) {
+      const coverage = summary.coverage.views[view];
+      if (coverage.withheld) warn(`${VIEW_TITLES[view]}: ${coverage.statement}`);
+    }
     if (!summary.coverage.analysis) {
       warn(
         `run ${runId} has no analysis output — no rule was evaluated against it, so the ` +
@@ -204,25 +211,35 @@ function write(
   data: ReportData,
   html: () => string,
   markdown: () => string,
+  views: Record<ViewId, ViewCoverage>,
 ): string[] {
+  // A withheld view's diagram file is not written (ADR-0033): a loose .mmd
+  // carries no coverage line, and it is the file most likely to be pasted
+  // somewhere on its own. index.html and findings.md say why it is missing.
   const outputs: Array<[string, string]> = [
     ['index.html', html()],
-    ['workspace.dsl', toStructurizr(data.model)],
-    ['c4-context.mmd', toMermaid(data.model.context)],
-    ['c4-container.mmd', toMermaid(data.model.container)],
-    ...data.model.components.map(
-      (diagram): [string, string] => [
-        `c4-component-${slug(diagram.scope)}.mmd`,
-        toMermaid(diagram),
-      ],
-    ),
-    ...data.classes.map(
-      (diagram): [string, string] => [
-        `c4-code-${slug(diagram.packageFqn)}.mmd`,
-        toClassMermaid(diagram),
-      ],
-    ),
-    ...(data.er.entities.length > 0
+    ...(views.architecture.withheld
+      ? []
+      : ([
+          ['workspace.dsl', toStructurizr(data.model)],
+          ['c4-context.mmd', toMermaid(data.model.context)],
+          ['c4-container.mmd', toMermaid(data.model.container)],
+          ...data.model.components.map(
+            (diagram): [string, string] => [
+              `c4-component-${slug(diagram.scope)}.mmd`,
+              toMermaid(diagram),
+            ],
+          ),
+        ] as Array<[string, string]>)),
+    ...(views.code.withheld
+      ? []
+      : data.classes.map(
+          (diagram): [string, string] => [
+            `c4-code-${slug(diagram.packageFqn)}.mmd`,
+            toClassMermaid(diagram),
+          ],
+        )),
+    ...(data.er.entities.length > 0 && !views.data.withheld
       ? ([['data-model.mmd', toErMermaid(data.er)]] as Array<[string, string]>)
       : []),
     ['findings.md', markdown()],
