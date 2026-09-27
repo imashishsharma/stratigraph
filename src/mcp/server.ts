@@ -18,6 +18,14 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 
+import {
+  DEFAULT_THRESHOLDS,
+  runCoverage,
+  VIEW_TITLES,
+  VIEWS,
+  type CoverageThresholds,
+  type ViewId,
+} from '../analysis/coverage.js';
 import type { Db } from '../db/database.js';
 import { NODE_KINDS } from '../facts/types.js';
 import { TOOL_VERSION } from '../version.js';
@@ -45,6 +53,8 @@ export interface McpContext {
   runId: number;
   /** For the bus-factor floor, from `history.minCommits`. */
   minCommits: number;
+  /** When a view counts as below coverage (ADR-0033). Defaults to 50% for all. */
+  thresholds?: CoverageThresholds | undefined;
 }
 
 /** Names the tools by the question they answer, for the tool list a client shows. */
@@ -78,6 +88,31 @@ export function createServer(context: McpContext): McpServer {
   const readOnly = { readOnlyHint: true, destructiveHint: false, openWorldHint: false };
   const { db, runId } = context;
 
+  // Computed once: the run is pinned and the store read-only, so no answer in
+  // this process can see different coverage from another (ADR-0033).
+  const coverage = runCoverage(db, runId, context.thresholds ?? DEFAULT_THRESHOLDS);
+
+  /**
+   * Every answer carries the coverage of the view it is drawn from — in the
+   * text an agent reads, and in the structured result it can test. Answers are
+   * never withheld: an agent told an answer is partial can reason about it.
+   */
+  const answer = (view: ViewId, body: string, structured: object): ToolText => {
+    const stated = coverage.views[view];
+    const footer = [
+      '',
+      `Coverage (${VIEW_TITLES[view]}): ${stated.statement}`,
+      ...(stated.withheld || (stated.ratio !== null && stated.ratio < 1)
+        ? [
+            ...stated.reasons.map((reason) => `  - ${reason}`),
+            'Anything absent from this answer may be in what was not read: treat absence as ' +
+              'unknown, not as none.',
+          ]
+        : []),
+    ];
+    return text(`${body}\n${footer.join('\n')}`, { ...structured, coverage: stated });
+  };
+
   server.registerTool(
     'describe_run',
     {
@@ -90,7 +125,7 @@ export function createServer(context: McpContext): McpServer {
       annotations: readOnly,
     },
     () => {
-      const summary = describeRun(db, runId);
+      const summary = describeRun(db, runId, context.thresholds ?? DEFAULT_THRESHOLDS);
       if (summary === null) return text(`Run ${runId} is not in this database.`);
 
       const lines = [
@@ -105,6 +140,10 @@ export function createServer(context: McpContext): McpServer {
         `extractors: ${summary.extractors.join(', ') || 'none'}` +
           `${summary.languages.length > 0 ? ` — languages: ${summary.languages.join(', ')}` : ''}`,
       ];
+      lines.push('', 'Coverage by view:');
+      for (const view of VIEWS) {
+        lines.push(`  ${VIEW_TITLES[view]}: ${summary.coverage.views[view].statement}`);
+      }
       if (summary.gaps.length > 0) {
         lines.push('', 'What this run cannot answer:');
         for (const gap of summary.gaps) lines.push(`  - ${gap}`);
@@ -138,17 +177,17 @@ export function createServer(context: McpContext): McpServer {
     (args) => {
       const result = findNode(db, runId, args);
       if (!result.covered) {
-        return text('No code has been extracted into this run, so there is nothing to match.', result);
+        return answer('architecture', 'No code has been extracted into this run, so there is nothing to match.', result);
       }
       if (result.nodes.length === 0) {
-        return text(
+        return answer('architecture', 
           `Nothing matches "${args.query}" in run ${runId}. The run does contain extracted ` +
             `code, so this is an absence, not a gap.`,
           result,
         );
       }
       const lines = result.nodes.map((node) => `  ${nodeLine(node)}`);
-      return text(
+      return answer('architecture', 
         [`${result.total} match(es) for "${args.query}":`, ...lines, more(result.nodes.length, result.total)]
           .filter(Boolean)
           .join('\n'),
@@ -173,13 +212,13 @@ export function createServer(context: McpContext): McpServer {
     },
     (args) => {
       const result = queryDependencies(db, runId, args);
-      if (!result.found) return text(notFound(args.fqn, result.covered), result);
+      if (!result.found) return answer('architecture', notFound(args.fqn, result.covered), result);
 
       const lines = [`${result.subject?.fqn} (${result.subject?.kind})`];
       if (result.note !== null) lines.push(`  note: ${result.note}`);
       lines.push('', `depends on (${result.dependsOn.length}):`, ...dependencyLines(result.dependsOn));
       lines.push('', `depended on by (${result.dependedOnBy.length}):`, ...dependencyLines(result.dependedOnBy));
-      return text(lines.join('\n'), result);
+      return answer('architecture', lines.join('\n'), result);
     },
   );
 
@@ -198,9 +237,9 @@ export function createServer(context: McpContext): McpServer {
     },
     (args) => {
       const result = findCallers(db, runId, args);
-      if (!result.found) return text(notFound(args.fqn, result.covered), result);
+      if (!result.found) return answer('architecture', notFound(args.fqn, result.covered), result);
       if (result.callers.length === 0) {
-        return text(
+        return answer('architecture', 
           result.covered
             ? `Nothing in this run calls or injects ${args.fqn}. The run does contain call ` +
               `edges, so this is an absence rather than a gap — but a caller outside the ` +
@@ -212,7 +251,7 @@ export function createServer(context: McpContext): McpServer {
       const lines = result.callers.map(
         (row) => `  ${row.caller} —${row.edgeKind === 'injects' ? ' injects' : ''} ${at(row.file, row.line)}`,
       );
-      return text(
+      return answer('architecture', 
         [`${result.total} caller(s) of ${args.fqn}:`, ...lines, more(result.callers.length, result.total)]
           .filter(Boolean)
           .join('\n'),
@@ -238,7 +277,7 @@ export function createServer(context: McpContext): McpServer {
     (args) => {
       const result = describeModule(db, runId, args);
       if (!result.found) {
-        return text(result.note ?? notFound(args.fqn, true), result);
+        return answer('architecture', result.note ?? notFound(args.fqn, true), result);
       }
 
       const lines = [`${result.subject?.fqn} — ${result.memberCount} declared type(s)`];
@@ -282,7 +321,7 @@ export function createServer(context: McpContext): McpServer {
           );
         }
       }
-      return text(lines.join('\n'), result);
+      return answer('architecture', lines.join('\n'), result);
     },
   );
 
@@ -302,11 +341,11 @@ export function createServer(context: McpContext): McpServer {
     },
     (args) => {
       const result = listEndpoints(db, runId, args);
-      if (!result.covered) return text(result.note ?? 'No endpoints in this run.', result);
+      if (!result.covered) return answer('api', result.note ?? 'No endpoints in this run.', result);
       if (result.endpoints.length === 0) {
-        return text('No endpoint matches that filter, though this run does contain endpoints.', result);
+        return answer('api', 'No endpoint matches that filter, though this run does contain endpoints.', result);
       }
-      return text(
+      return answer('api', 
         [
           `${result.total} endpoint(s):`,
           ...result.endpoints.map((endpoint) => `  ${endpointLine(endpoint)}`),
@@ -339,9 +378,9 @@ export function createServer(context: McpContext): McpServer {
     },
     (args) => {
       const result = findHotspots(db, runId, { ...args, minCommits: context.minCommits });
-      if (!result.covered) return text(result.note ?? 'No history mined.', result);
+      if (!result.covered) return answer('hotspots', result.note ?? 'No history mined.', result);
       if (result.files.length === 0) {
-        return text(result.note ?? 'History was mined, but no file qualifies under this ranking.', result);
+        return answer('hotspots', result.note ?? 'History was mined, but no file qualifies under this ranking.', result);
       }
       const lines = result.files.map(
         (file) =>
@@ -349,7 +388,7 @@ export function createServer(context: McpContext): McpServer {
           `indentation ${file.complexity}, ${file.authors} author(s), bus factor ${file.busFactor}` +
           `${file.topAuthor === null ? '' : `, mostly ${file.topAuthor}`}`,
       );
-      return text(
+      return answer('hotspots', 
         [`Ranked by ${result.ranking}:`, ...lines, ...(result.note === null ? [] : ['', result.note])].join('\n'),
         result,
       );
@@ -373,7 +412,7 @@ export function createServer(context: McpContext): McpServer {
     (args) => {
       const result = traceToTable(db, runId, args);
       if (!result.found) {
-        return text(
+        return answer('data', 
           result.covered
             ? `No table named "${args.table}" is in this run. This run does contain table ` +
               `mappings, so the name is either spelled differently or never mapped in code.`
@@ -394,7 +433,7 @@ export function createServer(context: McpContext): McpServer {
         lines.push('  no call or injection into the mapped type(s) was observed');
       }
       lines.push('', `limits: ${result.limits}`);
-      return text(lines.join('\n'), result);
+      return answer('data', lines.join('\n'), result);
     },
   );
 
@@ -414,7 +453,7 @@ export function createServer(context: McpContext): McpServer {
     (args) => {
       const result = checkCycle(db, runId, args);
       if (!result.found) {
-        return text(
+        return answer('cycles', 
           `${result.note} Could not resolve: ${result.missing.join(', ')}.`,
           result,
         );
@@ -430,7 +469,7 @@ export function createServer(context: McpContext): McpServer {
       ];
       if (result.forward !== null) lines.push('', ...pathLines(result.forward));
       if (result.backward !== null) lines.push('', ...pathLines(result.backward));
-      return text(lines.join('\n'), result);
+      return answer('cycles', lines.join('\n'), result);
     },
   );
 

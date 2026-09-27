@@ -75,6 +75,7 @@ export async function runMcp(options: McpOptions): Promise<McpServing> {
       db,
       runId: run.id,
       minCommits: config.history.minCommits,
+      thresholds: config.coverage,
     });
 
     const transport = new StdioServerTransport();

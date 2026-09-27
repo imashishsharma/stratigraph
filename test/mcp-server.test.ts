@@ -10,7 +10,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { runInit } from '../src/commands/init.js';
 import { McpError, runMcp } from '../src/commands/mcp.js';
 import { openDatabase, type Db } from '../src/db/database.js';
-import { createRun } from '../src/db/run.js';
+import { createRun, recordExtractor } from '../src/db/run.js';
 import { parseFact } from '../src/facts/ndjson.js';
 import type { Fact } from '../src/facts/types.js';
 import { SqliteFactWriter } from '../src/facts/writer.js';
@@ -280,5 +280,82 @@ describe('stratigraph mcp', () => {
     for (const name of TOOLS) await callText(name === 'describe_run' ? name : 'describe_run');
 
     expect(written.join('')).toBe('');
+  });
+});
+
+describe('coverage on every answer', () => {
+  /** Every tool, with arguments that make it answer rather than refuse. */
+  const CALLS: Array<[string, Record<string, unknown>, string]> = [
+    ['find_node', { query: 'Order' }, 'architecture'],
+    ['query_dependencies', { fqn: 'shop.web' }, 'architecture'],
+    ['query_dependencies', { fqn: 'shop.Missing' }, 'architecture'],
+    ['find_callers', { fqn: 'shop.web.OrderController' }, 'architecture'],
+    ['describe_module', { fqn: 'shop.web' }, 'architecture'],
+    ['list_endpoints', {}, 'api'],
+    ['find_hotspots', {}, 'hotspots'],
+    ['trace_to_table', { table: 'orders' }, 'data'],
+    ['check_cycle', { from: 'shop.web', to: 'shop.service' }, 'cycles'],
+  ];
+
+  async function withInventory(): Promise<Client> {
+    // Two of five main source files parsed: 40%, below the default 50%.
+    const role = db.prepare(
+      `INSERT INTO file_role (run_id, path, role, rule) VALUES (?, ?, 'source', 'ext:.java')`,
+    );
+    for (const path of [
+      'src/shop/web/OrderController.java',
+      'src/shop/service/OrderService.java',
+      'src/shop/a/A.java',
+      'src/shop/b/B.java',
+      'src/shop/c/C.java',
+    ]) {
+      role.run(runId, path);
+    }
+    recordExtractor(db, runId, 'java', 'failed', 'exited with status 1');
+
+    const server = createServer({ db, runId, minCommits: 5 });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const other = new Client({ name: 'test', version: '0.0.0' });
+    await Promise.all([server.connect(serverTransport), other.connect(clientTransport)]);
+    return other;
+  }
+
+  it.each(CALLS)('%s carries the coverage of its view', async (name, args, view) => {
+    const other = await withInventory();
+    const result = (await other.callTool({ name, arguments: args })) as {
+      content: Array<{ text: string }>;
+      structuredContent?: { coverage?: { view: string; withheld: boolean } };
+    };
+    await other.close();
+
+    expect(result.structuredContent?.coverage).toMatchObject({ view });
+    expect(result.content[0]?.text).toMatch(/\nCoverage \(.+\): /);
+  });
+
+  it('tells the agent that absence at low coverage is unknown, and why', async () => {
+    const other = await withInventory();
+    const result = (await other.callTool({
+      name: 'find_callers',
+      arguments: { fqn: 'shop.web.OrderController' },
+    })) as { content: Array<{ text: string }> };
+    await other.close();
+
+    const text = result.content[0]?.text ?? '';
+    expect(text).toContain(
+      'Coverage (architecture (C4)): Withheld: built from only 2 of 5 main source files parsed (40%)',
+    );
+    expect(text).toContain('the java extractor failed: exited with status 1');
+    expect(text).toContain('treat absence as unknown, not as none');
+  });
+
+  it('lists every view\'s coverage in describe_run', async () => {
+    const other = await withInventory();
+    const result = (await other.callTool({ name: 'describe_run', arguments: {} })) as {
+      content: Array<{ text: string }>;
+    };
+    await other.close();
+
+    expect(result.content[0]?.text).toContain('Coverage by view:');
+    expect(result.content[0]?.text).toContain('  data model: Withheld: built from only 2 of 5');
   });
 });
