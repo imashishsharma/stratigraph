@@ -18,7 +18,7 @@
  */
 
 import type { Db } from '../db/database.js';
-import { busFactorRisks, topHotspots, type Hotspot } from '../analysis/hotspots.js';
+import { busFactorRisks, explainHotspots, topHotspots, type Hotspot } from '../analysis/hotspots.js';
 import {
   buildPackageGraph,
   supportingEdges,
@@ -717,7 +717,7 @@ export function findHotspots(
     ranking,
     files,
     note: covered
-      ? null
+      ? explainHotspots(db, runId, ranking === 'bus-factor' ? 1 : files.length)
       : 'No history has been mined into this run, so there are no churn or complexity ' +
         'numbers to rank. Fix: `stratigraph history`.',
   };

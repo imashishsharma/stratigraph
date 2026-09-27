@@ -49,6 +49,7 @@ describe('migrations', () => {
       'file_role',
       'finding',
       'git_commit',
+      'history_window',
       'node',
       'run',
       'schema_migration',

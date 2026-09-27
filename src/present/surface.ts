@@ -10,7 +10,7 @@
  */
 
 import { buildPackageGraph } from '../analysis/package-graph.js';
-import { hotspotCandidates, topHotspots } from '../analysis/hotspots.js';
+import { explainHotspots, hotspotCandidates, topHotspots } from '../analysis/hotspots.js';
 import type { Db } from '../db/database.js';
 
 // ------------------------------------------------------------- HTTP surface
@@ -225,6 +225,10 @@ export function buildHotspotChart(db: Db, runId: number, limit: number): Hotspot
   }));
 
   const notes: string[] = [];
+  const hasHistory =
+    (db.prepare('SELECT COUNT(*) AS n FROM git_commit WHERE run_id = ?').get(runId) as { n: number })
+      .n > 0;
+  if (hasHistory) notes.push(explainHotspots(db, runId, bars.length));
   if (bars.length > 0) {
     notes.push(
       'Only source files are ranked — lockfiles, manifests, tests, generated and vendored ' +

@@ -739,7 +739,9 @@ function matrixSection(matrix: DependencyMatrix): string {
 // ---------------------------------------------------------------- hotspots
 
 function hotspotSection(chart: HotspotChart): string {
-  if (chart.bars.length === 0) return '';
+  // An empty ranking still gets its section when there is a reason to give:
+  // silence would read as "nothing here is risky".
+  if (chart.bars.length === 0) return chart.notes.length === 0 ? '' : notes(chart.notes);
 
   return [
     `<p class="caption">${escapeText(

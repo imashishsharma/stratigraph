@@ -27,4 +27,17 @@ ALTER TABLE file_metric ADD COLUMN recent_commits INTEGER NOT NULL DEFAULT 0;
 -- The file's own indent unit, in columns (a tab counts as one unit). Null when
 -- the file was not measured or has no indentation.
 ALTER TABLE file_metric ADD COLUMN indent_unit INTEGER;
+
+-- How recent_commits was measured, so every view that ranks by it can state
+-- the window and what was left out — including when that was everything.
+CREATE TABLE history_window (
+  run_id            INTEGER PRIMARY KEY REFERENCES run(id) ON DELETE CASCADE,
+  window_start      TEXT,                 -- null when the run has no commits
+  window_end        TEXT,
+  months            INTEGER NOT NULL,
+  max_files         INTEGER NOT NULL,
+  commits           INTEGER NOT NULL,     -- non-merge commits in the window
+  excluded_bulk     INTEGER NOT NULL,
+  excluded_ignored  INTEGER NOT NULL
+);
 `;

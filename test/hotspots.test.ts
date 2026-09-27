@@ -7,7 +7,7 @@ import {
   HOTSPOT_RULE,
   recordHistoryFindings,
 } from '../src/analysis/history-findings.js';
-import { busFactorRisks, topHotspots } from '../src/analysis/hotspots.js';
+import { busFactorRisks, explainHotspots, topHotspots } from '../src/analysis/hotspots.js';
 import { migrate, openDatabase, type Db } from '../src/db/database.js';
 import { createRun } from '../src/db/run.js';
 
@@ -92,6 +92,29 @@ describe('topHotspots', () => {
     expect(ranked[0]).toMatchObject({ recentPercentile: 1, complexityPercentile: 0.75, score: 0.75 });
   });
 
+  it('compares complexity within a file type, so markup does not outrank code by nesting', () => {
+    // jhipster-sample-app: with one pool, Angular templates took 14 of the top
+    // 20, because markup nests deeply without branching. Indentation in HTML
+    // and indentation in Java are not the same unit.
+    for (let i = 0; i < 10; i += 1) {
+      metric(`t${i}.html`, { recent: 5, complexity: 1000 + i * 100 });
+      metric(`c${i}.java`, { recent: 5, complexity: 100 + i * 10 });
+    }
+
+    const top = topHotspots(db, runId, 2).map((h) => h.path);
+    expect(top.sort()).toEqual(['c9.java', 't9.html']);
+  });
+
+  it('ranks a file type too small to rank against itself against everything', () => {
+    // A lone .sql file must not score the top complexity percentile by being
+    // the only one of its kind.
+    for (let i = 0; i < 10; i += 1) metric(`c${i}.java`, { recent: 5, complexity: 100 + i * 10 });
+    metric('only.sql', { recent: 5, complexity: 1 });
+
+    const sql = topHotspots(db, runId, 20).find((h) => h.path === 'only.sql');
+    expect(sql?.complexityPercentile).toBeLessThan(0.2);
+  });
+
   it('ranks only source files', () => {
     metric('package-lock.json', { recent: 500, complexity: 90_000, role: 'lockfile' });
     metric('package.json', { recent: 400, complexity: 200, role: 'manifest' });
@@ -141,6 +164,37 @@ describe('topHotspots', () => {
 
     // cat has 2 of 4 — exactly half, not more — so it takes a second author.
     expect(topHotspots(db, runId, 10)[0]).toMatchObject({ busFactor: 2 });
+  });
+});
+
+describe('explainHotspots', () => {
+  function window(values: { commits: number; bulk?: number; ignored?: number; start?: string | null }): void {
+    db.prepare(
+      `INSERT INTO history_window
+         (run_id, window_start, window_end, months, max_files, commits, excluded_bulk, excluded_ignored)
+       VALUES (?, ?, '2026-09-18T00:00:00.000Z', 12, 50, ?, ?, ?)`,
+    ).run(runId, values.start === undefined ? '2025-09-18T00:00:00.000Z' : values.start, values.commits, values.bulk ?? 0, values.ignored ?? 0);
+  }
+
+  it('says when every commit in the window was a sweep, instead of an empty list', () => {
+    // jhipster-sample-app: all 7 commits in its last year regenerate 81-377 files.
+    metric('src/A.java', { recent: 0 });
+    window({ commits: 7, bulk: 7 });
+
+    expect(explainHotspots(db, runId, 0)).toMatch(/every one of the 7 commit\(s\) .* was a sweep/);
+  });
+
+  it('says how the ranking was made when there is one', () => {
+    metric('src/A.java', { recent: 3 });
+    window({ commits: 10, bulk: 2, ignored: 1 });
+
+    const text = explainHotspots(db, runId, 1);
+    expect(text).toMatch(/12 months to 2026-09-18/);
+    expect(text).toMatch(/2 touched more than 50 files and 1 are listed in .git-blame-ignore-revs/);
+  });
+
+  it('tells a store mined before file roles to re-run history', () => {
+    expect(explainHotspots(db, runId, 0)).toMatch(/Fix: `stratigraph history`/);
   });
 });
 

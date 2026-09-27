@@ -16,7 +16,7 @@ import { detectPackageCycles, type CycleFinding } from '../analysis/cycles.js';
 import { recordHistoryFindings, type RecordedFindings } from '../analysis/history-findings.js';
 import { linkHttpCalls, summariseLinks, type LinkResult } from '../analysis/http-links.js';
 import { recordRxjsFindings, summariseRxjs, type RxjsFindings } from '../analysis/rxjs-findings.js';
-import { busFactorRisks, topHotspots, type Hotspot } from '../analysis/hotspots.js';
+import { busFactorRisks, explainHotspots, topHotspots, type Hotspot } from '../analysis/hotspots.js';
 import {
   detectIntentMismatches,
   type IntentMismatch,
@@ -68,6 +68,8 @@ export interface AnalyzeResult {
   coupling: CoupledPair[];
   couplingStats: CouplingStats | null;
   hotspots: Hotspot[];
+  /** How the hotspot ranking was made, or why it is empty. Null without history. */
+  hotspotNote: string | null;
   busFactor: Hotspot[];
   /** Layer 4: the package partition. Null when there are no packages to group. */
   clusters: ClusterResult | null;
@@ -163,6 +165,7 @@ export async function runAnalyze(options: AnalyzeOptions): Promise<AnalyzeResult
       coupling: [],
       couplingStats: null,
       hotspots: [],
+      hotspotNote: null,
       busFactor: [],
       clusters: null,
       mismatches: [],
@@ -212,6 +215,7 @@ export async function runAnalyze(options: AnalyzeOptions): Promise<AnalyzeResult
       // The pairs worth reporting are the ones the static graph cannot see.
       result.coupling = pairs.filter((pair) => pair.staticEdges === 0).slice(0, top);
       result.hotspots = topHotspots(db, runId, top);
+      result.hotspotNote = explainHotspots(db, runId, result.hotspots.length);
       result.busFactor = busFactorRisks(db, runId, top, config.history.minCommits);
       result.findings = recordHistoryFindings(db, runId, {
         pairs: result.coupling,
@@ -398,7 +402,7 @@ function report(
   reportInterpretation(result);
   reportMismatches(result.mismatches, top);
   reportCoupling(result, top);
-  reportHotspots(result.hotspots, top);
+  reportHotspots(result.hotspots, result.hotspotNote, top);
   reportBusFactor(result.busFactor, top);
   if (commits === 0) {
     print('');
@@ -733,10 +737,11 @@ function reportCoupling(result: AnalyzeResult, top: number): void {
   }
 }
 
-function reportHotspots(hotspots: Hotspot[], top: number): void {
-  if (hotspots.length === 0) return;
+function reportHotspots(hotspots: Hotspot[], note: string | null, top: number): void {
+  if (note === null) return;
   print('');
   print(`Hotspots — recent change x complexity, source files only (top ${top}):`);
+  print(`  ${note}`);
   for (const [n, file] of hotspots.entries()) {
     print(
       `${String(n + 1).padStart(3)}. ${file.path}` +

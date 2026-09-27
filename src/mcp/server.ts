@@ -341,7 +341,7 @@ export function createServer(context: McpContext): McpServer {
       const result = findHotspots(db, runId, { ...args, minCommits: context.minCommits });
       if (!result.covered) return text(result.note ?? 'No history mined.', result);
       if (result.files.length === 0) {
-        return text('History was mined, but no file qualifies under this ranking.', result);
+        return text(result.note ?? 'History was mined, but no file qualifies under this ranking.', result);
       }
       const lines = result.files.map(
         (file) =>
@@ -349,7 +349,10 @@ export function createServer(context: McpContext): McpServer {
           `indentation ${file.complexity}, ${file.authors} author(s), bus factor ${file.busFactor}` +
           `${file.topAuthor === null ? '' : `, mostly ${file.topAuthor}`}`,
       );
-      return text([`Ranked by ${result.ranking}:`, ...lines].join('\n'), result);
+      return text(
+        [`Ranked by ${result.ranking}:`, ...lines, ...(result.note === null ? [] : ['', result.note])].join('\n'),
+        result,
+      );
     },
   );
 

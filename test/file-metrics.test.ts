@@ -221,6 +221,13 @@ describe('computeFileMetrics', () => {
 
       expect(stats.windowStart).toBe('2022-01-01T00:00:00.000Z');
       expect(metrics('src/A.java')).toMatchObject({ commits: 3, recent_commits: 2 });
+      expect(db.prepare('SELECT * FROM history_window WHERE run_id = ?').get(runId)).toMatchObject({
+        window_start: '2022-01-01T00:00:00.000Z',
+        window_end: '2023-01-01T00:00:00.000Z',
+        months: 12,
+        commits: 2,
+        excluded_bulk: 0,
+      });
     });
 
     it('ignores merge commits when finding the end of the window', () => {

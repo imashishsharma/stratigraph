@@ -168,6 +168,32 @@ export function computeFileMetrics(
       ).n;
     }
 
+    const windowCommits =
+      windowStart === null
+        ? 0
+        : (
+            db
+              .prepare(
+                `SELECT COUNT(*) AS n FROM git_commit
+                  WHERE run_id = ? AND is_merge = 0 AND authored_at >= ?`,
+              )
+              .get(runId, windowStart) as { n: number }
+          ).n;
+    db.prepare(
+      `INSERT OR REPLACE INTO history_window
+         (run_id, window_start, window_end, months, max_files, commits, excluded_bulk, excluded_ignored)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(
+      runId,
+      windowStart,
+      newest,
+      windowMonths,
+      maxFiles,
+      windowCommits,
+      stats.excludedBulk,
+      stats.excludedIgnored,
+    );
+
     db.prepare('DELETE FROM file_metric WHERE run_id = ?').run(runId);
     stats.files = db.prepare(AGGREGATE).run({ runId, windowStart: windowStart ?? '' }).changes;
   })();

@@ -39,8 +39,15 @@ Four separate problems, each enough on its own:
   The v1 proxy floored every file by four spaces, which halved every 2-space
   TypeScript, HTML and SCSS file relative to Java. Still a proxy, and still
   labelled one.
-- **Score:** `percentile(recent_commits) × percentile(complexity)`, each
-  percentile taken over the candidate set. Bounded, and neither term can win on
+- **Complexity is compared within a file type.** Indentation is a different
+  unit in each language: markup nests on every element, Java on every branch.
+  With one pool, Angular templates took 14 of the top 20 on
+  jhipster-sample-app. The complexity percentile is therefore taken among
+  ranked files with the same extension; a type with fewer than 10 ranked files
+  is ranked against every ranked file instead, so a lone file is not top of
+  its type by being alone in it. Recent change is compared across all types —
+  a commit is the same unit everywhere.
+- **Score:** `percentile(recent_commits) × percentile(complexity)`. Bounded, and neither term can win on
   tail length alone. Ties break on recent commits, then path.
 - **Bus factor:** source files only, among files changed in the window, sorted
   by recent commits. A single author makes it `medium`, not `high`: one person
@@ -50,6 +57,12 @@ Four separate problems, each enough on its own:
 
 `churn` stays in `file_metric` and in the finding's evidence — it is still true
 and still useful context — it just no longer decides rank.
+
+- **An empty ranking explains itself.** The window, its commit count and what
+  was excluded are stored per run (`history_window`). When nothing ranks, every
+  view says why — on jhipster-sample-app every commit in the last year is a
+  generator sweep of 81–377 files, and "no hotspots" without that sentence would
+  read as "nothing here is risky".
 
 ## Consequences
 
