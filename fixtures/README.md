@@ -96,3 +96,30 @@ records `"resolution": "import"` for them. Installing any of those as a
 dependency of `stratigraph` would change the golden. That is a failure worth
 having — it is the difference between the two resolution paths, and it should be
 noticed rather than absorbed.
+
+## `maven-multi`, `gradle-multi`, `war-app`
+
+What makes a module a deployable ([ADR-0040](../docs/adr/0040-containers-are-deployables.md)),
+read from build files as text and never by running them.
+
+| Module | Expected |
+| --- | --- |
+| `maven-multi` (root) | `packaging: "pom"` and a `modules` list — an aggregator, **no `deployable`**, even though its `<pluginManagement>` names the Boot plugin |
+| `maven-multi/bom` | `packaging: "pom"` — a BOM, **no `deployable`** |
+| `maven-multi/shared` | a jar library, **no `deployable`** |
+| `maven-multi/orders-app` | `deployable: "spring-boot"`, cited at the plugin's `<artifactId>` line under `<build><plugins>` |
+| `maven-multi/billing-app` | **no `deployable` attribute** — its only proof is the `@SpringBootApplication` `annotated_with` edge, which the core joins (ADR-0040 rule 2) |
+| `gradle-multi` (root) | **no `deployable`**: `apply false` applies nothing, and `subprojects {}` is build logic |
+| `gradle-multi/app` | `deployable: "spring-boot"` from its own Kotlin-DSL `plugins {}` block |
+| `gradle-multi/lib` | `java-library`, **no `deployable`** |
+| `war-app` | `deployable: "war"`, cited at `<packaging>` |
+
+Every module carries `root` and, where there is one, `buildFile`.
+
+## `split-package`
+
+`com.example.split.util` is declared in both `core` and `extra`
+([ADR-0041](../docs/adr/0041-split-packages.md)). Expected: **one** package node
+(parent `core`, the first seen), a `contains` edge from **each** module cited at
+the package declaration first seen there, and an `info` diagnostic naming both.
+The unsplit package `com.example.split.report` gets no `contains` edge.

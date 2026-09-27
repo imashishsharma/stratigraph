@@ -44,6 +44,9 @@ final class JavaFactExtractor {
     /** Type fqn → the file that declared it, so a second declaration can be reported. */
     private final Map<String, String> declaredIn = new LinkedHashMap<>();
 
+    /** Package fqn → module fqn → where it was first declared there, for ADR-0041. */
+    private final Map<String, Map<String, Object[]>> packageModules = new LinkedHashMap<>();
+
     JavaFactExtractor(Path repoRoot, FactEmitter emitter, SourceDiscovery discovery) {
         this.repoRoot = repoRoot;
         this.emitter = emitter;
@@ -68,7 +71,7 @@ final class JavaFactExtractor {
 
         for (Map.Entry<Path, SourceDiscovery.ModuleId> module : found.modules.entrySet()) {
             emitter.node("module", module.getValue().fqn, module.getValue().name,
-                    null, null, null, null, null);
+                    null, null, null, null, module.getValue().attrs);
         }
 
         if (found.sources.isEmpty()) {
@@ -184,6 +187,8 @@ final class JavaFactExtractor {
 
         emitter.node("package", packageName, Fqn.simpleName(packageName),
                 new NodeRef("module", module.fqn), null, null, null, null);
+        recordPackageMembership(packageName, module, path,
+                cu.getPackageDeclaration() == null ? null : line(cu.getPackageDeclaration()));
 
         // Declarations before references, so a node is described before
         // anything points at it and the store never has to upgrade a stub for a
@@ -204,6 +209,36 @@ final class JavaFactExtractor {
         if (importOwner != null && !Fqn.UNKNOWN.equals(importOwner)) {
             emitImports(cu, path, importOwner);
         }
+    }
+
+    /**
+     * A package declared in more than one module is split (ADR-0041). The
+     * package node was emitted once, with the first module as its parent; from
+     * the second module on, each module's membership is a `contains` edge cited
+     * at the first package declaration seen in that module, and the split is
+     * reported. An unsplit package gets no edge: its `parent` says everything.
+     */
+    private void recordPackageMembership(String packageName, SourceDiscovery.ModuleId module,
+                                         String path, Integer line) {
+        Map<String, Object[]> modules = packageModules.computeIfAbsent(packageName, k -> new LinkedHashMap<>());
+        if (modules.containsKey(module.fqn)) {
+            return;
+        }
+        modules.put(module.fqn, new Object[]{path, line});
+        if (modules.size() < 2) {
+            return;
+        }
+        // The first module's membership was implicit until now.
+        List<String> toEmit = modules.size() == 2 ? List.copyOf(modules.keySet()) : List.of(module.fqn);
+        for (String moduleFqn : toEmit) {
+            Object[] at = modules.get(moduleFqn);
+            emitter.edge("contains", new NodeRef("module", moduleFqn), new NodeRef("package", packageName),
+                    (String) at[0], (Integer) at[1], null);
+        }
+        emitter.diagnostic("info",
+                "package " + packageName + " is split across modules " + String.join(", ", modules.keySet())
+                        + "; each module's half is recorded with a contains edge",
+                path, line);
     }
 
     /** Fallback for a compilation unit that declares no type we could attribute. */

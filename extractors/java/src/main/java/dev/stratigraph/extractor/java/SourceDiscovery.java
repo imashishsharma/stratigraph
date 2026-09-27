@@ -1,13 +1,6 @@
 package dev.stratigraph.extractor.java;
 
-import org.w3c.dom.Document;
-import org.w3c.dom.Element;
-import org.w3c.dom.Node;
-import org.w3c.dom.NodeList;
-
-import javax.xml.parsers.DocumentBuilderFactory;
 import java.io.IOException;
-import java.io.InputStream;
 import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -67,10 +60,13 @@ final class SourceDiscovery {
     static final class ModuleId {
         final String fqn;
         final String name;
+        /** Facts from the build file (ADR-0040): root, buildFile, packaging, deployability. */
+        final Map<String, Object> attrs;
 
-        ModuleId(String fqn, String name) {
+        ModuleId(String fqn, String name, Map<String, Object> attrs) {
             this.fqn = fqn;
             this.name = name;
+            this.attrs = attrs;
         }
     }
 
@@ -127,7 +123,9 @@ final class SourceDiscovery {
         // No build file anywhere: the repository is one module named for its directory.
         if (byDepth.isEmpty()) {
             String name = repoRoot.getFileName() == null ? "." : repoRoot.getFileName().toString();
-            byDepth.put(repoRoot, new ModuleId(name, name));
+            Map<String, Object> attrs = new LinkedHashMap<>();
+            attrs.put("root", ".");
+            byDepth.put(repoRoot, new ModuleId(name, name, attrs));
         }
         result.modules.putAll(byDepth);
         return result;
@@ -161,7 +159,7 @@ final class SourceDiscovery {
     }
 
     /**
-     * Module identity from a build file.
+     * Module identity, and what the build file proves about it (ADR-0040).
      *
      * A POM is read as plain XML for its coordinates. We deliberately do not use
      * OpenRewrite's {@code MavenParser}, which resolves parent POMs over the
@@ -173,52 +171,53 @@ final class SourceDiscovery {
         String directory = moduleRoot.getFileName() == null
                 ? "."
                 : moduleRoot.getFileName().toString();
+        Map<String, Object> attrs = new LinkedHashMap<>();
+        String root = relative(moduleRoot);
+        attrs.put("root", root.isEmpty() ? "." : root);
+        String buildPath = relative(buildFile);
+        attrs.put("buildFile", buildPath);
 
-        if (!buildFile.getFileName().toString().equals("pom.xml")) {
-            return new ModuleId(directory, directory);
+        String fileName = buildFile.getFileName().toString();
+        if (fileName.startsWith("build.gradle")) {
+            try {
+                putProof(attrs, buildPath, BuildFiles.readGradle(buildFile));
+            } catch (Exception e) {
+                // An unreadable script costs us the proof, not the module.
+            }
+            return new ModuleId(directory, directory, attrs);
+        }
+        if (!fileName.equals("pom.xml")) {
+            return new ModuleId(directory, directory, attrs);
         }
 
-        try (InputStream in = Files.newInputStream(buildFile)) {
-            DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
-            // A POM is data. Do not let it reach out to a DTD or an entity.
-            factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
-            factory.setXIncludeAware(false);
-            factory.setExpandEntityReferences(false);
-            Document document = factory.newDocumentBuilder().parse(in);
-            Element project = document.getDocumentElement();
-
-            String artifactId = childText(project, "artifactId");
-            String groupId = childText(project, "groupId");
-            if (groupId == null) {
-                Element parent = childElement(project, "parent");
-                if (parent != null) {
-                    groupId = childText(parent, "groupId");
-                }
+        try {
+            BuildFiles.Pom pom = BuildFiles.readPom(buildFile);
+            if (pom.packaging != null) {
+                attrs.put("packaging", pom.packaging);
             }
-            if (artifactId == null) {
-                return new ModuleId(directory, directory);
+            if (!pom.modules.isEmpty()) {
+                attrs.put("modules", pom.modules);
             }
-            return new ModuleId(groupId == null ? artifactId : groupId + ":" + artifactId, artifactId);
+            putProof(attrs, buildPath, pom.proof);
+            String groupId = pom.groupId != null ? pom.groupId : pom.parentGroupId;
+            if (pom.artifactId == null) {
+                return new ModuleId(directory, directory, attrs);
+            }
+            return new ModuleId(groupId == null ? pom.artifactId : groupId + ":" + pom.artifactId,
+                    pom.artifactId, attrs);
         } catch (Exception e) {
             // An unreadable POM costs us a module name, not the analysis.
-            return new ModuleId(directory, directory);
+            return new ModuleId(directory, directory, attrs);
         }
     }
 
-    private static String childText(Element parent, String tag) {
-        Element child = childElement(parent, tag);
-        return child == null ? null : child.getTextContent().trim();
-    }
-
-    /** Direct children only — {@code <dependency><groupId>} must not be mistaken for the project's. */
-    private static Element childElement(Element parent, String tag) {
-        NodeList children = parent.getChildNodes();
-        for (int i = 0; i < children.getLength(); i++) {
-            Node child = children.item(i);
-            if (child.getNodeType() == Node.ELEMENT_NODE && tag.equals(child.getNodeName())) {
-                return (Element) child;
-            }
+    private static void putProof(Map<String, Object> attrs, String buildPath, BuildFiles.Proof proof) {
+        if (proof == null) {
+            return;
         }
-        return null;
+        attrs.put("deployable", proof.kind());
+        attrs.put("deployableFile", buildPath);
+        attrs.put("deployableLine", proof.line());
+        attrs.put("deployableRule", proof.rule());
     }
 }
