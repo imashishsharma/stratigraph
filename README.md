@@ -483,7 +483,14 @@ matrix and ranked hotspots — with a contents list, and a panel of the numbers
 worth knowing before you read the rest.
 
 **C4 is a projection of the fact graph, not a new model.** A container is a
-`module` node from a build file; a component is a package; a data store exists
+deployable — a module whose build file applies the Spring Boot plugin, packages
+a WAR or declares an Angular/Nx application, or that holds a
+`@SpringBootApplication` class — and cites that proof; aggregator POMs, BOMs and
+libraries are not containers, and a library's packages are drawn inside each
+container that uses it ([ADR-0040](docs/adr/0040-containers-are-deployables.md)).
+A component is a package — in an Angular workspace, a project, NgModule or lazy
+route boundary rather than a directory
+([ADR-0042](docs/adr/0042-angular-structure.md)); a data store exists
 because a `@Table` mapping was read; an external system exists because an
 extractor read an absolute URL out of a literal. Where C4 asks for something no
 fact supplies, the diagram omits the box and says so on the page:
