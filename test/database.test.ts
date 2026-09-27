@@ -46,6 +46,7 @@ describe('migrations', () => {
       'diagnostic',
       'edge',
       'file_metric',
+      'file_role',
       'finding',
       'git_commit',
       'node',

@@ -1,0 +1,61 @@
+# ADR-0031: Hotspots rank recent change in source, by percentile
+
+- Status: accepted; supersedes the hotspot parts of ADR-0010 and ADR-0011
+- Date: 2026-09-27
+- Milestone: M9 (before the code)
+
+## Context
+
+The v1 score was `churn × complexity`, where churn was lines inserted plus
+deleted over the whole history and complexity was total indentation. Both
+terms grow with the size of the file, so the score grows roughly with its
+square. On a real repository that put a 1–2 MB lockfile at around 10¹⁰ against
+10⁷ for the largest Java class — no hand-written file could compete.
+
+Four separate problems, each enough on its own:
+
+1. **Non-source files were ranked** (fixed by ADR-0030).
+2. **Lines, not commits.** One reformat or one dependency bump rewrites
+   thousands of lines and counts as thousands of units of "change". Tornhill's
+   hotspot uses change *frequency*; lines measure the size of a diff, not how
+   often people had to go back to a file.
+3. **All of history, equally.** A file that was volatile in 2016 and has not
+   been touched since is not where today's risk is.
+4. **Raw product of unbounded terms.** Whichever term has the heavier tail
+   decides the ranking, and in real repositories that is size.
+
+## Decision
+
+- **Candidates:** files whose `file_role` is `source`. Nothing else is ranked.
+- **Change:** `recent_commits` — distinct non-merge commits touching the file in
+  the window, excluding commits that touch more than `history.maxFilesPerCommit`
+  files and any revision listed in `.git-blame-ignore-revs`. A sweep is evidence
+  about a script, for hotspots exactly as ADR-0011 already said for coupling.
+- **Window:** `history.hotspotMonths`, default **12**, measured back from the
+  newest non-merge commit — not from the wall clock, so the same repository at
+  the same commit always ranks the same way.
+- **Complexity:** indentation depth normalised by the file's own indent unit
+  (the most common positive step between consecutive indents: 2, 4, a tab).
+  The v1 proxy floored every file by four spaces, which halved every 2-space
+  TypeScript, HTML and SCSS file relative to Java. Still a proxy, and still
+  labelled one.
+- **Score:** `percentile(recent_commits) × percentile(complexity)`, each
+  percentile taken over the candidate set. Bounded, and neither term can win on
+  tail length alone. Ties break on recent commits, then path.
+- **Bus factor:** source files only, among files changed in the window, sorted
+  by recent commits. A single author makes it `medium`, not `high`: one person
+  owning one file is a fact about the file, and whether that is a risk depends
+  on the file mattering, which this rule cannot see. M10's coverage and importance
+  work can raise it once importance is measurable.
+
+`churn` stays in `file_metric` and in the finding's evidence — it is still true
+and still useful context — it just no longer decides rank.
+
+## Consequences
+
+- Hotspot and bus-factor findings change on every repository with this release.
+  That is a schema change and a behaviour change, and ships in 2.0.0.
+- A repository with no commits in the window has no hotspots, and says so,
+  rather than ranking ancient history.
+- The finding text states the window, the exclusions and that indentation is a
+  proxy, so the evidence describes exactly how the rank was produced.
