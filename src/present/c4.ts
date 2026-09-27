@@ -20,6 +20,7 @@ import {
   declaredInTest,
   moduleAncestry,
   moduleOfNodeInPackage,
+  packageEdgeFromTest,
   packageInModule,
   supportingEdgesForPairs,
   testOnlyPackage,
@@ -434,6 +435,7 @@ function containerRelationships(
           JOIN ancestor_of dm ON dm.node_id = e.dst_id
          WHERE e.run_id = @runId
            AND e.kind IN (${kinds})
+           AND NOT ${packageEdgeFromTest('e')}
            AND sm.ancestor_id <> dm.ancestor_id
          GROUP BY sm.ancestor_id, dm.ancestor_id, e.confidence, e.kind
          ORDER BY sm.ancestor_id, dm.ancestor_id, e.confidence, e.kind`,
@@ -498,6 +500,7 @@ function moduleEdgeEvidence(
           LEFT JOIN source_file f ON f.id = e.file_id
          WHERE e.run_id = @runId
            AND e.kind IN (${kinds})
+           AND NOT ${packageEdgeFromTest('e')}
            AND e.confidence = @confidence
            AND sm.ancestor_id = @srcModule
            AND dm.ancestor_id = @dstModule

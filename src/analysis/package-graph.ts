@@ -61,6 +61,23 @@ export function declaredInTest(alias: string): string {
 }
 
 /**
+ * SQL: true for an edge a test file makes on behalf of a package.
+ *
+ * A TypeScript import is attributed to the importing file's package, not to a
+ * declaration (ADR-0017), so its source node has no file for
+ * `declaredInTest` to look at; the test file is only on the edge. Without
+ * this, a `*.spec.ts` sitting beside a component gives the component's package
+ * every dependency the spec has.
+ */
+export function packageEdgeFromTest(edgeAlias: string): string {
+  return /* sql */ `(
+    EXISTS (SELECT 1 FROM node sx WHERE sx.id = ${edgeAlias}.src_id AND sx.kind = 'package')
+    AND EXISTS (SELECT 1 FROM source_file tf
+                  JOIN file_role tr ON tr.run_id = tf.run_id AND tr.path = tf.path AND tr.role = 'test'
+                 WHERE tf.id = ${edgeAlias}.file_id))`;
+}
+
+/**
  * SQL: true for a package that declares at least one type, all of them test
  * code. A package mixing main and test types is a main package; one declaring
  * no types at all is kept, since nothing says it is test code.
@@ -236,6 +253,7 @@ export function buildPackageGraph(db: Db, runId: number): PackageGraph {
          WHERE e.run_id = @runId
            AND e.kind IN (${kinds})
            AND e.confidence = 'fact'
+           AND NOT ${packageEdgeFromTest('e')}
            AND sp.ancestor_id <> dp.ancestor_id
          GROUP BY sp.ancestor_id, dp.ancestor_id`,
     )
@@ -251,14 +269,18 @@ export function buildPackageGraph(db: Db, runId: number): PackageGraph {
     packages.set(row.id, row);
   }
 
+  // A test-only package is not a node (ADR-0034), so no dependency may name
+  // one — including one lifted from an edge whose source is the package itself.
+  const dependencies = rows.filter((row) => packages.has(row.src) && packages.has(row.dst));
+
   const adjacency = new Map<number, number[]>();
-  for (const row of rows) {
+  for (const row of dependencies) {
     const existing = adjacency.get(row.src);
     if (existing) existing.push(row.dst);
     else adjacency.set(row.src, [row.dst]);
   }
 
-  return { packages, dependencies: rows, adjacency };
+  return { packages, dependencies, adjacency };
 }
 
 export interface SupportingEdge {
@@ -310,6 +332,7 @@ export function supportingEdgesForPairs(
          WHERE e.run_id = @runId
            AND e.kind IN (${kinds})
            AND e.confidence = 'fact'
+           AND NOT ${packageEdgeFromTest('e')}
            AND sp.ancestor_id IN (${srcs})
            AND dp.ancestor_id IN (${dsts})
          ORDER BY e.id`,
@@ -379,6 +402,7 @@ export function supportingEdges(
          WHERE e.run_id = @runId
            AND e.kind IN (${kinds})
            AND e.confidence = 'fact'
+           AND NOT ${packageEdgeFromTest('e')}
            AND sp.ancestor_id = @srcPackage
            AND dp.ancestor_id = @dstPackage
          ORDER BY e.id

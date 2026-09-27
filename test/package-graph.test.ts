@@ -362,4 +362,44 @@ describe('test code is not architecture (ADR-0034)', () => {
     seedWithTests();
     expect(detectPackageCycles(db, runId)).toEqual([]);
   });
+
+  /**
+   * TypeScript attributes an import to the importing file's package, not to a
+   * declaration (ADR-0017), so the edge's source node has no file of its own:
+   * the test file is only on the edge. app → core from a spec file, and a
+   * test-only package `app/testing` importing core, must both stay out.
+   */
+  it('leaves out imports made by test files on behalf of a package', () => {
+    const tsImports = (src: string, dst: string, file: string) => ({
+      v: 1,
+      type: 'edge',
+      kind: 'imports',
+      src: { kind: 'package', fqn: src },
+      dst: { kind: 'class', fqn: dst },
+      file,
+      line: 1,
+    });
+    ingest([
+      { v: 1, type: 'meta', extractor: 'typescript', extractorVersion: '0.0.0' },
+      pkg('app'),
+      pkg('core'),
+      pkg('app/testing'),
+      cls('app.Page', 'app/page.ts'),
+      { ...cls('core.Api', 'core/api.ts') },
+      { ...cls('app/testing.Stub', 'app/testing/stub.ts'), parent: { kind: 'package', fqn: 'app/testing' } },
+      tsImports('app', 'core.Api', 'app/page.spec.ts'),
+      tsImports('app/testing', 'core.Api', 'app/testing/stub.ts'),
+    ]);
+    const role = db.prepare(
+      `INSERT INTO file_role (run_id, path, role, rule) VALUES (?, ?, ?, 'fixture')`,
+    );
+    role.run(runId, 'app/page.ts', 'source');
+    role.run(runId, 'core/api.ts', 'source');
+    role.run(runId, 'app/page.spec.ts', 'test');
+    role.run(runId, 'app/testing/stub.ts', 'test');
+
+    const graph = buildPackageGraph(db, runId);
+    expect([...graph.packages.values()].map((p) => p.fqn).sort()).toEqual(['app', 'core']);
+    expect(graph.dependencies).toEqual([]);
+  });
 });
