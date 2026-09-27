@@ -1,5 +1,5 @@
 import { readdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, relative } from 'node:path';
 
 /**
  * Which extractors a repository needs.
@@ -11,7 +11,12 @@ import { join } from 'node:path';
  * into one run, not about which of two separate analyses to perform.
  */
 
-export const LANGUAGES = ['java', 'typescript'] as const;
+/**
+ * `migrations` runs first so a table a migration creates is declared with its
+ * file and line before a JPA mapping refers to it (ADR-0037): the store keeps a
+ * node's first declaration.
+ */
+export const LANGUAGES = ['migrations', 'java', 'typescript'] as const;
 export type Language = (typeof LANGUAGES)[number];
 
 /**
@@ -28,6 +33,25 @@ export type Language = (typeof LANGUAGES)[number];
  * site (ADR-0006).
  */
 const JAVA_EXTENSIONS = ['.java', '.kt'];
+
+/**
+ * Migration and DDL files, by the same directory rule as `src/files/roles.ts`
+ * and `extractors/typescript/src/migrations/main.ts` (a test keeps all three
+ * equal): changelogs and scripts under a migration directory, and standalone
+ * `schema*.sql` / `ddl.sql` / `*.ddl` files. Test resources are not the
+ * application's schema.
+ */
+const MIGRATION_DIRS = ['db/changelog/', 'db/migration/', 'db/migrations/', 'liquibase/', 'flyway/'];
+const DDL_NAME = /^(?:(?:schema|ddl)(?:[-_.][\w.-]*)?\.sql|[\w.-]+\.ddl)$/i;
+const TEST_SEGMENT = /(^|\/)(src\/test|src\/it|src\/integrationTest|test|tests|__tests__)\//;
+
+function isMigration(path: string): boolean {
+  if (TEST_SEGMENT.test(path)) return false;
+  const name = path.slice(path.lastIndexOf('/') + 1);
+  if (DDL_NAME.test(name)) return true;
+  if (!/\.(sql|xml|ya?ml|json)$/i.test(name)) return false;
+  return MIGRATION_DIRS.some((dir) => `/${path}`.includes(`/${dir}`));
+}
 const TYPESCRIPT_EXTENSIONS = ['.ts', '.tsx', '.mts', '.cts'];
 
 /**
@@ -66,7 +90,7 @@ export function detectLanguages(
       if (entry.isDirectory()) {
         if (!excluded.has(entry.name)) queue.push(join(dir, entry.name));
       } else if (entry.isFile()) {
-        const language = extractorFor(entry.name);
+        const language = extractorFor(relative(repoPath, join(dir, entry.name)).split('\\').join('/'));
         if (language !== null) found.add(language);
       }
     }
@@ -81,6 +105,7 @@ export function detectLanguages(
  * (ADR-0033), so the two cannot disagree about what counts as a source.
  */
 export function extractorFor(path: string): Language | null {
+  if (isMigration(path)) return 'migrations';
   if (JAVA_EXTENSIONS.some((ext) => path.endsWith(ext))) return 'java';
   if (!path.endsWith('.d.ts') && TYPESCRIPT_EXTENSIONS.some((ext) => path.endsWith(ext))) {
     return 'typescript';
@@ -91,6 +116,9 @@ export function extractorFor(path: string): Language | null {
 /** What a user may type for a language, and which extractor it selects. */
 const ALIASES: Record<string, string> = {
   ts: 'typescript',
+  sql: 'migrations',
+  liquibase: 'migrations',
+  flyway: 'migrations',
   kotlin: 'java',
   kt: 'java',
   jvm: 'java',

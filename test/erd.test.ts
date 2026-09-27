@@ -634,3 +634,113 @@ describe('the ER model, as JPA maps it (ADR-0036)', () => {
     ]);
   });
 });
+
+describe('the ER model with migrations (ADR-0037)', () => {
+  const MIGRATIONS = [
+    { v: 1, type: 'meta', extractor: 'migrations', extractorVersion: '0' },
+    { v: 1, type: 'file', path: 'db/changelog/0001.xml', language: 'liquibase-xml' },
+    ...[
+      ['owner', 3, [['id', true], ['first_name', false], ['street', false], ['created_at', false]]],
+      ['clinic.pets', 12, [['id', true], ['pet_name', false], ['owner_id', false]]],
+      ['audit_log', 20, [['id', true], ['message', false]]],
+      ['pet_visit', 25, [['pet_id', false], ['visit_id', false]]],
+      ['visit', 30, [['id', true], ['description', false]]],
+    ].flatMap(([table, line, columns]) => [
+      { v: 1, type: 'node', kind: 'table', fqn: table, name: table, file: 'db/changelog/0001.xml', startLine: line, attrs: { source: 'migration' } },
+      ...(columns as Array<[string, boolean]>).map(([column, pk], n) => ({
+        v: 1,
+        type: 'node',
+        kind: 'column',
+        fqn: `${table}#${column}`,
+        name: column,
+        parent: { kind: 'table', fqn: table },
+        file: 'db/changelog/0001.xml',
+        startLine: (line as number) + n + 1,
+        attrs: pk ? { primaryKey: true } : {},
+      })),
+    ]),
+    { v: 1, type: 'edge', kind: 'references', src: { kind: 'column', fqn: 'clinic.pets#owner_id' }, dst: { kind: 'table', fqn: 'owner' }, file: 'db/changelog/0001.xml', line: 15 },
+    { v: 1, type: 'edge', kind: 'references', src: { kind: 'column', fqn: 'pet_visit#pet_id' }, dst: { kind: 'table', fqn: 'clinic.pets' }, file: 'db/changelog/0001.xml', line: 26 },
+    { v: 1, type: 'edge', kind: 'references', src: { kind: 'column', fqn: 'pet_visit#visit_id' }, dst: { kind: 'table', fqn: 'visit' }, file: 'db/changelog/0001.xml', line: 27 },
+  ];
+
+  /** Migrations first, as `extract` runs them, then the Java golden. */
+  function seedBoth(): void {
+    seed(MIGRATIONS);
+    const golden = readFileSync(join(REPO_ROOT, 'fixtures', 'jpa-model', 'expected-facts.ndjson'), 'utf8');
+    seed(golden.split('\n').filter((line) => line.trim() !== '').map((line) => JSON.parse(line)));
+  }
+
+  it('shows every table the migrations create, and every mapped one, and says where each came from', () => {
+    seedBoth();
+    const model = buildErModel(db, runId);
+    expect(model.entities.map((e) => `${e.table} ${e.source} ${e.className ?? '-'}`)).toEqual([
+      'ambulance_van jpa com.example.clinic.domain.AmbulanceVan',
+      'audit_log migration -',
+      'clinic.pets both com.example.clinic.domain.Pet',
+      'owner both com.example.clinic.domain.Owner',
+      'payment jpa com.example.clinic.domain.Payment',
+      'pet_visit migration -',
+      'vehicle jpa com.example.clinic.domain.Vehicle',
+      'visit both com.example.clinic.domain.VisitRecord',
+    ]);
+  });
+
+  it('takes the columns from the migration, and lists mapped columns no migration creates', () => {
+    seedBoth();
+    const owner = buildErModel(db, runId).entities.find((e) => e.table === 'owner');
+    expect(owner?.columns.map((c) => `${c.name}${c.primaryKey ? ' PK' : ''}`)).toEqual([
+      'id PK',
+      'first_name',
+      'street',
+      'created_at',
+    ]);
+    expect(owner?.columns[0]).toMatchObject({ path: 'db/changelog/0001.xml', line: 4 });
+    expect(owner?.unbacked.map((c) => c.name)).toEqual(['city']);
+  });
+
+  it('draws foreign keys, without doubling an association the mapping already draws', () => {
+    seedBoth();
+    expect(
+      buildErModel(db, runId).relationships.map((r) => `${r.fromTable} ${r.cardinality} ${r.toTable} via ${r.via}`),
+    ).toEqual([
+      'clinic.pets many-to-one owner via owner',
+      'pet_visit many-to-one clinic.pets via pet_id',
+      'pet_visit many-to-one visit via visit_id',
+    ]);
+  });
+});
+
+describe('schema drift (ADR-0037)', () => {
+  it('reports each disagreement between mapping and migrations, citing both sides', async () => {
+    const { detectSchemaDrift } = await import('../src/analysis/schema-drift.js');
+    const golden = readFileSync(join(REPO_ROOT, 'fixtures', 'jpa-model', 'expected-facts.ndjson'), 'utf8');
+    seed([
+      { v: 1, type: 'meta', extractor: 'migrations', extractorVersion: '0' },
+      { v: 1, type: 'file', path: 'db/changelog/0001.xml', language: 'liquibase-xml' },
+      { v: 1, type: 'node', kind: 'table', fqn: 'owner', name: 'owner', file: 'db/changelog/0001.xml', startLine: 3 },
+      { v: 1, type: 'node', kind: 'column', fqn: 'owner#id', name: 'id', parent: { kind: 'table', fqn: 'owner' }, file: 'db/changelog/0001.xml', startLine: 4, attrs: { primaryKey: true } },
+      { v: 1, type: 'node', kind: 'column', fqn: 'owner#first_name', name: 'first_name', parent: { kind: 'table', fqn: 'owner' }, file: 'db/changelog/0001.xml', startLine: 5 },
+      { v: 1, type: 'node', kind: 'table', fqn: 'audit_log', name: 'audit_log', file: 'db/changelog/0001.xml', startLine: 9 },
+      ...golden.split('\n').filter((line) => line.trim() !== '').map((line) => JSON.parse(line)),
+    ]);
+
+    const drift = detectSchemaDrift(db, runId);
+
+    // owner: street and city (embedded) are mapped, not migrated. Five mapped
+    // tables have no migration. audit_log has no class.
+    expect(drift).toEqual({ compared: true, unbackedColumns: 2, unmigratedTables: 5, unmappedTables: 1 });
+    const titles = (
+      db.prepare(`SELECT title FROM finding WHERE run_id = ? AND rule = 'schema-drift' ORDER BY title`).all(runId) as Array<{ title: string }>
+    ).map((row) => row.title);
+    expect(titles).toContain('Owner.city maps to column owner.city, which no migration creates');
+    expect(titles).toContain('Table audit_log is created by a migration and mapped by no class');
+    const uncited = db
+      .prepare(
+        `SELECT COUNT(*) AS n FROM finding f WHERE f.run_id = ? AND f.rule = 'schema-drift'
+           AND NOT EXISTS (SELECT 1 FROM citation c WHERE c.finding_id = f.id)`,
+      )
+      .get(runId) as { n: number };
+    expect(uncited.n).toBe(0);
+  });
+});

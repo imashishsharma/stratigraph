@@ -1,0 +1,87 @@
+name: spring-petclinic-angular
+sha: 1978a75eab0c803595d5cde75acc6a0a9bcff4de
+labelledBy: >
+  Labelled by reading `git ls-files`, `angular.json`, and source files directly at
+  the pinned commit (checked out detached). Roles sampled across all files present;
+  there is no `migration` role in this repo (frontend-only, no database). `entities`,
+  `tables` and `endpoints` are omitted: this is an Angular client with no backend of
+  its own — it calls a separate spring-petclinic-rest API (see
+  src/environments/environment.ts REST_API_URL) but declares no JPA entities, no
+  tables and no server-side controllers in this repo. `injections` covers every
+  local-to-local constructor-injection edge found via `git grep 'constructor('`
+  across src/app, restricted to pairs where both classes are defined in this repo
+  (Angular framework services like HttpClient/Router/ActivatedRoute/FormBuilder are
+  excluded as targets); the 4 uses of the newer `inject()` function found
+  (`inject(ChangeDetectorRef)`) are framework-only so no `inject()`-based edges
+  qualify. `riskyFiles`: only one fix-like commit (122c227, "fix page templates
+  refresh issue (#178)") touched more than one main-source file in the 12 months
+  before the pinned commit (2025-09-12..2026-09-12); the repo is very low-churn
+  (24 non-merge commits total in that window, one large >50-file dependency-bump
+  commit excluded per the rule). Only 4 files have any repeatable signal at all, all
+  tied at 1 qualifying commit each — ranking among them is by file size, and the
+  signal here is weak by volume even though each is a genuine fix commit.
+roles:
+  - { path: package.json, role: manifest }
+  - { path: package-lock.json, role: lockfile }
+  - { path: angular.json, role: manifest }
+  - { path: tsconfig.json, role: manifest }
+  - { path: src/tsconfig.app.json, role: manifest }
+  - { path: src/tsconfig.spec.json, role: manifest }
+  - { path: tsconfig.doc.json, role: manifest }
+  - { path: eslint.config.js, role: config }
+  - { path: playwright.config.ts, role: config }
+  - { path: src/environments/environment.ts, role: config }
+  - { path: src/environments/environment.prod.ts, role: config }
+  - { path: .github/workflows/angular-ci.yml, role: config }
+  - { path: .editorconfig, role: config }
+  - { path: .nvmrc, role: config }
+  - { path: src/app/app.component.ts, role: source }
+  - { path: src/app/app.component.spec.ts, role: test }
+  - { path: src/app/owners/owner.service.ts, role: source }
+  - { path: src/app/owners/owner.service.spec.ts, role: test }
+  - { path: src/app/owners/owner-list/owner-list.component.html, role: source }
+  - { path: src/app/testing/router-stubs.ts, role: test }
+  - { path: src/app/testing/dummy.component.ts, role: test }
+  - { path: e2e/app.e2e-spec.ts, role: test }
+  - { path: src/main.ts, role: source }
+  - { path: src/polyfills.ts, role: source }
+  - { path: src/index.html, role: source }
+  - { path: src/assets/images/angular.png, role: asset }
+  - { path: src/assets/fonts/montserrat-webfont.woff, role: asset }
+  - { path: src/favicon.ico, role: asset }
+  - { path: README.md, role: docs }
+  - { path: docs/index.html, role: generated }
+  - { path: docs/coverage.html, role: generated }
+  - { path: docs/template-playground/template-playground.component.ts, role: generated }
+  - { path: docs/js/libs/d3.v3.min.js, role: vendored }
+  - { path: docs/js/libs/jszip.min.js, role: vendored }
+  - { path: Dockerfile, role: config }
+  - { path: .dockerignore, role: other }
+  - { path: .gitignore, role: other }
+containers:
+  - { name: spring-petclinic-angular, kind: angular-app, path: . }
+injections:
+  - { from: "src/app/owners/owner-add/owner-add.component.ts#OwnerAddComponent", to: "src/app/owners/owner.service.ts#OwnerService", via: constructor }
+  - { from: "src/app/owners/owner-detail/owner-detail.component.ts#OwnerDetailComponent", to: "src/app/owners/owner.service.ts#OwnerService", via: constructor }
+  - { from: "src/app/owners/owner-edit/owner-edit.component.ts#OwnerEditComponent", to: "src/app/owners/owner.service.ts#OwnerService", via: constructor }
+  - { from: "src/app/owners/owner-list/owner-list.component.ts#OwnerListComponent", to: "src/app/owners/owner.service.ts#OwnerService", via: constructor }
+  - { from: "src/app/owners/owner.service.ts#OwnerService", to: "src/app/error.service.ts#HttpErrorHandler", via: constructor }
+  - { from: "src/app/pets/pet-add/pet-add.component.ts#PetAddComponent", to: "src/app/pets/pet.service.ts#PetService", via: constructor }
+  - { from: "src/app/pets/pet-add/pet-add.component.ts#PetAddComponent", to: "src/app/pettypes/pettype.service.ts#PetTypeService", via: constructor }
+  - { from: "src/app/pets/pet-list/pet-list.component.ts#PetListComponent", to: "src/app/pets/pet.service.ts#PetService", via: constructor }
+  - { from: "src/app/pets/pet.service.ts#PetService", to: "src/app/error.service.ts#HttpErrorHandler", via: constructor }
+  - { from: "src/app/pettypes/pettype-add/pettype-add.component.ts#PettypeAddComponent", to: "src/app/pettypes/pettype.service.ts#PetTypeService", via: constructor }
+  - { from: "src/app/pettypes/pettype.service.ts#PetTypeService", to: "src/app/error.service.ts#HttpErrorHandler", via: constructor }
+  - { from: "src/app/specialties/spec-resolver.ts#SpecResolver", to: "src/app/specialties/specialty.service.ts#SpecialtyService", via: constructor }
+  - { from: "src/app/specialties/specialty.service.ts#SpecialtyService", to: "src/app/error.service.ts#HttpErrorHandler", via: constructor }
+  - { from: "src/app/vets/vet-add/vet-add.component.ts#VetAddComponent", to: "src/app/vets/vet.service.ts#VetService", via: constructor }
+  - { from: "src/app/vets/vet-resolver.ts#VetResolver", to: "src/app/vets/vet.service.ts#VetService", via: constructor }
+  - { from: "src/app/vets/vet.service.ts#VetService", to: "src/app/error.service.ts#HttpErrorHandler", via: constructor }
+  - { from: "src/app/visits/visit-add/visit-add.component.ts#VisitAddComponent", to: "src/app/visits/visit.service.ts#VisitService", via: constructor }
+  - { from: "src/app/visits/visit-add/visit-add.component.ts#VisitAddComponent", to: "src/app/pets/pet.service.ts#PetService", via: constructor }
+  - { from: "src/app/visits/visit.service.ts#VisitService", to: "src/app/error.service.ts#HttpErrorHandler", via: constructor }
+riskyFiles:
+  - src/app/owners/owner-list/owner-list.component.ts
+  - src/app/specialties/specialty-list/specialty-list.component.ts
+  - src/app/vets/vet-list/vet-list.component.ts
+  - src/app/pettypes/pettype-list/pettype-list.component.ts

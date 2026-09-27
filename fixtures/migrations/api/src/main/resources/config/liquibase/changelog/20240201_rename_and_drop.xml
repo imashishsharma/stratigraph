@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog">
+    <changeSet id="20240201-1" author="fixture">
+        <renameTable oldTableName="authority" newTableName="role"/>
+        <dropTable tableName="scratch"/>
+        <addColumn tableName="owner">
+            <column name="last_name" type="varchar(255)"/>
+        </addColumn>
+        <sql>
+            ALTER TABLE owner ADD COLUMN telephone varchar(20);
+        </sql>
+    </changeSet>
+</databaseChangeLog>

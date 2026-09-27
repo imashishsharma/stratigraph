@@ -1,0 +1,115 @@
+name: initializr
+sha: d445a056ced904ba5098df1e75b75bebf9840687
+labelledBy: >
+  Labelled by reading the repo directly at the pinned commit with git/grep/Read
+  only (no stratigraph). IMPORTANT CORRECTION to corpus.yaml's characterization:
+  at this pin the repo itself builds with Maven (root pom.xml, mvnw, .mvn/), not
+  Gradle — there is no build.gradle/settings.gradle/buildSrc for this project's
+  own build. The `*.gradle`/`*.gradle.kts` files corpus.yaml's "why" text likely
+  saw are test/template resources: initializr *generates* Gradle (and Maven)
+  builds for other projects, so its own tree is full of `.gradle`/`.gradle.kts`
+  sample and golden files under src/test/resources and src/main/resources
+  (bundled templates it stamps into generated projects) — those are labelled
+  `test` or `vendored` below, not `manifest`, since they are not this repo's own
+  build configuration. roles is a ~28-file sample. There is no lockfile (pure
+  Java, no npm frontend) and no genuinely generated/build-output code committed,
+  so both are omitted from roles. This is a project-generator tool with no
+  database access: no JPA, no Liquibase/Flyway found anywhere (`git grep` for
+  @Entity, javax/jakarta.persistence, liquibase, flyway all came back empty), so
+  `entities`, `tables` and `migration`-role files are absent — noted rather than
+  guessed. containers: only initializr-service-sample carries a
+  @SpringBootApplication class; every other module is a library (default jar
+  packaging, no Spring Boot main class) and is excluded per the aggregator/library
+  rule, even though several (initializr-web, initializr-actuator) look
+  service-like. endpoints (20, exhaustive) come from initializr-web's four REST
+  controllers, which live in a library module consumed by initializr-service-sample
+  rather than in the container itself — still counted since the instruction is
+  "this repo's own controllers", not "the container's controllers"; paths are
+  deduplicated where multiple @GetMapping overloads share an identical path for
+  content-negotiation (e.g. GET / appears once even though two controller methods
+  both map it under different `produces`); SpringCliDistributionController's
+  `@GetMapping(path = {"/spring.tar.gz", "spring.tgz"})` has a literal source typo
+  (missing leading slash on the second path) at
+  initializr-web/src/main/java/io/spring/initializr/web/controller/SpringCliDistributionController.java:44 —
+  recorded here as `/spring.tgz` for consistency with the rest of the list.
+  injections (11, all Java — no frontend in this repo) are constructor-injection
+  edges between repo-local classes/interfaces across initializr-web and
+  initializr-actuator. riskyFiles ranks the 10 most-committed src/main/java files
+  by non-merge commits in the 12 months before the pinned commit (2025-09-25 to
+  2026-09-25: 152 qualifying commits after dropping 2 that touched >50 files),
+  tie-broken by fix-like commit messages then file line count.
+roles:
+  - { path: initializr-web/src/main/java/io/spring/initializr/web/controller/ProjectMetadataController.java, role: source }
+  - { path: initializr-generator/src/main/java/io/spring/initializr/generator/language/CodeBlock.java, role: source }
+  - { path: initializr-service-sample/src/main/java/sample/service/ServiceApplication.java, role: source }
+  - { path: initializr-metadata/src/main/java/io/spring/initializr/metadata/InitializrMetadataProvider.java, role: source }
+  - { path: initializr-generator-spring/src/main/resources/templates/documentation/warnings.mustache, role: source }
+  - { path: initializr-generator/src/test/java/io/spring/initializr/generator/language/CodeBlockTests.java, role: test }
+  - { path: initializr-web/src/test/java/io/spring/initializr/web/controller/ProjectMetadataControllerIntegrationTests.java, role: test }
+  - { path: initializr-generator-test/src/main/java/io/spring/initializr/generator/test/InitializrMetadataTestBuilder.java, role: test }
+  - { path: initializr-generator-test/src/main/java/io/spring/initializr/generator/test/io/TextTestUtils.java, role: test }
+  - { path: initializr-generator/src/test/resources/project/build/gradle/sample-build.gradle, role: test }
+  - { path: initializr-web/src/test/resources/application-test-default.yml, role: test }
+  - { path: pom.xml, role: manifest }
+  - { path: initializr-parent/pom.xml, role: manifest }
+  - { path: initializr-bom/pom.xml, role: manifest }
+  - { path: initializr-service-sample/pom.xml, role: manifest }
+  - { path: mvnw, role: manifest }
+  - { path: .mvn/wrapper/maven-wrapper.properties, role: manifest }
+  - { path: initializr-generator-spring/src/main/resources/gradle/9/wrapper/gradle/wrapper/gradle-wrapper.jar, role: vendored }
+  - { path: initializr-generator-spring/src/main/resources/maven/3/wrapper/.mvn/wrapper/maven-wrapper.properties, role: vendored }
+  - { path: initializr-service-sample/src/main/resources/application.yaml, role: config }
+  - { path: .mvn/jvm.config, role: config }
+  - { path: initializr-actuator/src/main/resources/META-INF/additional-spring-configuration-metadata.json, role: config }
+  - { path: eclipse/eclipse-code-formatter.xml, role: config }
+  - { path: README.adoc, role: docs }
+  - { path: CONTRIBUTING.adoc, role: docs }
+  - { path: initializr-docs/src/main/asciidoc/api-guide.adoc, role: docs }
+  - { path: initializr-docs/src/main/javadoc/spring-javadoc.css, role: asset }
+  - { path: git/hooks/forward-merge, role: other }
+containers:
+  - { name: initializr-service-sample, kind: spring-boot, path: initializr-service-sample }
+endpoints:
+  - GET /metadata/config
+  - GET /
+  - GET /metadata/client
+  - GET /dependencies
+  - GET /spring
+  - GET /spring.zip
+  - GET /spring.tar.gz
+  - GET /spring.tgz
+  - GET /pom
+  - POST /pom
+  - GET /pom.xml
+  - POST /pom.xml
+  - GET /build
+  - POST /build
+  - GET /build.gradle
+  - POST /build.gradle
+  - GET /starter.zip
+  - POST /starter.zip
+  - GET /starter.tgz
+  - POST /starter.tgz
+injections:
+  - { from: io.spring.initializr.web.controller.ProjectMetadataController, to: io.spring.initializr.metadata.InitializrMetadataProvider, via: constructor }
+  - { from: io.spring.initializr.web.controller.ProjectMetadataController, to: io.spring.initializr.metadata.DependencyMetadataProvider, via: constructor }
+  - { from: io.spring.initializr.web.controller.SpringCliDistributionController, to: io.spring.initializr.metadata.InitializrMetadataProvider, via: constructor }
+  - { from: io.spring.initializr.web.controller.ProjectGenerationController, to: io.spring.initializr.metadata.InitializrMetadataProvider, via: constructor }
+  - { from: io.spring.initializr.web.controller.ProjectGenerationController, to: io.spring.initializr.web.project.ProjectGenerationInvoker, via: constructor }
+  - { from: io.spring.initializr.web.controller.CommandLineMetadataController, to: io.spring.initializr.metadata.InitializrMetadataProvider, via: constructor }
+  - { from: io.spring.initializr.web.controller.CommandLineMetadataController, to: io.spring.initializr.web.support.CommandLineHelpGenerator, via: constructor }
+  - { from: io.spring.initializr.web.project.ProjectGenerationInvoker, to: io.spring.initializr.web.project.ProjectRequestToDescriptionConverter, via: constructor }
+  - { from: io.spring.initializr.web.project.DefaultProjectRequestToDescriptionConverter, to: io.spring.initializr.web.project.ProjectRequestPlatformVersionTransformer, via: constructor }
+  - { from: io.spring.initializr.actuate.info.BomRangesInfoContributor, to: io.spring.initializr.metadata.InitializrMetadataProvider, via: constructor }
+  - { from: io.spring.initializr.actuate.stat.ProjectGenerationStatPublisher, to: io.spring.initializr.actuate.stat.ProjectRequestDocumentFactory, via: constructor }
+riskyFiles:
+  - initializr-generator/src/main/java/io/spring/initializr/generator/buildsystem/gradle/GradleBuildWriter.java
+  - initializr-generator-spring/src/main/java/io/spring/initializr/generator/spring/properties/ApplicationProperties.java
+  - initializr-generator/src/main/java/io/spring/initializr/generator/container/docker/compose/ComposeFileWriter.java
+  - initializr-web/src/main/java/io/spring/initializr/web/project/DefaultProjectRequestToDescriptionConverter.java
+  - initializr-generator/src/main/java/io/spring/initializr/generator/buildsystem/maven/MavenBuildWriter.java
+  - initializr-metadata/src/main/java/io/spring/initializr/metadata/InitializrMetadata.java
+  - initializr-generator/src/main/java/io/spring/initializr/generator/language/java/JavaSourceCodeWriter.java
+  - initializr-web/src/main/java/io/spring/initializr/web/autoconfigure/InitializrAutoConfiguration.java
+  - initializr-generator-spring/src/main/java/io/spring/initializr/generator/spring/build/maven/ConvertAnnotationProcessorsToPluginConfigBuildCustomizer.java
+  - initializr-web/src/main/java/io/spring/initializr/web/project/MetadataProjectDescriptionCustomizer.java

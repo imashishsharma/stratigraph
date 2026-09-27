@@ -1,0 +1,93 @@
+name: spring-boot-realworld-example-app
+sha: ee17e31aafe733d98c4853c8b9a74d7f2f6c924a
+labelledBy: >
+  Read build.gradle, .gitignore, the Flyway migration, every file under
+  src/main/resources (mapper/, schema/, db/migration/), and every one of the 8
+  REST controllers under src/main/java/io/spring/api plus their injected
+  collaborator interfaces (116 Java files total; small enough that endpoints
+  and injections below are exhaustive, not sampled). Confirmed via `git grep`
+  that there are zero @Entity/@Table classes (persistence is MyBatis XML
+  mappers under src/main/resources/mapper, matching corpus.yaml's note that
+  this pin is not actually JPA) — `entities` is omitted per the truth-format
+  instructions for a non-JPA persistence layer. `tables` comes directly from
+  the single Flyway migration V1__create_tables.sql. riskyFiles is omitted:
+  repo is dormant, 0 non-merge commits in the 12 months before the pinned
+  commit (last real commit 2022-06-08, matching corpus.yaml). Two judgment
+  calls to flag: (1) the MyBatis mapper XML files under src/main/resources/mapper
+  are labelled `source` rather than `config`, since they are the hand-written
+  SQL/DAO implementation, not application behavior configuration; (2)
+  schema/schema.graphqls (the DGS GraphQL SDL, consumed by codegen to
+  generate Java types) is also labelled `source` for the same reason, not
+  `config`. No lockfile and no generated code are committed (build/ and
+  .gradle are gitignored, with only gradle-wrapper.jar force-included), so
+  `lockfile` and `generated` roles are absent from the sample — noted rather
+  than faked.
+roles:
+  - { path: build.gradle, role: manifest }
+  - { path: gradlew, role: manifest }
+  - { path: gradlew.bat, role: manifest }
+  - { path: gradle/wrapper/gradle-wrapper.properties, role: manifest }
+  - { path: gradle/wrapper/gradle-wrapper.jar, role: vendored }
+  - { path: src/main/resources/db/migration/V1__create_tables.sql, role: migration }
+  - { path: src/main/resources/mapper/ArticleMapper.xml, role: source }
+  - { path: src/main/resources/mapper/UserMapper.xml, role: source }
+  - { path: src/main/resources/schema/schema.graphqls, role: source }
+  - { path: src/main/resources/application.properties, role: config }
+  - { path: src/main/resources/application-test.properties, role: config }
+  - { path: src/main/java/io/spring/api/ArticlesApi.java, role: source }
+  - { path: src/main/java/io/spring/api/UsersApi.java, role: source }
+  - { path: src/main/java/io/spring/core/article/Article.java, role: source }
+  - { path: src/main/java/io/spring/core/user/User.java, role: source }
+  - { path: src/main/java/io/spring/graphql/ArticleDatafetcher.java, role: source }
+  - { path: src/test/java/io/spring/api/ArticlesApiTest.java, role: test }
+  - { path: src/test/java/io/spring/infrastructure/user/MyBatisUserRepositoryTest.java, role: test }
+  - { path: src/test/java/io/spring/api/TestWithCurrentUser.java, role: test }
+  - { path: src/test/java/io/spring/TestHelper.java, role: test }
+  - { path: .gitignore, role: other }
+  - { path: README.md, role: docs }
+  - { path: LICENSE, role: docs }
+  - { path: example-logo.png, role: asset }
+  - { path: graphql-schema.png, role: asset }
+containers:
+  - { name: spring-boot-realworld-example-app, kind: spring-boot, path: . }
+tables:
+  - users
+  - articles
+  - article_favorites
+  - follows
+  - tags
+  - article_tags
+  - comments
+endpoints:
+  - POST /articles/{slug}/favorite
+  - DELETE /articles/{slug}/favorite
+  - GET /profiles/{username}
+  - POST /profiles/{username}/follow
+  - DELETE /profiles/{username}/follow
+  - POST /articles
+  - GET /articles/feed
+  - GET /articles
+  - GET /articles/{slug}
+  - PUT /articles/{slug}
+  - DELETE /articles/{slug}
+  - POST /articles/{slug}/comments
+  - GET /articles/{slug}/comments
+  - DELETE /articles/{slug}/comments/{id}
+  - GET /user
+  - PUT /user
+  - GET /tags
+  - POST /users
+  - POST /users/login
+injections:
+  - { from: io.spring.api.ArticlesApi, to: io.spring.application.article.ArticleCommandService, via: constructor }
+  - { from: io.spring.api.ArticlesApi, to: io.spring.application.ArticleQueryService, via: constructor }
+  - { from: io.spring.api.ArticleFavoriteApi, to: io.spring.core.favorite.ArticleFavoriteRepository, via: constructor }
+  - { from: io.spring.api.ArticleFavoriteApi, to: io.spring.core.article.ArticleRepository, via: constructor }
+  - { from: io.spring.api.ArticleFavoriteApi, to: io.spring.application.ArticleQueryService, via: constructor }
+  - { from: io.spring.api.ProfileApi, to: io.spring.application.ProfileQueryService, via: constructor }
+  - { from: io.spring.api.ProfileApi, to: io.spring.core.user.UserRepository, via: constructor }
+  - { from: io.spring.api.TagsApi, to: io.spring.application.TagsQueryService, via: constructor }
+  - { from: io.spring.api.UsersApi, to: io.spring.core.user.UserRepository, via: constructor }
+  - { from: io.spring.api.UsersApi, to: io.spring.application.UserQueryService, via: constructor }
+  - { from: io.spring.api.ArticleApi, to: io.spring.application.ArticleQueryService, via: constructor }
+  - { from: io.spring.api.CurrentUserApi, to: io.spring.application.user.UserService, via: constructor }

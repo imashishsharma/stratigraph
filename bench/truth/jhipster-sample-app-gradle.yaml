@@ -1,0 +1,137 @@
+name: jhipster-sample-app-gradle
+sha: 8bdbaacecdb91cf3bef693e01294e82e00c2ac06
+labelledBy: >
+  Labelled by reading the repo directly at the pinned commit with git/grep/Read only
+  (no stratigraph). roles is a ~30-file sample spanning every role vocabulary word
+  present; there is no committed lockfile (only package.json is tracked, same
+  pattern as the other jhipster samples), so `lockfile` is omitted from roles.
+  `generated` is also omitted: GeneratedByJHipster.java is a hand-authored marker
+  annotation applied once by the generator, not regenerated build output, and no
+  other committed generated code exists. containers lists the one Spring Boot app
+  and the one Angular application project. entities/tables come from the Liquibase
+  changelog directory (one initial-schema changelog plus per-entity
+  added_entity_*.xml files, a JHipster convention for entities added after project
+  generation) cross-checked against @Table on each @Entity class; this is the
+  "full" JWT-variant JHipster sample so it carries real domain entities
+  (BankAccount, Label, Operation) beyond the built-in User/Authority, unlike the
+  OAuth2 sample. endpoints is exhaustive (39, well under the 100-sample threshold)
+  from grepping @RequestMapping/@*Mapping across src/main/java, excluding tests;
+  UserResource's @PutMapping({"/users","/users/{login}"}) is counted as two
+  endpoints, one per path. injections mixes 12 Java constructor-injection edges
+  between repo-local classes with 3 Angular inject()-based edges, for 15 total.
+  riskyFiles is omitted: all 6 non-merge commits in the 12 months before the
+  pinned commit are "automatic project update for vX.Y.Z" JHipster generator
+  sweeps touching 154-393 files each, so nothing survives the >50-file-commit
+  filter.
+roles:
+  - { path: src/main/java/io/github/jhipster/sample/web/rest/AccountResource.java, role: source }
+  - { path: src/main/java/io/github/jhipster/sample/service/UserService.java, role: source }
+  - { path: src/main/java/io/github/jhipster/sample/domain/Operation.java, role: source }
+  - { path: src/main/java/io/github/jhipster/sample/GeneratedByJHipster.java, role: source }
+  - { path: src/main/webapp/app/home/home.ts, role: source }
+  - { path: src/main/webapp/app/entities/label/list/label.ts, role: source }
+  - { path: src/test/java/io/github/jhipster/sample/web/rest/AccountResourceIT.java, role: test }
+  - { path: src/test/java/io/github/jhipster/sample/web/rest/TestUtil.java, role: test }
+  - { path: src/test/java/io/github/jhipster/sample/domain/AssertUtils.java, role: test }
+  - { path: src/test/java/io/github/jhipster/sample/security/SecurityUtilsUnitTest.java, role: test }
+  - { path: src/main/webapp/app/entities/label/list/label.spec.ts, role: test }
+  - { path: src/test/javascript/cypress/e2e/account/logout.cy.ts, role: test }
+  - { path: src/main/resources/config/liquibase/changelog/00000000000000_initial_schema.xml, role: migration }
+  - { path: src/main/resources/config/liquibase/changelog/20150805124838_added_entity_BankAccount.xml, role: migration }
+  - { path: src/main/resources/config/liquibase/master.xml, role: migration }
+  - { path: src/main/resources/config/liquibase/data/user.csv, role: migration }
+  - { path: src/main/resources/config/liquibase/fake-data/bank_account.csv, role: migration }
+  - { path: build.gradle, role: manifest }
+  - { path: settings.gradle, role: manifest }
+  - { path: buildSrc/build.gradle, role: manifest }
+  - { path: package.json, role: manifest }
+  - { path: angular.json, role: manifest }
+  - { path: tsconfig.json, role: manifest }
+  - { path: gradlew, role: manifest }
+  - { path: gradle/wrapper/gradle-wrapper.properties, role: manifest }
+  - { path: gradle/wrapper/gradle-wrapper.jar, role: vendored }
+  - { path: src/main/webapp/swagger-ui/index.html, role: vendored }
+  - { path: src/main/resources/config/application.yml, role: config }
+  - { path: src/main/resources/config/application-prod.yml, role: config }
+  - { path: .yo-rc.json, role: config }
+  - { path: README.md, role: docs }
+  - { path: src/main/webapp/content/images/jhipster_family_member_0.svg, role: asset }
+  - { path: src/main/webapp/content/css/loading.css, role: asset }
+  - { path: src/main/webapp/i18n/en/bankAccount.json, role: other }
+  - { path: src/main/webapp/i18n/en/activate.json, role: other }
+containers:
+  - { name: jhipster-gradle-sample-application, kind: spring-boot, path: . }
+  - { name: jhipster-gradle-sample-application, kind: angular-app, path: . }
+entities:
+  - { class: io.github.jhipster.sample.domain.User, table: jhi_user }
+  - { class: io.github.jhipster.sample.domain.Authority, table: jhi_authority }
+  - { class: io.github.jhipster.sample.domain.PersistentToken, table: jhi_persistent_token }
+  - { class: io.github.jhipster.sample.domain.BankAccount, table: bank_account }
+  - { class: io.github.jhipster.sample.domain.Label, table: label }
+  - { class: io.github.jhipster.sample.domain.Operation, table: operation }
+tables:
+  - jhi_user
+  - jhi_authority
+  - jhi_user_authority
+  - jhi_persistent_token
+  - jhi_date_time_wrapper
+  - bank_account
+  - label
+  - operation
+  - rel_operation__label
+endpoints:
+  - GET /api/users
+  - POST /api/operations
+  - PUT /api/operations/{id}
+  - PATCH /api/operations/{id}
+  - GET /api/operations
+  - GET /api/operations/{id}
+  - DELETE /api/operations/{id}
+  - POST /api/register
+  - GET /api/activate
+  - GET /api/authenticate
+  - GET /api/account
+  - POST /api/account
+  - POST /api/account/change-password
+  - GET /api/account/sessions
+  - DELETE /api/account/sessions/{series}
+  - POST /api/account/reset-password/init
+  - POST /api/account/reset-password/finish
+  - POST /api/labels
+  - PUT /api/labels/{id}
+  - PATCH /api/labels/{id}
+  - GET /api/labels
+  - GET /api/labels/{id}
+  - DELETE /api/labels/{id}
+  - POST /api/authorities
+  - GET /api/authorities
+  - GET /api/authorities/{id}
+  - DELETE /api/authorities/{id}
+  - POST /api/admin/users
+  - PUT /api/admin/users
+  - PUT /api/admin/users/{login}
+  - GET /api/admin/users
+  - GET /api/admin/users/{login}
+  - DELETE /api/admin/users/{login}
+  - POST /api/bank-accounts
+  - PUT /api/bank-accounts/{id}
+  - PATCH /api/bank-accounts/{id}
+  - GET /api/bank-accounts
+  - GET /api/bank-accounts/{id}
+  - DELETE /api/bank-accounts/{id}
+injections:
+  - { from: io.github.jhipster.sample.web.rest.AccountResource, to: io.github.jhipster.sample.repository.UserRepository, via: constructor }
+  - { from: io.github.jhipster.sample.web.rest.AccountResource, to: io.github.jhipster.sample.service.UserService, via: constructor }
+  - { from: io.github.jhipster.sample.web.rest.AccountResource, to: io.github.jhipster.sample.service.MailService, via: constructor }
+  - { from: io.github.jhipster.sample.web.rest.AccountResource, to: io.github.jhipster.sample.repository.PersistentTokenRepository, via: constructor }
+  - { from: io.github.jhipster.sample.web.rest.UserResource, to: io.github.jhipster.sample.service.UserService, via: constructor }
+  - { from: io.github.jhipster.sample.web.rest.UserResource, to: io.github.jhipster.sample.service.MailService, via: constructor }
+  - { from: io.github.jhipster.sample.web.rest.PublicUserResource, to: io.github.jhipster.sample.service.UserService, via: constructor }
+  - { from: io.github.jhipster.sample.web.rest.AuthorityResource, to: io.github.jhipster.sample.repository.AuthorityRepository, via: constructor }
+  - { from: io.github.jhipster.sample.web.rest.BankAccountResource, to: io.github.jhipster.sample.repository.BankAccountRepository, via: constructor }
+  - { from: io.github.jhipster.sample.web.rest.OperationResource, to: io.github.jhipster.sample.repository.OperationRepository, via: constructor }
+  - { from: io.github.jhipster.sample.service.UserService, to: io.github.jhipster.sample.repository.PersistentTokenRepository, via: constructor }
+  - { from: io.github.jhipster.sample.service.UserService, to: io.github.jhipster.sample.repository.AuthorityRepository, via: constructor }
+  - { from: "src/main/webapp/app/home/home.ts#Home", to: "src/main/webapp/app/core/auth/account.service.ts#AccountService" }
+  - { from: "src/main/webapp/app/admin/health/health.ts#Health", to: "src/main/webapp/app/admin/health/health.service.ts#HealthService" }
+  - { from: "src/main/webapp/app/entities/label/list/label.ts#Label", to: "src/main/webapp/app/entities/label/service/label.service.ts#LabelService" }

@@ -106,3 +106,11 @@ snake-case naming, `@Entity(name)`, `@Table(name, schema)`, single-table and
 joined inheritance, an `@Embedded` value, transient fields, a bidirectional
 association, a Spring Data repository with JPQL and native `@Query`, and JDBC
 literal SQL.
+
+## `migrations`
+
+Liquibase (XML master including XML and YAML changelogs, relative and
+classpath includes, an inline `<sql>` block), Flyway (`V1`, `V2`, `V10` — V10
+must apply last) and a MySQL `schema.sql`. Renames, drops and foreign keys in
+every form; a test-resources changelog that must be ignored. Asserted by
+`test/migrations-extractor.test.ts`.

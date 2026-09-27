@@ -132,7 +132,7 @@ function outputTables(db: Db, runId: number): Map<string, string> {
   // Output table name → the class mapped to it, or '' for a table with no class.
   const tables = new Map<string, string>();
   for (const entity of buildErModel(db, runId).entities) {
-    tables.set(bareTable(entity.table), entity.className);
+    tables.set(bareTable(entity.table), entity.className ?? '');
   }
   for (const row of db
     .prepare(`SELECT fqn FROM node WHERE run_id = ? AND kind = 'table' AND is_stub = 0`)

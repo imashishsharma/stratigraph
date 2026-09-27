@@ -1,0 +1,131 @@
+name: jhipster-sample-app
+sha: 6b000b5d23a36c45e01472471b84a44fa2464044
+labelledBy: >
+  Labelled by reading the repo directly at the pinned commit: entities from
+  src/main/java/.../domain, table names cross-checked against the Liquibase
+  changelogs under src/main/resources/config/liquibase/changelog (all
+  @Table(name=...) values match the createTable statements exactly), endpoints
+  enumerated from every @RestController class-level + method-level mapping
+  under src/main/java/.../web/rest, injections from constructor-injected
+  fields in REST resources and the service layer (plain explicit constructors,
+  no Lombok here), and containers confirmed from pom.xml artifactId +
+  @SpringBootApplication for the backend and angular.json's single
+  "jhipster-sample-application" application project for the frontend.
+  riskyFiles omitted: `git log --no-merges --since=2025-09-17
+  --until=2026-09-17T21:28:19-0600 --name-only` found only 7 commits in the
+  window, every one an "automatic project update for vX.Y.Z" bot commit
+  touching 81-377 files (all above the 50-file sweep cutoff), so zero commits
+  remain after dropping sweeps and no source file has real per-file history in
+  this window — matches corpus.yaml's note that this is a low-churn template
+  repo. No package-lock.json/yarn.lock is committed (confirmed via `git
+  ls-files`), so `lockfile` is not represented in roles despite package.json
+  being present; no separate generated-code output directory exists either
+  (JHipster scaffolds the whole app as ordinary editable source, not a
+  regenerate-on-build artifact), so `generated` is also omitted. Judgment
+  call: Angular's src/main/webapp/i18n/en/*.json translation bundles are
+  labelled `asset` (fetched by the browser at runtime as static files) rather
+  than `config`, unlike the Spring-side messages*.properties equivalent in
+  other repos, which is a genuine judgment call worth flagging.
+roles:
+  - { path: pom.xml, role: manifest }
+  - { path: package.json, role: manifest }
+  - { path: angular.json, role: manifest }
+  - { path: tsconfig.json, role: manifest }
+  - { path: mvnw, role: manifest }
+  - { path: .mvn/wrapper/maven-wrapper.properties, role: manifest }
+  - { path: .mvn/wrapper/maven-wrapper.jar, role: vendored }
+  - { path: src/main/java/io/github/jhipster/sample/JhipsterSampleApplicationApp.java, role: source }
+  - { path: src/main/java/io/github/jhipster/sample/domain/User.java, role: source }
+  - { path: src/main/java/io/github/jhipster/sample/web/rest/BankAccountResource.java, role: source }
+  - { path: src/main/webapp/app/home/home.ts, role: source }
+  - { path: src/main/webapp/app/home/home.html, role: source }
+  - { path: src/test/java/io/github/jhipster/sample/web/rest/TestUtil.java, role: test }
+  - { path: src/test/java/io/github/jhipster/sample/domain/AssertUtils.java, role: test }
+  - { path: src/test/java/io/github/jhipster/sample/web/rest/BankAccountResourceIT.java, role: test }
+  - { path: src/test/javascript/cypress/support/commands.ts, role: test }
+  - { path: src/test/gatling/conf/gatling.conf, role: test }
+  - { path: src/main/webapp/app/home/home.spec.ts, role: test }
+  - { path: src/main/resources/config/application.yml, role: config }
+  - { path: src/main/resources/config/application-dev.yml, role: config }
+  - { path: checkstyle.xml, role: config }
+  - { path: .github/workflows/github-actions.yml, role: config }
+  - { path: src/main/resources/config/liquibase/master.xml, role: migration }
+  - { path: src/main/resources/config/liquibase/changelog/20150805124838_added_entity_BankAccount.xml, role: migration }
+  - { path: src/main/resources/config/liquibase/data/user.csv, role: migration }
+  - { path: src/main/webapp/i18n/en/password.json, role: asset }
+  - { path: src/main/webapp/content/images/logo-jhipster.png, role: asset }
+  - { path: src/main/webapp/content/css/loading.css, role: asset }
+  - { path: README.md, role: docs }
+  - { path: LICENSE.txt, role: docs }
+  - { path: .gitignore, role: other }
+containers:
+  - { name: jhipster-sample-application, kind: spring-boot, path: . }
+  - { name: jhipster-sample-application, kind: angular-app, path: . }
+entities:
+  - { class: io.github.jhipster.sample.domain.User, table: jhi_user }
+  - { class: io.github.jhipster.sample.domain.Authority, table: jhi_authority }
+  - { class: io.github.jhipster.sample.domain.BankAccount, table: bank_account }
+  - { class: io.github.jhipster.sample.domain.Label, table: label }
+  - { class: io.github.jhipster.sample.domain.Operation, table: operation }
+tables:
+  - jhi_user
+  - jhi_authority
+  - jhi_user_authority
+  - jhi_date_time_wrapper
+  - bank_account
+  - label
+  - operation
+  - rel_operation__label
+endpoints:
+  - POST /api/authenticate
+  - GET /api/authenticate
+  - POST /api/bank-accounts
+  - PUT /api/bank-accounts/{id}
+  - PATCH /api/bank-accounts/{id}
+  - GET /api/bank-accounts
+  - GET /api/bank-accounts/{id}
+  - DELETE /api/bank-accounts/{id}
+  - POST /api/register
+  - GET /api/activate
+  - GET /api/account
+  - POST /api/account
+  - POST /api/account/change-password
+  - POST /api/account/reset-password/init
+  - POST /api/account/reset-password/finish
+  - POST /api/authorities
+  - GET /api/authorities
+  - GET /api/authorities/{id}
+  - DELETE /api/authorities/{id}
+  - POST /api/operations
+  - PUT /api/operations/{id}
+  - PATCH /api/operations/{id}
+  - GET /api/operations
+  - GET /api/operations/{id}
+  - DELETE /api/operations/{id}
+  - POST /api/labels
+  - PUT /api/labels/{id}
+  - PATCH /api/labels/{id}
+  - GET /api/labels
+  - GET /api/labels/{id}
+  - DELETE /api/labels/{id}
+  - GET /api/users
+  - POST /api/admin/users
+  - PUT /api/admin/users
+  - PUT /api/admin/users/{login}
+  - GET /api/admin/users
+  - GET /api/admin/users/{login}
+  - DELETE /api/admin/users/{login}
+injections:
+  - { from: io.github.jhipster.sample.web.rest.BankAccountResource, to: io.github.jhipster.sample.repository.BankAccountRepository, via: constructor }
+  - { from: io.github.jhipster.sample.web.rest.OperationResource, to: io.github.jhipster.sample.repository.OperationRepository, via: constructor }
+  - { from: io.github.jhipster.sample.web.rest.AuthorityResource, to: io.github.jhipster.sample.repository.AuthorityRepository, via: constructor }
+  - { from: io.github.jhipster.sample.web.rest.LabelResource, to: io.github.jhipster.sample.repository.LabelRepository, via: constructor }
+  - { from: io.github.jhipster.sample.web.rest.AuthenticateController, to: org.springframework.security.oauth2.jwt.JwtEncoder, via: constructor }
+  - { from: io.github.jhipster.sample.web.rest.AuthenticateController, to: org.springframework.security.config.annotation.authentication.builders.AuthenticationManagerBuilder, via: constructor }
+  - { from: io.github.jhipster.sample.web.rest.PublicUserResource, to: io.github.jhipster.sample.service.UserService, via: constructor }
+  - { from: io.github.jhipster.sample.web.rest.UserResource, to: io.github.jhipster.sample.service.UserService, via: constructor }
+  - { from: io.github.jhipster.sample.web.rest.UserResource, to: io.github.jhipster.sample.repository.UserRepository, via: constructor }
+  - { from: io.github.jhipster.sample.web.rest.UserResource, to: io.github.jhipster.sample.service.MailService, via: constructor }
+  - { from: io.github.jhipster.sample.service.UserService, to: io.github.jhipster.sample.repository.UserRepository, via: constructor }
+  - { from: io.github.jhipster.sample.service.UserService, to: io.github.jhipster.sample.repository.AuthorityRepository, via: constructor }
+  - { from: io.github.jhipster.sample.service.MailService, to: org.springframework.mail.javamail.JavaMailSender, via: constructor }

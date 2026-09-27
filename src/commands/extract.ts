@@ -17,7 +17,11 @@ import {
 } from '../toolchain/extractor-jar.js';
 import { findJava, MIN_JAVA_MAJOR } from '../toolchain/java.js';
 import { detectLanguages, LANGUAGES, type Language } from '../toolchain/languages.js';
-import { findTsExtractor, missingTsExtractorMessage } from '../toolchain/ts-extractor.js';
+import {
+  findMigrationsExtractor,
+  findTsExtractor,
+  missingTsExtractorMessage,
+} from '../toolchain/ts-extractor.js';
 import { summarise } from './ingest.js';
 
 export class ExtractError extends Error {
@@ -278,9 +282,17 @@ function spawnerFor(
   config: StratigraphConfig,
   env: NodeJS.ProcessEnv,
 ): SpawnExtractor {
-  return language === 'java'
-    ? javaSpawner(options, config.java.home, config.java.jar, env)
-    : typescriptSpawner();
+  if (language === 'java') return javaSpawner(options, config.java.home, config.java.jar, env);
+  return language === 'migrations' ? migrationsSpawner() : typescriptSpawner();
+}
+
+function migrationsSpawner(): SpawnExtractor {
+  const extractor = findMigrationsExtractor();
+  if (!extractor) throw new ExtractError(missingTsExtractorMessage());
+  return (_language, _repoPath, args) =>
+    spawn(process.execPath, [...extractor.nodeArgs, extractor.entry, ...args], {
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
 }
 
 function typescriptSpawner(): SpawnExtractor {

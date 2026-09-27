@@ -122,9 +122,11 @@ export function runCoverage(
     let found = 0;
     let read = 0;
     let testsParsed = 0;
+    // The migrations extractor reads migration-role files; the others, source.
+    const counted = language === 'migrations' ? 'migration' : 'source';
     for (const { path, role } of roles) {
       if (extractorFor(path) !== language) continue;
-      if (role === 'source') {
+      if (role === counted) {
         found += 1;
         if (parsed.has(path)) read += 1;
       } else if (role === 'test' && parsed.has(path)) {
@@ -144,7 +146,8 @@ export function runCoverage(
   }
 
   // The structural views leave test code out (ADR-0034), and say how much.
-  const structural = codeBasis(extractors, LANGUAGES);
+  const code: readonly Language[] = ['java', 'typescript'];
+  const structural = codeBasis(extractors, code);
   const tests = extractors.reduce((sum, entry) => sum + entry.testsParsed, 0);
   if (tests > 0) {
     structural.reasons = [
@@ -158,8 +161,8 @@ export function runCoverage(
     code: structural,
     cycles: structural,
     matrix: structural,
-    api: codeBasis(extractors, LANGUAGES),
-    data: dataBasis(db, runId, extractors),
+    api: codeBasis(extractors, code),
+    data: dataBasis(extractors),
     hotspots: historyBasis(db, runId, 'complexity'),
     coupling: historyBasis(db, runId, 'history'),
   };
@@ -172,31 +175,23 @@ export function runCoverage(
 function codeBasis(extractors: ExtractorCoverage[], languages: readonly Language[]): Basis {
   const relevant = extractors.filter((entry) => languages.includes(entry.language));
   return {
-    unit: 'main source files parsed',
+    unit: languages.includes('migrations') ? 'main source and migration files parsed' : 'main source files parsed',
     numerator: relevant.reduce((sum, entry) => sum + entry.parsed, 0),
     denominator: relevant.reduce((sum, entry) => sum + entry.found, 0),
     reasons: relevant.filter((entry) => entry.found > 0).map(describeExtractor),
-    empty:
-      languages.length === 1 && languages[0] === 'java'
-        ? 'The repository has no Java or Kotlin source files, so there is no JPA mapping to read.'
-        : 'The repository has no Java, Kotlin or TypeScript source files to parse.',
+    empty: languages.includes('migrations')
+      ? 'The repository has no Java or Kotlin sources and no migrations, so there is no data model to read.'
+      : 'The repository has no Java, Kotlin or TypeScript source files to parse.',
   };
 }
 
-function dataBasis(db: Db, runId: number, extractors: ExtractorCoverage[]): Basis {
-  const basis = codeBasis(extractors, ['java']);
-  const migrations = count(
-    db,
-    `SELECT COUNT(*) AS n FROM file_role WHERE run_id = ? AND role = 'migration'`,
-    runId,
-  );
-  if (migrations > 0) {
-    basis.reasons.push(
-      `${fmt(migrations)} migration file(s) are not read yet — this is the model the JPA ` +
-        'mappings declare, not the schema the migrations create.',
-    );
-  }
-  return basis;
+/**
+ * The data model is the JPA mapping and the schema the migrations create
+ * (ADR-0037), so both count: a repository whose Java half was never read has a
+ * data model only as good as its migrations.
+ */
+function dataBasis(extractors: ExtractorCoverage[]): Basis {
+  return codeBasis(extractors, ['java', 'migrations']);
 }
 
 function historyBasis(db: Db, runId: number, what: 'complexity' | 'history'): Basis {
@@ -267,7 +262,8 @@ function judge(view: ViewId, basis: Basis, inventory: number, threshold: number)
 }
 
 function describeExtractor(entry: ExtractorCoverage): string {
-  const head = `${label(entry.language)}: ${fmt(entry.parsed)} of ${fmt(entry.found)} main source files parsed`;
+  const kind = entry.language === 'migrations' ? 'migration files' : 'main source files';
+  const head = `${label(entry.language)}: ${fmt(entry.parsed)} of ${fmt(entry.found)} ${kind} parsed`;
   switch (entry.status) {
     case 'skipped':
       return `${head} — the ${entry.language} extractor did not run: ${firstLine(entry.reason)}`;
@@ -281,7 +277,7 @@ function describeExtractor(entry: ExtractorCoverage): string {
 }
 
 function label(language: Language): string {
-  return language === 'java' ? 'Java/Kotlin' : 'TypeScript';
+  return language === 'java' ? 'Java/Kotlin' : language === 'migrations' ? 'Migrations' : 'TypeScript';
 }
 
 function firstLine(text: string | null): string {

@@ -23,6 +23,7 @@ export type NodeKind =
   | 'field'
   | 'endpoint'
   | 'table'
+  | 'column'
   | 'component'
   | 'service'
   | 'route';
@@ -40,7 +41,8 @@ export type EdgeKind =
   | 'http_calls'
   | 'handles'
   | 'imports'
-  | 'declares_route';
+  | 'declares_route'
+  | 'references';
 
 export type Confidence = 'fact' | 'inferred';
 

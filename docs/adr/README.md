@@ -44,6 +44,7 @@ the code when it is incidental. Either way, before the commit.
 | [0034](0034-test-code-is-not-architecture.md) | Test code is left out of every structural aggregate, and counted | accepted |
 | [0035](0035-quality-is-measured.md) | Quality is scored by `bench` against ground truth labelled without the tool | accepted |
 | [0036](0036-the-data-model-as-jpa-maps-it.md) | Tables by the module's JPA naming strategy and inheritance; repositories, @Query and JDBC SQL read and write tables | accepted |
+| [0037](0037-the-schema-as-migrations-define-it.md) | A migrations extractor reads Liquibase/Flyway/DDL; the ER model overlays schema and mapping; drift is a finding | accepted |
 
 Format: context, decision, alternatives considered (with why each was rejected),
 consequences — including the costs, not only the benefits.

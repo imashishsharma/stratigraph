@@ -1,0 +1,85 @@
+name: analog
+sha: 40cc8b45586549ff95679eef245901122613acd3
+labelledBy: >
+  Labelled by reading the checked-out worktree directly with git/grep/ls and Read
+  (no stratigraph, no .stratigraph/, no tool source). analog is an Nx/pnpm
+  monorepo with 0 Java files (confirmed via corpus.yaml and `git ls-files`), so
+  entities/tables/endpoints are omitted entirely — there is no JPA/DB backend.
+  containers were determined by reading every project.json's "projectType" field
+  and, for the "application" ones, checking whether the project has real
+  build/serve targets vs. being an e2e-test-only harness (the five *-e2e projects
+  are projectType:application but only run playwright/lint, so they are excluded
+  as non-deployables). injections were found by grepping every @Injectable/
+  @Component/@Directive class for inject()/constructor-parameter use and manually
+  tracing each injected symbol back to its declaring file; the framework
+  overwhelmingly uses inject() inside plain functions (route loaders, server
+  functions, interceptors) rather than inside decorated classes, and favors
+  InjectionTokens over injectable classes for its own extension points, so
+  genuine class-to-class DI edges are naturally sparse — I found 9, two of which
+  target an InjectionToken constant (CONTENT_LOCALE) rather than a class,
+  flagged inline. riskyFiles is a full commit-file tally (not a sample) over
+  git log --no-merges --since=2025-09-26 --until=2026-09-26T16:04:36Z (12 months
+  before the pinned commit's author date), dropping the 10 commits that touched
+  >50 files (these are release-automation commits that bump every package.json's
+  version in lockstep and are pure noise, not risk signal); versions.ts constant
+  files under packages/*/versions/ were also excluded even though some have
+  hundreds of touches, because they are pure auto-bumped version-pin tables with
+  no logic. roles is a sample of 26 files, not exhaustive; no vendored code or
+  migration files were found anywhere in the repo.
+roles:
+  - { path: package.json, role: manifest }
+  - { path: apps/analog-app/project.json, role: manifest }
+  - { path: nx.json, role: manifest }
+  - { path: pnpm-workspace.yaml, role: manifest }
+  - { path: tsconfig.base.json, role: manifest }
+  - { path: pnpm-lock.yaml, role: lockfile }
+  - { path: eslint.config.mjs, role: config }
+  - { path: commitlint.config.cjs, role: config }
+  - { path: .coderabbit.yaml, role: config }
+  - { path: zerops.yaml, role: config }
+  - { path: apps/analog-app/vite.config.ts, role: config }
+  - { path: .editorconfig, role: config }
+  - { path: apps/analog-app/src/app/app.component.ts, role: source }
+  - { path: packages/router/src/lib/route-config.ts, role: source }
+  - { path: packages/nx-plugin/src/generators/app/files/template-angular/src/main.server.ts__template__, role: source }
+  - { path: apps/analog-app/src/app/app.component.spec.ts, role: test }
+  - { path: apps/analog-app-e2e/tests/app.spec.ts, role: test }
+  - { path: "apps/analog-app/src/app/pages/products.[productId].page.spec.ts", role: test }
+  - { path: libs/card/src/lib/autocomplete/__snapshots__/autocomplete.component.spec.ts.snap, role: generated }
+  - { path: CHANGELOG.md, role: generated }
+  - { path: README.md, role: docs }
+  - { path: CONTRIBUTING.md, role: docs }
+  - { path: docs/rebuild-docs-app-plan.md, role: docs }
+  - { path: apps/analog-app/favicon.ico, role: asset }
+  - { path: apps/analog-app/src/stories/assets/accessibility.png, role: asset }
+  - { path: apps/analog-app/src/public/assets/shipping.json, role: asset }
+  - { path: LICENSE, role: other }
+containers:
+  - { name: analog-app, kind: angular-app, path: apps/analog-app }
+  - { name: astro-app, kind: angular-app, path: apps/astro-app }
+  - { name: blog-app, kind: angular-app, path: apps/blog-app }
+  - { name: docs-analog, kind: angular-app, path: apps/docs-analog }
+  - { name: opt-catchall-app, kind: angular-app, path: apps/opt-catchall-app }
+  - { name: streaming-app, kind: angular-app, path: apps/streaming-app }
+  - { name: trpc-app, kind: angular-app, path: apps/trpc-app }
+injections:
+  - { from: "packages/content/src/lib/markdown-route.component.ts#AnalogMarkdownRouteComponent", to: "packages/content/src/lib/content-renderer.ts#ContentRenderer" }
+  - { from: "packages/content/src/lib/markdown.component.ts#AnalogMarkdownComponent", to: "packages/content/src/lib/content-renderer.ts#ContentRenderer" }
+  - { from: "packages/content/src/lib/markdown-content-renderer.service.ts#MarkdownContentRendererService", to: "packages/content/src/lib/marked-setup.service.ts#MarkedSetupService" }
+  - { from: "apps/analog-app/src/app/pages/cart.page.ts#CartComponent", to: "apps/analog-app/src/app/cart.service.ts#CartService" }
+  - { from: "apps/analog-app/src/app/pages/products.[productId].page.ts#ProductDetailsComponent", to: "apps/analog-app/src/app/cart.service.ts#CartService" }
+  - { from: "apps/analog-app/src/app/pages/shipping/index.page.ts#ShippingComponent", to: "apps/analog-app/src/app/pages/shipping/shipping-service.ts#ShippingService" }
+  - { from: "apps/docs-analog/src/app/pages/docs/[[...slug]].page.ts#DocPage", to: "apps/docs-analog/src/app/seo.ts#DocSeo" }
+  - { from: "apps/docs-analog/src/app/docs/components/locale-picker.ts#LocalePicker", to: "packages/content/src/lib/content-locale.ts#CONTENT_LOCALE" }
+  - { from: "apps/docs-analog/src/app/docs/components/copy-page.ts#CopyPage", to: "packages/content/src/lib/content-locale.ts#CONTENT_LOCALE" }
+riskyFiles:
+  - packages/vite-plugin-angular/src/lib/angular-vite-plugin.ts
+  - packages/vite-plugin-angular/src/lib/fast-compile-plugin.ts
+  - packages/storybook-angular/src/lib/preset.ts
+  - packages/vite-plugin-angular/src/lib/compiler/compile.ts
+  - packages/platform/src/lib/platform-plugin.ts
+  - packages/vite-plugin-angular/src/lib/utils/virtual-resources.ts
+  - packages/vite-plugin-angular/src/lib/angular-vitest-plugin.ts
+  - packages/vite-plugin-nitro/src/lib/vite-plugin-nitro.ts
+  - packages/vite-plugin-angular/src/lib/compiler/metadata.ts
+  - packages/vite-plugin-angular/src/lib/angular-jit-plugin.ts

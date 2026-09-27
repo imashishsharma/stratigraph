@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog">
+    <!-- The order here is the order the schema is built in. -->
+    <include file="config/liquibase/changelog/00000000000000_initial_schema.xml" relativeToChangelogFile="false"/>
+    <include file="changelog/20240101_added_entity_Owner.yaml" relativeToChangelogFile="true"/>
+    <include file="changelog/20240201_rename_and_drop.xml" relativeToChangelogFile="true"/>
+</databaseChangeLog>

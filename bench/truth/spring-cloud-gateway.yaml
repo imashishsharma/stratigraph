@@ -1,0 +1,94 @@
+name: spring-cloud-gateway
+sha: 88a92c065767a20a5d37753437d15975a8c06c28
+labelledBy: >
+  Labelled by reading the checkout directly at the pinned sha with `git ls-files`,
+  targeted grep for annotations, and reading individual files to confirm class
+  bodies. Correction to the corpus.yaml `why` note: at this pin the repo builds
+  with Maven (root pom.xml, mvnw, <modules>), not Gradle -- no build.gradle/
+  settings.gradle file exists anywhere in the tree. containers: the
+  spring-cloud-gateway-server(-webflux|-webmvc) and proxyexchange-webflux/webmvc
+  modules are libraries/starters with no main class in src/main; every
+  @SpringBootApplication hit found by grep is in test source only (excluded per
+  "test code is not architecture"). The 5 containers listed instead use the split
+  @SpringBootConfiguration + @EnableAutoConfiguration + public static void main
+  pattern (functionally the same as @SpringBootApplication minus component-scan),
+  each its own Maven module with its own artifactId: the sample app plus four
+  spring-cloud-gateway-integration-tests/* harness apps (mvc-failure-analyzer,
+  httpclient, http2, grpc) -- grpc has no REST controller of its own. No JPA
+  entities, database schema or migration files exist anywhere in the repo (this
+  is a stateless reactive gateway) -- entities/tables omitted. endpoints: found by
+  grepping every @RestController/@Controller/@RequestMapping in non-test main
+  source repo-wide; the two GatewayControllerEndpoint classes under
+  server-webflux/.../actuate are @RestControllerEndpoint (Spring Boot actuator
+  operations) and are excluded as out-of-scope per the task spec; gateway routing
+  itself (RouteLocator/GatewayFilterFactory/predicates) is a separate
+  non-HTTP-mapping-annotation mechanism and is not counted as "endpoints" either.
+  The result is a short, exhaustive list of 4 real endpoints, all in
+  integration-test sample apps, not the library itself -- this is an intentional
+  outcome of the repo's shape, not a labelling shortfall. injections is a sample
+  of DI edges into the library's GlobalFilter implementations (server-webflux).
+  riskyFiles: git log --no-merges over the 12 months before the pinned commit's
+  2026-09-24 date, dropping >50-file commits, weighted by fix-like messages then
+  file size; one file's history is split across a mid-window module rename
+  (spring-cloud-gateway-server-mvc -> spring-cloud-gateway-server-webmvc) and was
+  manually merged onto its current path (confirmed the old path no longer exists
+  at HEAD).
+roles:
+  - { path: pom.xml, role: manifest }
+  - { path: mvnw, role: manifest }
+  - { path: .mvn/wrapper/maven-wrapper.properties, role: manifest }
+  - { path: .mvn/wrapper/maven-wrapper.jar, role: vendored }
+  - { path: spring-cloud-gateway-sample/pom.xml, role: manifest }
+  - { path: spring-cloud-gateway-server-webflux/src/main/java/org/springframework/cloud/gateway/filter/NettyRoutingFilter.java, role: source }
+  - { path: spring-cloud-gateway-server-webflux/src/main/java/org/springframework/cloud/gateway/actuate/GatewayControllerEndpoint.java, role: source }
+  - { path: spring-cloud-gateway-integration-tests/http2/src/main/java/org/springframework/cloud/gateway/tests/http2/Http2Application.java, role: source }
+  - { path: spring-cloud-gateway-server-webflux/src/main/kotlin/org/springframework/cloud/gateway/route/builder/RouteDsl.kt, role: source }
+  - { path: spring-cloud-gateway-sample/src/main/kotlin/org/springframework/cloud/gateway/sample/AdditionalRoutes.kt, role: source }
+  - { path: spring-cloud-gateway-server-webflux/src/test/java/org/springframework/cloud/gateway/filter/NettyRoutingFilterTests.java, role: test }
+  - { path: spring-cloud-gateway-server-webflux/src/test/kotlin/org/springframework/cloud/gateway/route/builder/RouteDslTests.kt, role: test }
+  - { path: spring-cloud-gateway-server-webmvc/src/test/resources/application-lb.yml, role: config }
+  - { path: spring-cloud-gateway-sample/src/main/resources/application.yml, role: config }
+  - { path: spring-cloud-gateway-integration-tests/http2/src/main/resources/application.yml, role: config }
+  - { path: .mvn/maven.config, role: config }
+  - { path: .sdkmanrc, role: config }
+  - { path: docs/antora.yml, role: docs }
+  - { path: docs/modules/ROOT/pages/intro.adoc, role: docs }
+  - { path: docs/modules/ROOT/pages/spring-cloud-gateway-server-webflux/gatewayfilter-factories/retry-factory.adoc, role: docs }
+  - { path: .github/CONTRIBUTING.md, role: docs }
+  - { path: docs/modules/ROOT/assets/images/spring_cloud_gateway_diagram.png, role: asset }
+  - { path: docs/modules/ROOT/assets/images/gateway-grafana-dashboard.jpeg, role: asset }
+  - { path: .github/workflows/ci.yaml, role: config }
+  - { path: .github/dependabot.yml, role: config }
+  - { path: .gitignore, role: other }
+containers:
+  - { name: spring-cloud-gateway-sample, kind: spring-boot, path: spring-cloud-gateway-sample }
+  - { name: mvc-failure-analyzer, kind: spring-boot, path: spring-cloud-gateway-integration-tests/mvc-failure-analyzer }
+  - { name: httpclient, kind: spring-boot, path: spring-cloud-gateway-integration-tests/httpclient }
+  - { name: http2, kind: spring-boot, path: spring-cloud-gateway-integration-tests/http2 }
+  - { name: grpc, kind: spring-boot, path: spring-cloud-gateway-integration-tests/grpc }
+endpoints:
+  - GET /hello
+  - GET /do/frameworkretry
+  - GET /do/retry
+injections:
+  - { from: org.springframework.cloud.gateway.filter.NettyRoutingFilter, to: reactor.netty.http.client.HttpClient, via: constructor }
+  - { from: org.springframework.cloud.gateway.filter.NettyRoutingFilter, to: org.springframework.cloud.gateway.config.HttpClientProperties, via: constructor }
+  - { from: org.springframework.cloud.gateway.filter.GatewayMetricsFilter, to: io.micrometer.core.instrument.MeterRegistry, via: constructor }
+  - { from: org.springframework.cloud.gateway.filter.WebsocketRoutingFilter, to: org.springframework.web.reactive.socket.client.WebSocketClient, via: constructor }
+  - { from: org.springframework.cloud.gateway.filter.WebsocketRoutingFilter, to: org.springframework.web.reactive.socket.server.WebSocketService, via: constructor }
+  - { from: org.springframework.cloud.gateway.filter.LoadBalancerServiceInstanceCookieFilter, to: org.springframework.cloud.client.loadbalancer.reactive.ReactiveLoadBalancer.Factory, via: constructor }
+  - { from: org.springframework.cloud.gateway.filter.ReactiveLoadBalancerClientFilter, to: org.springframework.cloud.loadbalancer.support.LoadBalancerClientFactory, via: constructor }
+  - { from: org.springframework.cloud.gateway.filter.ReactiveLoadBalancerClientFilter, to: org.springframework.cloud.gateway.config.GatewayLoadBalancerProperties, via: constructor }
+  - { from: org.springframework.cloud.gateway.tests.httpclient.HttpClientApplication.RetryController, to: java.util.concurrent.ConcurrentHashMap, via: field }
+  - { from: org.springframework.cloud.gateway.sample.GatewaySampleApplication, to: org.springframework.cloud.gateway.route.builder.RouteLocatorBuilder, via: field }
+riskyFiles:
+  - spring-cloud-gateway-server-webmvc/src/main/java/org/springframework/cloud/gateway/server/mvc/filter/ForwardedRequestHeadersFilter.java
+  - spring-cloud-gateway-server-webflux/src/main/java/org/springframework/cloud/gateway/route/builder/GatewayFilterSpec.java
+  - spring-cloud-gateway-server-webmvc/src/main/java/org/springframework/cloud/gateway/server/mvc/filter/RetryFilterFunctions.java
+  - spring-cloud-gateway-server-webflux/src/main/java/org/springframework/cloud/gateway/filter/factory/rewrite/ModifyResponseBodyGatewayFilterFactory.java
+  - spring-cloud-gateway-server-webmvc/src/main/java/org/springframework/cloud/gateway/server/mvc/filter/LoadBalancerFilterFunctions.java
+  - spring-cloud-gateway-server-webmvc/src/main/java/org/springframework/cloud/gateway/server/mvc/common/MvcUtils.java
+  - spring-cloud-gateway-server-webmvc/src/main/java/org/springframework/cloud/gateway/server/mvc/filter/Bucket4jFilterFunctions.java
+  - spring-cloud-gateway-server-webflux/src/main/java/org/springframework/cloud/gateway/filter/FunctionRoutingFilter.java
+  - spring-cloud-gateway-server-webflux/src/main/java/org/springframework/cloud/gateway/filter/factory/rewrite/ModifyRequestBodyGatewayFilterFactory.java
+  - spring-cloud-gateway-server-webmvc/src/main/java/org/springframework/cloud/gateway/server/mvc/predicate/GatewayRequestPredicates.java

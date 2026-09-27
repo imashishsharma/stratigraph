@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog">
+    <changeSet id="00000000000001" author="fixture">
+        <createTable tableName="app_user">
+            <column name="id" type="bigint">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="login" type="varchar(50)">
+                <constraints unique="true" nullable="false"/>
+            </column>
+        </createTable>
+        <createTable tableName="authority">
+            <column name="name" type="varchar(50)">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+        </createTable>
+        <createTable tableName="user_authority">
+            <column name="user_id" type="bigint">
+                <constraints nullable="false" references="app_user(id)" foreignKeyName="fk_user"/>
+            </column>
+            <column name="authority_name" type="varchar(50)"/>
+        </createTable>
+        <addForeignKeyConstraint baseTableName="user_authority" baseColumnNames="authority_name"
+                                 constraintName="fk_authority_name"
+                                 referencedTableName="authority" referencedColumnNames="name"/>
+        <createTable tableName="scratch">
+            <column name="id" type="bigint"/>
+        </createTable>
+    </changeSet>
+</databaseChangeLog>

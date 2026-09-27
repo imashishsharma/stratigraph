@@ -27,6 +27,7 @@ const AUTHOR_RANK: Record<string, number> = { algorithm: 0, model: 1 };
  */
 const RULE_TITLES: Record<string, string> = {
   'package-cycle': 'Package cycle',
+  'schema-drift': 'Mapping and migrations disagree',
   'intent-mismatch': 'Name and edges disagree',
   'logical-coupling': 'Changes together, with no dependency',
   hotspot: 'Hotspot — recent change × complexity',

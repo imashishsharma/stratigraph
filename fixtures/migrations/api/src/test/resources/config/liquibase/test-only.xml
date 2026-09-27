@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog">
+    <changeSet id="t1" author="fixture">
+        <createTable tableName="test_only_table">
+            <column name="id" type="bigint"/>
+        </createTable>
+    </changeSet>
+</databaseChangeLog>

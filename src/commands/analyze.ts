@@ -13,6 +13,7 @@ import {
   type CouplingStats,
 } from '../analysis/coupling.js';
 import { detectPackageCycles, type CycleFinding } from '../analysis/cycles.js';
+import { detectSchemaDrift, type SchemaDrift } from '../analysis/schema-drift.js';
 import { recordHistoryFindings, type RecordedFindings } from '../analysis/history-findings.js';
 import { linkHttpCalls, summariseLinks, type LinkResult } from '../analysis/http-links.js';
 import { recordRxjsFindings, summariseRxjs, type RxjsFindings } from '../analysis/rxjs-findings.js';
@@ -91,6 +92,8 @@ export interface AnalyzeResult {
   links: LinkResult | null;
   /** Layer 4: subscriptions with no way to unsubscribe. Null when none were looked for. */
   rxjs: RxjsFindings | null;
+  /** The mapping against the migrations (ADR-0037); null before it ran. */
+  schemaDrift: SchemaDrift | null;
   /**
    * Whether this run has any extracted dependency to have checked against.
    *
@@ -174,6 +177,7 @@ export async function runAnalyze(options: AnalyzeOptions): Promise<AnalyzeResult
       findings: null,
       links: null,
       rxjs: null,
+      schemaDrift: null,
       staticGraph: countDependencyEdges(db, runId) > 0,
     };
 
@@ -198,6 +202,16 @@ export async function runAnalyze(options: AnalyzeOptions): Promise<AnalyzeResult
     // and "nothing can unsubscribe from this" is a judgement over three pieces
     // of syntax. Judgements are findings, with citations.
     result.rxjs = recordRxjsFindings(db, runId);
+
+    // ADR-0037: the mapping against the migrations, when both were read.
+    result.schemaDrift = detectSchemaDrift(db, runId);
+    if (result.schemaDrift.compared) {
+      info(
+        `run ${runId}: schema drift — ${result.schemaDrift.unbackedColumns} mapped column(s) and ` +
+          `${result.schemaDrift.unmigratedTables} mapped table(s) no migration creates, ` +
+          `${result.schemaDrift.unmappedTables} migrated table(s) no class maps`,
+      );
+    }
     const rxjsLine = summariseRxjs(result.rxjs);
     if (rxjsLine !== null) info(`run ${runId}: ${rxjsLine}`);
 

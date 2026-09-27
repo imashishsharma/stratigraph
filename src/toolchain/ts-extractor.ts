@@ -44,6 +44,15 @@ export function findTsExtractor(root = packageRoot()): TsExtractor | null {
   return null;
 }
 
+/** The migrations extractor ships in the same build, as a second entry point (ADR-0037). */
+export function findMigrationsExtractor(root = packageRoot()): TsExtractor | null {
+  const built = join(root, 'dist', 'extractors', 'typescript', 'migrations', 'main.js');
+  if (existsSync(built)) return { nodeArgs: [], entry: built, source: 'built' };
+  const fromSource = join(root, 'extractors', 'typescript', 'src', 'migrations', 'main.ts');
+  if (existsSync(fromSource)) return { nodeArgs: ['--import', 'tsx'], entry: fromSource, source: 'source' };
+  return null;
+}
+
 export function missingTsExtractorMessage(root = packageRoot()): string {
   return [
     'the TypeScript extractor was not found. Looked at:',

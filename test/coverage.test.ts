@@ -51,6 +51,14 @@ describe('runCoverage', () => {
     const { db, runId } = noJdk();
     expect(runCoverage(db, runId).extractors).toEqual([
       {
+        language: 'migrations',
+        status: 'unrecorded',
+        reason: null,
+        found: 1,
+        parsed: 0,
+        testsParsed: 0,
+      },
+      {
         language: 'java',
         status: 'skipped',
         reason: 'no JDK found. The Java extractor needs a JDK 17+.\nmore',
@@ -83,11 +91,21 @@ describe('runCoverage', () => {
     ]);
   });
 
-  it('takes the data model from the Java side only, and names unread migrations', () => {
+  it('takes the data model from the JPA mapping and the migrations together', () => {
     const { db, runId } = noJdk();
     const data = runCoverage(db, runId).views.data;
-    expect(data).toMatchObject({ numerator: 0, denominator: 3, ratio: 0, withheld: true });
-    expect(data.reasons.at(-1)).toMatch(/^1 migration file\(s\) are not read yet/);
+    expect(data).toMatchObject({
+      unit: 'main source and migration files parsed',
+      numerator: 0,
+      denominator: 4,
+      ratio: 0,
+      withheld: true,
+    });
+    expect(data.reasons).toEqual([
+      'Migrations: 0 of 1 migration files parsed — no migrations extractor is recorded for this run',
+      'Java/Kotlin: 0 of 3 main source files parsed — the java extractor did not run: ' +
+        'no JDK found. The Java extractor needs a JDK 17+.',
+    ]);
   });
 
   it('lets a per-view threshold override the default', () => {

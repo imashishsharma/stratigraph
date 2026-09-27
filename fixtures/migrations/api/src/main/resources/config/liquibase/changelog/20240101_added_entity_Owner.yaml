@@ -1,0 +1,24 @@
+databaseChangeLog:
+  - changeSet:
+      id: 20240101-1
+      author: fixture
+      changes:
+        - createTable:
+            tableName: owner
+            columns:
+              - column:
+                  name: id
+                  type: bigint
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: first_name
+                  type: varchar(255)
+              - column:
+                  name: user_id
+                  type: bigint
+                  constraints:
+                    referencedTableName: app_user
+                    referencedColumnNames: id
+                    foreignKeyName: fk_owner_user

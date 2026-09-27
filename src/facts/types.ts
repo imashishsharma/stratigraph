@@ -21,6 +21,7 @@ export const NODE_KINDS = [
   'field',
   'endpoint', // an HTTP route served by the backend
   'table', // a database table
+  'column', // a table column, as a migration or DDL creates it (ADR-0037)
   'component', // angular component
   'service', // angular/spring injectable service
   'route', // angular route
@@ -44,6 +45,8 @@ export const EDGE_KINDS = [
   'handles', // a method handles an endpoint
   'imports',
   'declares_route',
+  // A foreign key: a column (or table) referencing another table (ADR-0037).
+  'references',
 ] as const;
 export type EdgeKind = (typeof EDGE_KINDS)[number];
 
