@@ -51,9 +51,9 @@ function facts(lines: string[]): Fact[] {
 }
 
 describe('the TypeScript extractor', () => {
-  it('emits exactly the expected facts for tiny-angular', async () => {
-    const actual = await extract('tiny-angular');
-    const golden = join(FIXTURES, 'tiny-angular', 'expected-facts.ndjson');
+  it.each(['tiny-angular', 'angular-workspace'])('emits exactly the expected facts for %s', async (fixture) => {
+    const actual = await extract(fixture);
+    const golden = join(FIXTURES, fixture, 'expected-facts.ndjson');
 
     if (process.env['UPDATE_GOLDENS'] === '1') {
       writeFileSync(golden, `${actual.join('\n')}\n`);
@@ -210,5 +210,84 @@ describe('the TypeScript extractor reads Angular', () => {
     ]);
     // The endpoint that serves it is the linker's inference, not a fact here.
     expect(all.some((f) => f.type === 'node' && f.kind === 'endpoint')).toBe(false);
+  });
+});
+
+describe('Angular structure and service calls (ADR-0040, ADR-0042)', () => {
+  let parsed: Fact[] | undefined;
+  async function load(): Promise<Fact[]> {
+    parsed ??= facts(await extract('angular-workspace'));
+    return parsed;
+  }
+  const nodes = async (kind: string): Promise<NodeFact[]> =>
+    (await load()).filter((f): f is NodeFact => f.type === 'node' && f.kind === kind);
+  const calls = async (): Promise<EdgeFact[]> =>
+    (await load()).filter((f): f is EdgeFact => f.type === 'edge' && f.kind === 'calls');
+
+  it('groups files by project root, NgModule and lazy route — not by directory', async () => {
+    const packages = await nodes('package');
+    expect(packages.map((p) => p.fqn).sort()).toEqual([
+      'projects/shop',
+      'projects/shop/src/app/admin',
+      'projects/shop/src/app/orders',
+      'projects/ui-kit',
+    ]);
+    // A component two directories below its NgModule belongs to the NgModule's package.
+    const list = (await nodes('class')).find((n) => n.name === 'OrderListComponent');
+    expect(list?.parent?.fqn).toBe('projects/shop/src/app/orders');
+    // Every boundary cites what made it one.
+    const orders = packages.find((p) => p.fqn === 'projects/shop/src/app/orders');
+    expect(orders?.attrs?.['boundaries']).toEqual([
+      { kind: 'lazy-route', file: 'projects/shop/src/app/app.routes.ts', line: 6 },
+      { kind: 'ngmodule', file: 'projects/shop/src/app/orders/orders.module.ts', line: 5 },
+    ]);
+  });
+
+  it('proves an application deployable from angular.json, and lets project.json win a disagreement', async () => {
+    const modules = await nodes('module');
+    const shop = modules.find((m) => m.fqn === 'shop');
+    expect(shop?.attrs).toMatchObject({
+      deployable: 'angular-app',
+      deployableFile: 'angular.json',
+      deployableLine: 6,
+    });
+    const kit = modules.find((m) => m.fqn === '@shop/ui-kit');
+    expect(kit?.attrs?.['projectType']).toBe('library');
+    expect(kit?.attrs?.['deployable']).toBeUndefined();
+    const warned = (await load()).some(
+      (f) => f.type === 'diagnostic' && f.level === 'warn' && f.message.includes('"ui-kit"'),
+    );
+    expect(warned).toBe(true);
+  });
+
+  it('draws a calls edge only where the checker names a class method in the repo', async () => {
+    const edges = await calls();
+    expect(edges.map((e) => `${e.src.fqn} -> ${e.dst.fqn} @${e.line}`)).toEqual([
+      'projects/shop/src/app/orders/list/order-list.component:OrderListComponent#constructor() -> ' +
+        'projects/shop/src/app/orders/order.service:OrderService#total() @13',
+      // Through the `@shop/ui-kit` barrel, to the declaration.
+      'projects/shop/src/app/orders/order.service:OrderService#total() -> ' +
+        'projects/ui-kit/src/lib/format.service:FormatService#money() @14',
+      'projects/shop/src/app/orders/order.service:OrderService#record() -> ' +
+        'projects/shop/src/app/orders/order.service:OrderService#total() @18',
+    ]);
+    // `sink.write(...)` is an interface member, and `this.clock.now()` has a
+    // receiver typed by an uninstalled `inject()`: neither is a fact about
+    // which method runs, so neither is an edge.
+    expect(edges.some((e) => e.dst.fqn.includes('Sink'))).toBe(false);
+    expect(edges.some((e) => e.dst.fqn.includes('ClockService'))).toBe(false);
+  });
+
+  it('keeps directory packages in a repository with no Angular in it', async () => {
+    // The Angular-free fixture: this repository's own extractor sources.
+    const stdout: string[] = [];
+    const status = await run(['--repo', resolve(import.meta.dirname, '..', 'extractors', 'typescript')], {
+      stdout: { write: (line) => stdout.push(line) },
+      stderr: { write: () => undefined },
+    });
+    expect(status).toBe(0);
+    const packages = facts(stdout).filter((f): f is NodeFact => f.type === 'node' && f.kind === 'package');
+    expect(packages.map((p) => p.fqn)).toEqual(['src']);
+    expect(packages[0]?.attrs).toBeUndefined();
   });
 });

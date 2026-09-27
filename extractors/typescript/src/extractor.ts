@@ -5,9 +5,10 @@ import ts from 'typescript';
 
 import { AngularFacts, loadTemplateParser, type HttpCall, type Subscribe } from './angular.js';
 import { countLines, moduleOf, type Discovery } from './discovery.js';
-import { directoryOf, fieldFqn, methodFqn, modulePath, typeFqn } from './fqn.js';
+import { fieldFqn, methodFqn, modulePath, typeFqn } from './fqn.js';
 import { createProgram, Resolver } from './program.js';
 import type { FactEmitter, NodeKind, NodeRef } from './protocol.js';
+import { PackageStructure } from './structure.js';
 
 /**
  * The walk that turns a parsed source set into facts.
@@ -22,6 +23,7 @@ export class TypeScriptExtractor {
   private readonly program: ts.Program;
   private readonly resolver: Resolver;
   private readonly angular: AngularFacts;
+  private readonly structure: PackageStructure;
 
   constructor(
     private readonly repoRoot: string,
@@ -31,6 +33,7 @@ export class TypeScriptExtractor {
     this.program = createProgram(repoRoot, discovery);
     this.resolver = new Resolver(repoRoot, this.program, discovery);
     this.angular = new AngularFacts(repoRoot, this.emitter, this.resolver);
+    this.structure = new PackageStructure(repoRoot, this.program, this.resolver, discovery);
   }
 
   async run(): Promise<void> {
@@ -39,6 +42,9 @@ export class TypeScriptExtractor {
     }
     for (const path of this.discovery.templates) {
       this.emitter.file(path, 'html', countLines(join(this.repoRoot, path)));
+    }
+    for (const diagnostic of this.discovery.diagnostics) {
+      this.emitter.diagnostic(diagnostic.level, diagnostic.message, diagnostic.file, diagnostic.line);
     }
 
     for (const path of this.discovery.sources) {
@@ -92,19 +98,25 @@ export class TypeScriptExtractor {
     }
   }
 
-  /** The `module` and `package` nodes a file belongs to. Emitted once each. */
+  /**
+   * The `module` and `package` nodes a file belongs to. Emitted once each.
+   *
+   * The package is the file's directory, or in an Angular workspace its
+   * nearest structural boundary (ADR-0042).
+   */
   private ensurePackage(path: string): string {
     const module = moduleOf(this.discovery, path);
-    this.emitter.node({ kind: 'module', fqn: module.fqn, name: module.name });
+    this.emitter.node({ kind: 'module', fqn: module.id.fqn, name: module.id.name, attrs: module.attrs });
 
-    const directory = directoryOf(path);
+    const pkg = this.structure.packageOf(path);
     this.emitter.node({
       kind: 'package',
-      fqn: directory,
-      name: directory === '.' ? '.' : (directory.split('/').pop() ?? directory),
-      parent: { kind: 'module', fqn: module.fqn },
+      fqn: pkg.fqn,
+      name: pkg.name,
+      parent: { kind: 'module', fqn: module.id.fqn },
+      ...(pkg.attrs === undefined ? {} : { attrs: pkg.attrs }),
     });
-    return directory;
+    return pkg.fqn;
   }
 
   /**
@@ -299,6 +311,7 @@ export class TypeScriptExtractor {
       endLine: endLineOf(source, declaration),
       ...attrsOf(modifiersOf(declaration), returnsOf(declaration), this.callSites(source, declaration)),
     });
+    this.emitCalls(path, source, { kind: 'method', fqn }, declaration);
     // A functional route guard or resolver injects without a class to hang the
     // edge off. Standalone Angular writes a great deal of DI this way.
     this.angular.emitInjectCalls(path, source, { kind: 'method', fqn }, declaration);
@@ -344,6 +357,9 @@ export class TypeScriptExtractor {
         startLine: lineOf(source, statement),
         ...attrsOf(modifiersOf(statement), typeTextOf(declaration.type)),
       });
+      if (declaration.initializer !== undefined) {
+        this.emitCalls(path, source, { kind: 'field', fqn }, declaration.initializer);
+      }
 
       // Recognised by the annotated type rather than by the binding's name, so
       // `appRoutes`, `ROUTES` and `routes` are all found.
@@ -434,6 +450,7 @@ export class TypeScriptExtractor {
           startLine: line,
           ...attrsOf(modifiersOf(member), typeTextOf(member.type), this.callSites(source, member)),
         });
+        this.emitCalls(path, source, { kind: 'field', fqn: fieldFqn(ownerFqn, member.name.text) }, member);
       } else if (ts.isMethodDeclaration(member) && ts.isIdentifier(member.name)) {
         if (!record(member.name.text, line)) continue;
         this.emitter.node({
@@ -446,6 +463,7 @@ export class TypeScriptExtractor {
           endLine: endLineOf(source, member),
           ...attrsOf(modifiersOf(member), returnsOf(member), this.callSites(source, member)),
         });
+        this.emitCalls(path, source, { kind: 'method', fqn: methodFqn(ownerFqn, member.name.text) }, member);
       } else if (ts.isConstructorDeclaration(member)) {
         this.emitter.node({
           kind: 'method',
@@ -457,6 +475,7 @@ export class TypeScriptExtractor {
           endLine: endLineOf(source, member),
           ...attrsOf([], this.callSites(source, member)),
         });
+        this.emitCalls(path, source, { kind: 'method', fqn: methodFqn(ownerFqn, 'constructor') }, member);
         this.extractParameterProperties(path, source, ownerFqn, member);
       }
     }
@@ -490,6 +509,32 @@ export class TypeScriptExtractor {
         ...attrsOf(modifiers, typeTextOf(parameter.type), { parameterProperty: true }),
       });
     }
+  }
+
+  /**
+   * `calls` edges from a member to the class methods it invokes, where the
+   * checker names the method's declaration (ADR-0042). Cited at the line of the
+   * method name at the call site; everything the checker cannot name is left
+   * out rather than guessed.
+   */
+  private emitCalls(path: string, source: ts.SourceFile, owner: NodeRef, scope: ts.Node): void {
+    const visit = (node: ts.Node): void => {
+      if (ts.isCallExpression(node)) {
+        const callee = this.resolver.resolveCall(node);
+        if (callee !== null) {
+          this.emitter.edge({
+            kind: 'calls',
+            src: owner,
+            dst: callee,
+            file: path,
+            line: lineOf(source, (node.expression as ts.PropertyAccessExpression).name),
+            attrs: { resolution: 'checker' },
+          });
+        }
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(scope);
   }
 
   /**

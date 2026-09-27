@@ -123,3 +123,25 @@ Every module carries `root` and, where there is one, `buildFile`.
 (parent `core`, the first seen), a `contains` edge from **each** module cited at
 the package declaration first seen there, and an `info` diagnostic naming both.
 The unsplit package `com.example.split.report` gets no `contains` edge.
+
+`tiny-angular` is also an Angular workspace in ADR-0042's sense, so its
+packages are boundaries: `src/app/orders` (an `@NgModule` and a lazy route
+target) and `.` (the module root) — not one package per directory. Its
+`ngOnInit` → `OrderService#findOne` call is a `calls` edge.
+
+## `angular-workspace`
+
+An `angular.json` workspace with an application and a library
+([ADR-0040](../docs/adr/0040-containers-are-deployables.md),
+[ADR-0042](../docs/adr/0042-angular-structure.md)).
+
+| Fact | Expected |
+| --- | --- |
+| module `shop` | named by its `angular.json` key (no manifest at its root); `deployable: "angular-app"` cited at its `projectType` line |
+| module `@shop/ui-kit` | `projectType: "library"` from its `project.json`, **and a `warn` diagnostic**: `angular.json` calls it an application, and `project.json` wins |
+| package `projects/shop/src/app/orders` | boundaries `ngmodule` and `lazy-route` (`loadChildren`); holds `list/order-list.component.ts`, two directories down |
+| package `projects/shop/src/app/admin` | boundary `lazy-route` (`loadComponent`); holds `widgets/stats.component.ts` |
+| package `projects/shop` | the module root; holds `app.component.ts`, `app.routes.ts` and `core/clock.service.ts` |
+| package `projects/ui-kit` | the library's module root |
+| `calls` | `OrderListComponent#constructor()` → `OrderService#total()`; `OrderService#total()` → `FormatService#money()` **through the `@shop/ui-kit` barrel**; `record()` → `total()` |
+| no `calls` | `sink.write()` (an interface member) and `this.clock.now()` (a receiver typed by an uninstalled `inject()`) — the checker cannot name the method, so there is no edge |

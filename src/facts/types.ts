@@ -27,8 +27,44 @@ export const NODE_KINDS = [
 ] as const;
 export type NodeKind = (typeof NODE_KINDS)[number];
 
+/**
+ * What a build file can prove a module deploys as (ADR-0040), recorded as
+ * `attrs.deployable` on a `module` node with `deployableFile`,
+ * `deployableLine` and `deployableRule` citing the proof. A `@SpringBootApplication`
+ * class proves `spring-boot` too; that proof is its `annotated_with` edge.
+ */
+export const DEPLOYABLE_KINDS = ['spring-boot', 'war', 'angular-app', 'nx-app'] as const;
+export type DeployableKind = (typeof DEPLOYABLE_KINDS)[number];
+
+/** The build-file facts on a `module` node's `attrs`. Every field is optional. */
+export interface ModuleAttrs {
+  /** The module's directory, repo-relative; `.` for the repository root. */
+  root?: string;
+  /** The file that named the module. */
+  buildFile?: string;
+  /** Maven `<packaging>`, when declared. `pom` is never a container. */
+  packaging?: string;
+  /** Maven `<modules>`, when declared. */
+  modules?: string[];
+  /** `application` or `library`, from `angular.json` / Nx `project.json`. */
+  projectType?: string;
+  deployable?: DeployableKind;
+  deployableFile?: string;
+  deployableLine?: number;
+  deployableRule?: string;
+}
+
+/**
+ * Why a directory is a TypeScript `package` in an Angular workspace
+ * (ADR-0042), recorded as `attrs.boundaries: [{ kind, file?, line? }]`.
+ */
+export const BOUNDARY_KINDS = ['module-root', 'ngmodule', 'lazy-route'] as const;
+export type BoundaryKind = (typeof BOUNDARY_KINDS)[number];
+
 export const EDGE_KINDS = [
-  'contains', // structural containment: package contains class, class contains method
+  // Structural containment that is not a tree: a module containing a package
+  // that is split across modules (ADR-0041). A tree is `NodeFact.parent`.
+  'contains',
   'calls',
   'injects',
   'implements',
