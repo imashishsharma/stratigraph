@@ -16,7 +16,9 @@ import { observedHttpCalls } from '../analysis/http-links.js';
 import {
   ancestorOfCte,
   buildPackageGraph,
+  declaredInTest,
   supportingEdges,
+  testOnlyPackage,
   DEPENDENCY_EDGE_KINDS,
 } from '../analysis/package-graph.js';
 import type { Db } from '../db/database.js';
@@ -801,8 +803,9 @@ function loadModules(db: Db, runId: number): ModuleRow[] {
 function loadPackages(db: Db, runId: number, moduleId: number): ModuleRow[] {
   return db
     .prepare(
-      `SELECT id, fqn, name FROM node
+      `SELECT id, fqn, name FROM node pkg
         WHERE run_id = ? AND kind = 'package' AND is_stub = 0 AND parent_id = ?
+          AND NOT ${testOnlyPackage('pkg')}
         ORDER BY fqn`,
     )
     .all(runId, moduleId) as ModuleRow[];
@@ -824,7 +827,7 @@ function loadModuleLanguages(db: Db, runId: number): Map<number, string[]> {
         JOIN node m  ON m.id = pkg.parent_id AND m.kind = 'module'
         JOIN node n  ON n.parent_id = pkg.id
         JOIN source_file sf ON sf.id = n.file_id
-       WHERE pkg.run_id = @runId AND pkg.kind = 'package'
+       WHERE pkg.run_id = @runId AND pkg.kind = 'package' AND NOT ${declaredInTest('n')}
        GROUP BY m.id, sf.language
        ORDER BY m.id, n DESC, sf.language`,
     )
@@ -848,8 +851,9 @@ function loadModuleSizes(db: Db, runId: number): Map<number, { packages: number;
              COUNT(n.id)            AS types
         FROM node pkg
         JOIN node m ON m.id = pkg.parent_id AND m.kind = 'module'
-        LEFT JOIN node n ON n.parent_id = pkg.id AND n.is_stub = 0
+        LEFT JOIN node n ON n.parent_id = pkg.id AND n.is_stub = 0 AND NOT ${declaredInTest('n')}
        WHERE pkg.run_id = @runId AND pkg.kind = 'package' AND pkg.is_stub = 0
+         AND NOT ${testOnlyPackage('pkg')}
        GROUP BY m.id`,
     )
     .all({ runId }) as Array<{ moduleId: number; packages: number; types: number }>;

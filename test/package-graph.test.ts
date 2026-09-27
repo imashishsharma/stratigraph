@@ -311,3 +311,55 @@ describe('detectPackageCycles', () => {
     expect(cycles.map((c) => c.severity)).toEqual(['high', 'medium']);
   });
 });
+
+describe('test code is not architecture (ADR-0034)', () => {
+  /**
+   * main: web.Controller → service.Service. test: web.ControllerTest (same
+   * package, test file) → service.Service and → support.Fixtures, a package
+   * holding only test code. And support.Fixtures → web.Controller, which with
+   * test code included would close a cycle web → support → web.
+   */
+  function seedWithTests(): void {
+    ingest([
+      meta,
+      { v: 1, type: 'file', path: 'src/main/java/web/Controller.java', language: 'java' },
+      { v: 1, type: 'file', path: 'src/main/java/service/Service.java', language: 'java' },
+      { v: 1, type: 'file', path: 'src/test/java/web/ControllerTest.java', language: 'java' },
+      { v: 1, type: 'file', path: 'src/test/java/support/Fixtures.java', language: 'java' },
+      pkg('web'),
+      pkg('service'),
+      pkg('support'),
+      cls('web.Controller', 'src/main/java/web/Controller.java'),
+      cls('service.Service', 'src/main/java/service/Service.java'),
+      cls('web.ControllerTest', 'src/test/java/web/ControllerTest.java'),
+      cls('support.Fixtures', 'src/test/java/support/Fixtures.java'),
+      imports('web.Controller', 'service.Service', 'src/main/java/web/Controller.java', 3),
+      imports('web.ControllerTest', 'service.Service', 'src/test/java/web/ControllerTest.java', 3),
+      imports('web.ControllerTest', 'support.Fixtures', 'src/test/java/web/ControllerTest.java', 4),
+      imports('support.Fixtures', 'web.Controller', 'src/test/java/support/Fixtures.java', 3),
+    ]);
+    const role = db.prepare(
+      `INSERT INTO file_role (run_id, path, role, rule) VALUES (?, ?, ?, 'fixture')`,
+    );
+    role.run(runId, 'src/main/java/web/Controller.java', 'source');
+    role.run(runId, 'src/main/java/service/Service.java', 'source');
+    role.run(runId, 'src/test/java/web/ControllerTest.java', 'test');
+    role.run(runId, 'src/test/java/support/Fixtures.java', 'test');
+  }
+
+  it('leaves test edges and test-only packages out of the package graph', () => {
+    seedWithTests();
+    const graph = buildPackageGraph(db, runId);
+    const name = (id: number) => graph.packages.get(id)?.fqn;
+
+    expect([...graph.packages.values()].map((p) => p.fqn).sort()).toEqual(['service', 'web']);
+    expect(graph.dependencies.map((d) => `${name(d.src)} -> ${name(d.dst)} x${d.weight}`)).toEqual([
+      'web -> service x1',
+    ]);
+  });
+
+  it('finds no cycle that only test code closes', () => {
+    seedWithTests();
+    expect(detectPackageCycles(db, runId)).toEqual([]);
+  });
+});

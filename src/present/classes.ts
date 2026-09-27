@@ -11,6 +11,7 @@
  * algorithm decided (ADR-0022).
  */
 
+import { declaredInTest } from '../analysis/package-graph.js';
 import type { Db } from '../db/database.js';
 import type { LayoutLine, LayoutLinkSpec, LayoutNodeSpec } from './layout.js';
 
@@ -316,6 +317,7 @@ function loadTypes(db: Db, runId: number): TypeRow[] {
         LEFT JOIN source_file f ON f.id = n.file_id
        WHERE n.run_id = @runId AND n.is_stub = 0
          AND n.kind IN ('class', 'interface', 'enum')
+         AND NOT ${declaredInTest('n')}
        ORDER BY n.fqn`,
     )
     .all({ runId }) as TypeRow[];

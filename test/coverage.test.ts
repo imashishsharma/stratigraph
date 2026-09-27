@@ -79,6 +79,7 @@ describe('runCoverage', () => {
       'Java/Kotlin: 0 of 3 main source files parsed — the java extractor did not run: ' +
         'no JDK found. The Java extractor needs a JDK 17+.',
       'TypeScript: 2 of 2 main source files parsed',
+      '1 test file(s) were parsed and are left out of this view (ADR-0034).',
     ]);
   });
 

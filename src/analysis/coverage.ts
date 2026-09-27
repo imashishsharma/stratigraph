@@ -143,14 +143,22 @@ export function runCoverage(
     });
   }
 
-  const staticBasis = codeBasis(extractors, LANGUAGES);
+  // The structural views leave test code out (ADR-0034), and say how much.
+  const structural = codeBasis(extractors, LANGUAGES);
+  const tests = extractors.reduce((sum, entry) => sum + entry.testsParsed, 0);
+  if (tests > 0) {
+    structural.reasons = [
+      ...structural.reasons,
+      `${fmt(tests)} test file(s) were parsed and are left out of this view (ADR-0034).`,
+    ];
+  }
   const views = {} as Record<ViewId, ViewCoverage>;
   const bases: Record<ViewId, Basis> = {
-    architecture: staticBasis,
-    code: staticBasis,
-    cycles: staticBasis,
-    matrix: staticBasis,
-    api: staticBasis,
+    architecture: structural,
+    code: structural,
+    cycles: structural,
+    matrix: structural,
+    api: codeBasis(extractors, LANGUAGES),
     data: dataBasis(db, runId, extractors),
     hotspots: historyBasis(db, runId, 'complexity'),
     coupling: historyBasis(db, runId, 'history'),

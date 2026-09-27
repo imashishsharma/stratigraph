@@ -46,6 +46,34 @@ export interface PackageGraph {
   adjacency: Map<number, number[]>;
 }
 
+/**
+ * SQL: true when the node `alias` was declared in a file whose role is `test`
+ * (ADR-0030). Test code is real code and its facts stay in the store; it is
+ * left out of every aggregate that describes the system's structure
+ * (ADR-0034), because a test depending on everything it tests would otherwise
+ * draw arrows the running system does not have.
+ */
+export function declaredInTest(alias: string): string {
+  return /* sql */ `EXISTS (
+    SELECT 1 FROM source_file tf
+      JOIN file_role tr ON tr.run_id = tf.run_id AND tr.path = tf.path AND tr.role = 'test'
+     WHERE tf.id = ${alias}.file_id)`;
+}
+
+/**
+ * SQL: true for a package that declares at least one type, all of them test
+ * code. A package mixing main and test types is a main package; one declaring
+ * no types at all is kept, since nothing says it is test code.
+ */
+export function testOnlyPackage(alias: string): string {
+  return /* sql */ `(
+    EXISTS (SELECT 1 FROM node tt WHERE tt.parent_id = ${alias}.id
+             AND tt.kind IN ('class','interface','enum','annotation') AND tt.is_stub = 0)
+    AND NOT EXISTS (SELECT 1 FROM node tt WHERE tt.parent_id = ${alias}.id
+             AND tt.kind IN ('class','interface','enum','annotation') AND tt.is_stub = 0
+             AND NOT ${declaredInTest('tt')}))`;
+}
+
 /** Node kinds that own other nodes, and that an edge can therefore be lifted to. */
 export type AncestorKind = 'package' | 'module';
 
@@ -92,6 +120,7 @@ export function ancestorOfCte(
     ancestry(start_id, node_id, kind) AS (
         SELECT e.id, n.id, n.kind
           FROM endpoint_node e JOIN node n ON n.id = e.id
+         WHERE NOT ${declaredInTest('n')}
       UNION ALL
         SELECT a.start_id, p.id, p.kind
           FROM ancestry a
@@ -137,7 +166,8 @@ export function buildPackageGraph(db: Db, runId: number): PackageGraph {
   const packages = new Map<number, PackageRef>();
   for (const row of db
     .prepare(
-      `SELECT id, fqn FROM node WHERE run_id = ? AND kind = 'package' AND is_stub = 0`,
+      `SELECT id, fqn FROM node pkg
+        WHERE run_id = ? AND kind = 'package' AND is_stub = 0 AND NOT ${testOnlyPackage('pkg')}`,
     )
     .all(runId) as Array<{ id: number; fqn: string }>) {
     packages.set(row.id, row);

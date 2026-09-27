@@ -15,7 +15,7 @@
 
 import type { Db } from '../db/database.js';
 import type { GraphNode, WeightedEdge, WeightedGraph } from './louvain.js';
-import { buildPackageGraph, type PackageGraph } from './package-graph.js';
+import { buildPackageGraph, declaredInTest, type PackageGraph } from './package-graph.js';
 
 export interface CombinedGraphOptions {
   /**
@@ -75,6 +75,7 @@ const PACKAGE_OF_FILE = /* sql */ `
            AND n.file_id IS NOT NULL
            AND n.is_stub = 0
            AND n.kind IN ('class', 'interface', 'enum', 'annotation')
+           AND NOT ${declaredInTest('n')}
       UNION ALL
         SELECT a.file_id, p.id, p.kind
           FROM ancestry a
