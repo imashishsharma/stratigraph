@@ -32,9 +32,8 @@ at the pinned commit.
 name: spring-petclinic
 sha: <same as corpus.yaml>
 labelledBy: how the labels were produced, in one or two sentences
-roles:              # a sample of files and their role (ADR-0030 vocabulary:
-                    # source test generated vendored lockfile manifest migration
-                    # config docs asset other)
+roles:              # a sample of files and their role, in ADR-0030's vocabulary
+                    # exactly as defined below
   - { path: pom.xml, role: manifest }
   - { path: src/test/java/.../OwnerControllerTests.java, role: test }
 containers:         # deployables only: a Spring Boot app (main class / boot plugin),
@@ -59,3 +58,22 @@ riskyFiles:         # up to 10 source files a senior engineer would call riskies
                     # (ignore >50-file sweeps), weighted by fix commits and size
   - src/main/java/.../OwnerController.java
 ```
+
+## Role vocabulary (ADR-0030)
+
+Labels must follow these definitions — a label that contradicts them is a
+labelling error, not a disagreement about taste.
+
+| role | meaning |
+| --- | --- |
+| `source` | hand-written program text: code, **templates (HTML, Thymeleaf, JSP), styles (CSS/SCSS/LESS) and SQL scripts** outside migration directories (e.g. `data.sql`) |
+| `test` | anything under a test root (`src/test/`, `test/`, `__tests__/`, …) or named as a test (`*Test.java`, `*.spec.ts`) |
+| `generated` | produced by a tool: marked in `.gitattributes`, under a `generated/` path, or carrying a generated-code header |
+| `vendored` | third-party code checked in, including minified bundles (`*.min.js`) and `vendor/` trees |
+| `lockfile` | a resolved dependency lock (`package-lock.json`, `yarn.lock`, …) |
+| `manifest` | build and dependency declarations **and build wrappers** (`mvnw`, `gradlew`, `.mvn/wrapper/*`, `gradle/wrapper/*` including the wrapper jar), `tsconfig*.json`, `angular.json` |
+| `migration` | schema migrations: Liquibase/Flyway files under `db/changelog/`, `db/migration(s)/`, `liquibase/`, `flyway/`, and standalone DDL (`schema*.sql`, `ddl.sql`, `*.ddl`) |
+| `config` | JSON, YAML, XML, properties **and dotfiles** (`.gitignore`, `.editorconfig`) not covered above — i18n/locale JSON included |
+| `docs` | prose (`*.md`, `*.adoc`, `README`, `LICENSE`) |
+| `asset` | images, **fonts**, archives, media |
+| `other` | none of the above |

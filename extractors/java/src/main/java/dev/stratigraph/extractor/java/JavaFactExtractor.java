@@ -122,6 +122,7 @@ final class JavaFactExtractor {
         // parse contributes nothing here; it reports its own error below, so
         // the loss is visible rather than silent.
         Map<String, String> declaredTypeNames = declaredTypeNames(parsed);
+        Set<String> declaredPackages = declaredPackages(parsed);
 
         for (SourceFile sourceFile : parsed) {
             String path = sourceFile.getSourcePath().toString().replace('\\', '/');
@@ -157,7 +158,7 @@ final class JavaFactExtractor {
             Path absolute = repoRoot.resolve(sourceFile.getSourcePath());
             SourceDiscovery.ModuleId module = discovery.moduleOf(found, absolute);
             currentModuleDir = moduleDirOf(found, absolute);
-            visit(cu, path, module, declaredTypeNames);
+            visit(cu, path, module, declaredTypeNames, declaredPackages);
         }
 
         persistence.finish(emitter, repoRoot);
@@ -171,6 +172,20 @@ final class JavaFactExtractor {
             }
         }
         return found.modules.isEmpty() ? repoRoot : found.modules.keySet().iterator().next();
+    }
+
+    /** Every package the parsed source set declares a type in (ADR-0038). */
+    private static Set<String> declaredPackages(List<SourceFile> parsed) {
+        Set<String> packages = new LinkedHashSet<>();
+        for (SourceFile sourceFile : parsed) {
+            if (sourceFile instanceof JavaSourceFile) {
+                J.Package declared = ((JavaSourceFile) sourceFile).getPackageDeclaration();
+                if (declared != null) {
+                    packages.add(declared.getExpression().printTrimmed().replaceAll("\\s", ""));
+                }
+            }
+        }
+        return packages;
     }
 
     /** Every type simple name the parsed source set declares, mapped to one file declaring it. */
@@ -193,7 +208,7 @@ final class JavaFactExtractor {
     }
 
     private void visit(JavaSourceFile cu, String path, SourceDiscovery.ModuleId module,
-                       Map<String, String> declaredTypeNames) {
+                       Map<String, String> declaredTypeNames, Set<String> declaredPackages) {
         // Prefer the attributed package over the printed declaration: it is the
         // same string, but it comes from the type system rather than from
         // re-reading source text.
@@ -209,7 +224,7 @@ final class JavaFactExtractor {
         // type this same file went on to declare.
         DeclarationVisitor declarations =
                 new DeclarationVisitor(path, packageName,
-                        new TypeResolver(cu, packageName, declaredTypeNames, path.endsWith(".kt")));
+                        new TypeResolver(cu, packageName, declaredTypeNames, declaredPackages, path.endsWith(".kt")));
         declarations.visit(cu, null);
         declarations.reportUnresolvedCalls();
 

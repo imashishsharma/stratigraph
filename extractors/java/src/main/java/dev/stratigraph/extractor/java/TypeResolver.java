@@ -9,6 +9,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Resolving a type name written in source to a fully qualified name, using only
@@ -87,11 +88,15 @@ final class TypeResolver {
      */
     private final Map<String, String> declaredTypeNames;
 
+    /** Every package the parsed source set declares — its contents are all known (ADR-0038). */
+    private final Set<String> declaredPackages;
+
     /** Takes a {@link JavaSourceFile} so a Kotlin compilation unit resolves too — ADR-0029. */
     TypeResolver(JavaSourceFile cu, String packageName, Map<String, String> declaredTypeNames,
-                 boolean kotlin) {
+                 Set<String> declaredPackages, boolean kotlin) {
         this.packageName = packageName;
         this.declaredTypeNames = declaredTypeNames;
+        this.declaredPackages = declaredPackages;
         for (J.Import anImport : cu.getImports()) {
             if (kotlin) {
                 readKotlinImport(anImport);
@@ -216,17 +221,37 @@ final class TypeResolver {
             }
         }
 
-        if (candidates.isEmpty()) {
+        // Condition 3 first: a first-party type of the same name — in this
+        // package, where it would shadow the import, or anywhere a wildcard
+        // could reach — makes this repository one of the ones that declares
+        // its own.
+        String declaredIn = declaredTypeNames.get(name);
+        if (declaredIn != null) {
+            return Resolved.ambiguous("the source set declares its own type named " + name
+                    + " (in " + declaredIn + "), which makes the wildcard import ambiguous");
+        }
+
+        // Condition 2, as ADR-0038 amends it: a wildcard-imported package can
+        // supply the name unless it provably cannot — a first-party package
+        // (condition 3 just showed the source set declares no such type), or a
+        // listed framework package whose complete listing lacks the name. An
+        // unlisted third-party package can always compete.
+        List<String> suppliers = new ArrayList<>();
+        for (String pkg : candidates) {
+            boolean firstParty = declaredPackages.contains(pkg);
+            boolean ruledOut = KnownPackages.isListed(pkg) && !KnownPackages.declares(pkg, name);
+            if (!firstParty && !ruledOut) {
+                suppliers.add(pkg);
+            }
+        }
+
+        if (suppliers.isEmpty()) {
             return Resolved.ambiguous("a wildcard import makes it ambiguous — no wildcard-imported "
                     + "package could be shown to declare " + name);
         }
-
-        // Condition 2: a second wildcard-imported package — known or unknown —
-        // could supply the same name, and nothing can prove it does not. The
-        // table lists what a package does declare, never what it does not.
-        if (candidates.size() > 1) {
+        if (suppliers.size() > 1) {
             List<String> spelled = new ArrayList<>();
-            for (String pkg : candidates) {
+            for (String pkg : suppliers) {
                 spelled.add(pkg + ".*");
             }
             return Resolved.ambiguous("competing wildcard imports ("
@@ -234,25 +259,16 @@ final class TypeResolver {
                     + name);
         }
 
-        String pkg = candidates.get(0);
+        String pkg = suppliers.get(0);
         String candidate = pkg + "." + name;
 
-        // Condition 1: the known-FQN table must place the name in the one
-        // wildcard-imported package. Both the table entry and the import are
-        // facts; their conjunction is not a guess.
-        if (!FrameworkAnnotations.isKnown(candidate)) {
+        // Condition 1: shipped data must place the name in the one package that
+        // could supply it — the known-annotation table, or the package's
+        // complete listing.
+        if (!FrameworkAnnotations.isKnown(candidate) && !KnownPackages.declares(pkg, name)) {
             return Resolved.ambiguous("a wildcard import makes it ambiguous — " + name
-                    + " is not in the known-annotation table under " + pkg
+                    + " is not in the known-annotation table or a package listing under " + pkg
                     + ", so no package in scope is known to declare it");
-        }
-
-        // Condition 3: a first-party type of the same name — in this package,
-        // where it would shadow the import, or anywhere a wildcard could
-        // reach — makes this repository one of the ones that declares its own.
-        String declaredIn = declaredTypeNames.get(name);
-        if (declaredIn != null) {
-            return Resolved.ambiguous("the source set declares its own type named " + name
-                    + " (in " + declaredIn + "), which makes the wildcard import ambiguous");
         }
 
         return new Resolved(candidate, Resolution.WILDCARD_IMPORT, null);

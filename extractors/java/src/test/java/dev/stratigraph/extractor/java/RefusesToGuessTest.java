@@ -280,6 +280,57 @@ class RefusesToGuessTest {
     }
 
     @Test
+    void resolvesThroughTwoWildcardsWhenTheOtherPackageIsListedAndLacksTheName(@TempDir Path repo) throws Exception {
+        // ADR-0038: jackson-annotations' complete listing has no `Entity`, so
+        // its wildcard cannot compete with jakarta.persistence.*.
+        write(repo, "src/main/java/app/Owner.java", """
+                package app;
+                import jakarta.persistence.*;
+                import com.fasterxml.jackson.annotation.*;
+                @Entity
+                @Table(name = "owners")
+                public class Owner {}
+                """);
+        List<JsonNode> facts = extract(repo);
+        assertTrue(has(facts, "edge", node -> "maps_to".equals(node.path("kind").asText())
+                && "owners".equals(node.path("dst").path("fqn").asText())));
+    }
+
+    @Test
+    void stillRefusesWhenAnUnlistedPackageCouldCompete(@TempDir Path repo) throws Exception {
+        write(repo, "src/main/java/app/Owner.java", """
+                package app;
+                import jakarta.persistence.*;
+                import com.acme.orm.*;
+                @Entity
+                @Table(name = "owners")
+                public class Owner {}
+                """);
+        List<JsonNode> facts = extract(repo);
+        assertFalse(has(facts, "edge", node -> "maps_to".equals(node.path("kind").asText())));
+        assertTrue(has(facts, "diagnostic", node ->
+                node.path("message").asText().contains("com.acme.orm.*")));
+    }
+
+    @Test
+    void aFirstPartyWildcardCannotCompete(@TempDir Path repo) throws Exception {
+        write(repo, "src/main/java/app/support/Money.java", """
+                package app.support;
+                public class Money {}
+                """);
+        write(repo, "src/main/java/app/Owner.java", """
+                package app;
+                import jakarta.persistence.*;
+                import app.support.*;
+                @Entity
+                @Table(name = "owners")
+                public class Owner { Money balance; }
+                """);
+        List<JsonNode> facts = extract(repo);
+        assertTrue(has(facts, "edge", node -> "maps_to".equals(node.path("kind").asText())));
+    }
+
+    @Test
     void willNotNameATableUnderANamingStrategyItDoesNotKnow(@TempDir Path repo) throws Exception {
         // ADR-0036: a default-named entity's table is its name put through the
         // module's physical naming strategy. A custom strategy class could do
