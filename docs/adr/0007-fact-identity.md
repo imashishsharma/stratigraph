@@ -1,6 +1,6 @@
 # ADR-0007: Fact identity — how a node's `fqn` is formed
 
-- Status: accepted
+- Status: accepted; containment amended by [ADR-0041](0041-split-packages.md)
 - Date: 2026-07-29
 - Milestone: M1 (before the code — every later milestone joins on this)
 

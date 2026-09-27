@@ -1,6 +1,6 @@
 # ADR-0017: TypeScript fact identity — extending ADR-0007 to a second stack
 
-- Status: accepted
+- Status: accepted; the `package` row amended by [ADR-0042](0042-angular-structure.md)
 - Date: 2026-07-31
 - Milestone: M5 (before the code — the Java scheme was fixed the same way at M1)
 

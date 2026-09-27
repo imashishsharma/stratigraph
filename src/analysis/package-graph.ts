@@ -110,13 +110,15 @@ export function ancestorOfCte(
 ): string {
   const kinds = edgeKinds.map((k) => `'${k}'`).join(', ');
   const factsOnly = confidence === 'fact' ? `AND confidence = 'fact'` : '';
-  return /* sql */ `
-  WITH RECURSIVE
+  const seed = /* sql */ `
     endpoint_node(id) AS (
       SELECT src_id FROM edge WHERE run_id = @runId AND kind IN (${kinds}) ${factsOnly}
       UNION
       SELECT dst_id FROM edge WHERE run_id = @runId AND kind IN (${kinds}) ${factsOnly}
-    ),
+    ),`;
+  if (kind === 'module') return `WITH RECURSIVE ${seed}${moduleAncestry('endpoint_node')}`;
+  return /* sql */ `
+  WITH RECURSIVE ${seed}
     ancestry(start_id, node_id, kind) AS (
         SELECT e.id, n.id, n.kind
           FROM endpoint_node e JOIN node n ON n.id = e.id
@@ -132,6 +134,82 @@ export function ancestorOfCte(
       SELECT a.start_id, a.node_id
         FROM ancestry a JOIN node p ON p.id = a.node_id
        WHERE a.kind = '${kind}' AND p.is_stub = 0
+    )
+`;
+}
+
+/**
+ * SQL: the module a node declared in `pkg` belongs to (ADR-0041).
+ *
+ * A package declared in one module has that module as its `parent`. A split
+ * package has a `contains` edge from each module declaring it, and a node in
+ * it belongs to the one whose `root` is the nearest directory above the node's
+ * file — the nearest-root rule the extractor used to pick the module in the
+ * first place. A node with no file (the package itself, as the source of a
+ * TypeScript `imports` edge) falls back to `parent`.
+ */
+export function moduleOfNodeInPackage(nodeAlias: string, pkgAlias: string): string {
+  return /* sql */ `COALESCE(
+    (SELECT c.src_id
+       FROM edge c
+       JOIN node m ON m.id = c.src_id AND m.kind = 'module'
+       JOIN source_file f ON f.id = ${nodeAlias}.file_id
+      WHERE c.run_id = ${pkgAlias}.run_id AND c.kind = 'contains' AND c.dst_id = ${pkgAlias}.id
+        AND ${underRoot('f.path', `json_extract(m.attrs, '$.root')`)}
+      ORDER BY length(json_extract(m.attrs, '$.root')) DESC
+      LIMIT 1),
+    ${pkgAlias}.parent_id)`;
+}
+
+/**
+ * SQL: true when package `pkgAlias` belongs to the module whose id is `moduleExpr`
+ * — by a `contains` edge when it is split, by `parent` when it is not.
+ */
+export function packageInModule(pkgAlias: string, moduleExpr: string): string {
+  return /* sql */ `(
+    EXISTS (SELECT 1 FROM edge c WHERE c.run_id = ${pkgAlias}.run_id AND c.kind = 'contains'
+             AND c.dst_id = ${pkgAlias}.id AND c.src_id = ${moduleExpr})
+    OR (${pkgAlias}.parent_id = ${moduleExpr}
+        AND NOT EXISTS (SELECT 1 FROM edge c WHERE c.run_id = ${pkgAlias}.run_id
+                         AND c.kind = 'contains' AND c.dst_id = ${pkgAlias}.id)))`;
+}
+
+/** SQL: `path` lies under the module directory `root` (`.` is the repository). */
+function underRoot(path: string, root: string): string {
+  return `(${root} = '.' OR substr(${path}, 1, length(${root}) + 1) = ${root} || '/')`;
+}
+
+/**
+ * The CTE body resolving every node in relation `seed(id)` to its module,
+ * exposing `ancestor_of(node_id, ancestor_id)`. Test code is left out, as for
+ * packages (ADR-0034).
+ */
+export function moduleAncestry(seed: string): string {
+  return /* sql */ `
+    ancestry(start_id, node_id, kind) AS (
+        SELECT e.id, n.id, n.kind
+          FROM ${seed} e JOIN node n ON n.id = e.id
+         WHERE NOT ${declaredInTest('n')}
+      UNION ALL
+        SELECT a.start_id, p.id, p.kind
+          FROM ancestry a
+          JOIN node c ON c.id = a.node_id
+          JOIN node p ON p.id = c.parent_id
+         WHERE a.kind NOT IN ('package', 'module')
+    ),
+    module_candidate(node_id, ancestor_id) AS (
+        SELECT a.start_id, ${moduleOfNodeInPackage('s', 'pkg')}
+          FROM ancestry a
+          JOIN node pkg ON pkg.id = a.node_id
+          JOIN node s   ON s.id = a.start_id
+         WHERE a.kind = 'package'
+      UNION ALL
+        SELECT a.start_id, a.node_id FROM ancestry a WHERE a.kind = 'module'
+    ),
+    ancestor_of(node_id, ancestor_id) AS (
+      SELECT mc.node_id, mc.ancestor_id
+        FROM module_candidate mc JOIN node p ON p.id = mc.ancestor_id
+       WHERE p.kind = 'module' AND p.is_stub = 0
     )
 `;
 }
