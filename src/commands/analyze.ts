@@ -23,7 +23,7 @@ import {
 } from '../analysis/intent-mismatch.js';
 import { buildPackageGraph, DEPENDENCY_EDGE_KINDS } from '../analysis/package-graph.js';
 import { assertSchemaCurrent, openDatabase, requireStore, type Db } from '../db/database.js';
-import { latestRun } from '../db/run.js';
+import { latestRun, noCompletedRunMessage } from '../db/run.js';
 import {
   createModelClient,
   resolveCredential,
@@ -141,9 +141,7 @@ export async function runAnalyze(options: AnalyzeOptions): Promise<AnalyzeResult
 
     const runId = options.run ?? latestRun(db)?.id;
     if (runId === undefined) {
-      throw new AnalysisError(
-        `no runs in ${config.dbPath} — run \`stratigraph extract\` or \`stratigraph history\` first`,
-      );
+      throw new AnalysisError(noCompletedRunMessage(db, config.dbPath));
     }
 
     const graph = buildPackageGraph(db, runId);

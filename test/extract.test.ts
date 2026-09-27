@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 
 import { describe, expect, it } from 'vitest';
 
-import { runExtract, type SpawnExtractor } from '../src/commands/extract.js';
+import { ExtractError, runExtract, type SpawnExtractor } from '../src/commands/extract.js';
 import { runInit } from '../src/commands/init.js';
 import { openDatabase } from '../src/db/database.js';
 import { setQuiet } from '../src/log.js';
@@ -275,6 +275,77 @@ describe('runExtract across two stacks', () => {
     expect(db.prepare('SELECT status FROM run ORDER BY id DESC LIMIT 1').get()).toEqual({
       status: 'failed',
     });
+    expect(extractorRuns(db)).toEqual([
+      { language: 'java', status: 'ok', reason: null },
+      { language: 'typescript', status: 'failed', reason: 'exited with status 4' },
+    ]);
+    db.close();
+  });
+
+  /** A toolchain resolver where Java has no JDK and TypeScript runs the fake. */
+  function noJdk(dir: string) {
+    const fake = fakeExtractor(dir, PER_LANGUAGE);
+    return (language: Language): SpawnExtractor => {
+      if (language === 'java') {
+        throw new ExtractError('no JDK found. The Java extractor needs a JDK 17+.');
+      }
+      return fake;
+    };
+  }
+
+  function extractorRuns(db: ReturnType<typeof openDatabase>) {
+    return db
+      .prepare('SELECT language, status, reason FROM extractor_run ORDER BY language')
+      .all();
+  }
+
+  it('records a skipped extractor as a gap in the run, not as nothing', async () => {
+    // ADR-0032. A run holding the Angular half of a repository, with no trace
+    // that the Java half was never read, is a map that looks complete.
+    const repo = fullStack();
+    const dir = scratch();
+    runInit({ repo, cwd: dir });
+
+    const result = await runExtract({ repo, cwd: dir, resolveSpawner: noJdk(dir) });
+
+    expect(result.languages).toEqual(['typescript']);
+    expect(result.skipped).toEqual([
+      { language: 'java', reason: 'no JDK found. The Java extractor needs a JDK 17+.' },
+    ]);
+    const db = openDatabase(join(dir, '.stratigraph', `${basename(repo)}.db`), {
+      mustExist: true,
+      readonly: true,
+    });
+    expect(db.prepare('SELECT status FROM run WHERE id = ?').get(result.runId)).toEqual({
+      status: 'ok',
+    });
+    expect(extractorRuns(db)).toEqual([
+      { language: 'java', status: 'skipped', reason: 'no JDK found. The Java extractor needs a JDK 17+.' },
+      { language: 'typescript', status: 'ok', reason: null },
+    ]);
+    db.close();
+  });
+
+  it('records a run even when every extractor was skipped, so the report can say why', async () => {
+    const repo = scratch();
+    writeFileSync(join(repo, 'App.java'), 'class App {}');
+    const dir = scratch();
+    runInit({ repo, cwd: dir });
+
+    const result = await runExtract({ repo, cwd: dir, resolveSpawner: noJdk(dir) });
+
+    expect(result.languages).toEqual([]);
+    expect(result.runId).toBeGreaterThan(0);
+    const db = openDatabase(join(dir, '.stratigraph', `${basename(repo)}.db`), {
+      mustExist: true,
+      readonly: true,
+    });
+    expect(db.prepare('SELECT status FROM run WHERE id = ?').get(result.runId)).toEqual({
+      status: 'ok',
+    });
+    expect(extractorRuns(db)).toEqual([
+      { language: 'java', status: 'skipped', reason: 'no JDK found. The Java extractor needs a JDK 17+.' },
+    ]);
     db.close();
   });
 });

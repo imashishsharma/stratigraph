@@ -1,8 +1,8 @@
 export const name = 'file_roles_and_recent_change';
 
 /**
- * v2.0: what each file is (ADR-0030), and the recent-change measure hotspots
- * rank by (ADR-0031).
+ * v2.0: what each file is (ADR-0030), the recent-change measure hotspots rank
+ * by (ADR-0031), and what became of each extractor a run selected (ADR-0032).
  */
 export const up = /* sql */ `
 -- One row per tracked file. "rule" is the citation: the rule that assigned the
@@ -39,5 +39,18 @@ CREATE TABLE history_window (
   commits           INTEGER NOT NULL,     -- non-merge commits in the window
   excluded_bulk     INTEGER NOT NULL,
   excluded_ignored  INTEGER NOT NULL
+);
+
+-- One row per extractor a run selected, whether or not it ran. A skipped
+-- extractor is a gap in the run, and a gap nobody recorded reads as "this
+-- repository has no Java in it". "reason" is the toolchain error for skipped,
+-- the exit status for failed, and null for ok.
+CREATE TABLE extractor_run (
+  run_id       INTEGER NOT NULL REFERENCES run(id) ON DELETE CASCADE,
+  language     TEXT    NOT NULL,
+  status       TEXT    NOT NULL CHECK (status IN ('ok','skipped','failed')),
+  reason       TEXT,
+  finished_at  TEXT    NOT NULL,
+  PRIMARY KEY (run_id, language)
 );
 `;

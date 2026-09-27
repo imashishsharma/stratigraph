@@ -31,6 +31,28 @@ export function finishRun(db: Db, runId: number, status: 'ok' | 'failed'): void 
   );
 }
 
+export type ExtractorStatus = 'ok' | 'skipped' | 'failed';
+
+/**
+ * What became of one extractor the run selected (ADR-0032). Written for every
+ * selected extractor — a skipped one especially, because a gap nobody recorded
+ * is indistinguishable from a language the repository does not use.
+ */
+export function recordExtractor(
+  db: Db,
+  runId: number,
+  language: string,
+  status: ExtractorStatus,
+  reason: string | null,
+): void {
+  db.prepare(
+    `INSERT INTO extractor_run (run_id, language, status, reason, finished_at)
+     VALUES (?, ?, ?, ?, ?)
+     ON CONFLICT (run_id, language) DO UPDATE
+       SET status = excluded.status, reason = excluded.reason, finished_at = excluded.finished_at`,
+  ).run(runId, language, status, reason, new Date().toISOString());
+}
+
 export function findRun(db: Db, id: number): Run | null {
   return toRun(
     db
@@ -39,14 +61,42 @@ export function findRun(db: Db, id: number): Run | null {
   );
 }
 
+/**
+ * The most recent run that finished ok (ADR-0032).
+ *
+ * Never a failed run, and never one still marked running — which, when no
+ * process holds it, is a process that died. Either would be reported as a
+ * complete description of a repository it only half read. An explicit
+ * `--run` still reaches them through `findRun`.
+ */
 export function latestRun(db: Db): Run | null {
   return toRun(
     db
       .prepare(
         `SELECT id, repo_path, repo_head, started_at FROM run
+          WHERE status = 'ok'
           ORDER BY id DESC LIMIT 1`,
       )
       .get() as RunRow | undefined,
+  );
+}
+
+/**
+ * Why `latestRun` found nothing: an empty store, or runs that never completed.
+ * The second must name the run and how to read it anyway, or the person who
+ * just watched `extract` fail is told to run `extract`.
+ */
+export function noCompletedRunMessage(db: Db, dbPath: string): string {
+  const last = db
+    .prepare('SELECT id, status FROM run ORDER BY id DESC LIMIT 1')
+    .get() as { id: number; status: string } | undefined;
+  if (last === undefined) {
+    return `no runs in ${dbPath} — run \`stratigraph extract\` or \`stratigraph history\` first`;
+  }
+  const what = last.status === 'failed' ? 'failed' : 'never finished';
+  return (
+    `no completed run in ${dbPath} — run ${last.id} ${what}. Fix the cause and extract ` +
+    `again, or pass --run ${last.id} to read its incomplete facts anyway`
   );
 }
 

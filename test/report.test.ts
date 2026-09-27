@@ -8,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { runInit } from '../src/commands/init.js';
 import { ReportError, runReport } from '../src/commands/report.js';
 import { openDatabase, type Db } from '../src/db/database.js';
-import { createRun } from '../src/db/run.js';
+import { createRun, finishRun } from '../src/db/run.js';
 import { parseFact } from '../src/facts/ndjson.js';
 import { SqliteFactWriter } from '../src/facts/writer.js';
 import type { Fact } from '../src/facts/types.js';
@@ -28,6 +28,7 @@ beforeEach(() => {
   runInit({ repo: FIXTURE, cwd });
   db = openDatabase(join(cwd, '.stratigraph', 'tiny-java.db'), { mustExist: true });
   runId = createRun(db, FIXTURE).id;
+  finishRun(db, runId, 'ok');
   vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
 });
 

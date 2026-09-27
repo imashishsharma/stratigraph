@@ -15,7 +15,7 @@ import { basename, join, resolve } from 'node:path';
 import { loadConfig, type ConfigOverrides } from '../config.js';
 import { resolveBrand, type ResolvedBrand } from '../present/brand.js';
 import { assertSchemaCurrent, openDatabase, type Db } from '../db/database.js';
-import { findRun, latestRun } from '../db/run.js';
+import { findRun, latestRun, noCompletedRunMessage } from '../db/run.js';
 import { info, outputFormat, print, printJson, warn } from '../log.js';
 import { describeRun } from '../mcp/queries.js';
 import { GateError } from './analyze.js';
@@ -252,11 +252,7 @@ function resolveRun(db: Db, requested: number | undefined, dbPath: string): numb
     return requested;
   }
   const latest = latestRun(db);
-  if (latest === null) {
-    throw new ReportError(
-      `no runs in ${dbPath} — run \`stratigraph extract\` or \`stratigraph history\` first`,
-    );
-  }
+  if (latest === null) throw new ReportError(noCompletedRunMessage(db, dbPath));
   return latest.id;
 }
 

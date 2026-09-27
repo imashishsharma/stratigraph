@@ -37,6 +37,9 @@ the code when it is incidental. Either way, before the commit.
 | [0027](0027-comparing-two-runs.md) | A finding is recognised across runs by its content; only regressions can fail a build | accepted |
 | [0028](0028-severity-and-what-was-checkable.md) | Severity reflects how checkable a finding is, not only how strong it looks | accepted |
 | [0029](0029-kotlin-rides-the-java-extractor.md) | Kotlin is parsed by the Java extractor, in the same jar, walked by the same visitor | accepted |
+| [0030](0030-every-file-has-a-role.md) | Every tracked file has a role, and the role cites the rule that assigned it | accepted |
+| [0031](0031-hotspots-rank-recent-change-in-source.md) | Hotspots rank recent change in source files, by percentile within file type | accepted |
+| [0032](0032-honest-runs.md) | A run records what each extractor did; only a completed run is the latest | accepted |
 
 Format: context, decision, alternatives considered (with why each was rejected),
 consequences — including the costs, not only the benefits.

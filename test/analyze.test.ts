@@ -9,7 +9,7 @@ import { AnalysisError, runAnalyze } from '../src/commands/analyze.js';
 import type { ModelClient } from '../src/interpret/client.js';
 import { runInit } from '../src/commands/init.js';
 import { openDatabase, type Db } from '../src/db/database.js';
-import { createRun } from '../src/db/run.js';
+import { createRun, finishRun } from '../src/db/run.js';
 import { parseFact } from '../src/facts/ndjson.js';
 import { SqliteFactWriter } from '../src/facts/writer.js';
 import type { Fact } from '../src/facts/types.js';
@@ -45,6 +45,7 @@ beforeEach(() => {
   dbPath = join(cwd, '.stratigraph', 'tiny-java.db');
   db = openDatabase(dbPath, { mustExist: true });
   runId = createRun(db, FIXTURE).id;
+  finishRun(db, runId, 'ok');
   sha = 0;
 
   printed = [];

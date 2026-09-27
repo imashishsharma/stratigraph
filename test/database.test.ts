@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { assertSchemaCurrent, currentVersion, migrate, openDatabase } from '../src/db/database.js';
 import { MIGRATIONS, SCHEMA_VERSION } from '../src/db/migrations/index.js';
-import { createRun, finishRun, latestRun } from '../src/db/run.js';
+import { createRun, finishRun, latestRun, noCompletedRunMessage } from '../src/db/run.js';
 
 function fresh() {
   const db = openDatabase(':memory:');
@@ -45,6 +45,7 @@ describe('migrations', () => {
       'commit_file',
       'diagnostic',
       'edge',
+      'extractor_run',
       'file_metric',
       'file_role',
       'finding',
@@ -111,8 +112,8 @@ describe('runs', () => {
   it('records and closes a run', () => {
     const db = fresh();
     const run = createRun(db, '/tmp/repo');
-    expect(latestRun(db)?.id).toBe(run.id);
     finishRun(db, run.id, 'ok');
+    expect(latestRun(db)?.id).toBe(run.id);
     const row = db.prepare('SELECT status, finished_at FROM run WHERE id = ?').get(run.id) as {
       status: string;
       finished_at: string;
@@ -123,5 +124,30 @@ describe('runs', () => {
 
   it('returns null when there are no runs', () => {
     expect(latestRun(fresh())).toBeNull();
+  });
+
+  it('means the latest completed run, never a failed or abandoned one', () => {
+    // ADR-0032. A report of a run whose extractor crashed halfway looks
+    // exactly like a report of a small repository.
+    const db = fresh();
+    const good = createRun(db, '/tmp/repo');
+    finishRun(db, good.id, 'ok');
+    const failed = createRun(db, '/tmp/repo');
+    finishRun(db, failed.id, 'failed');
+    createRun(db, '/tmp/repo'); // still 'running': a process that died
+
+    expect(latestRun(db)?.id).toBe(good.id);
+  });
+
+  it('says why there is no completed run, and how to read the failed one anyway', () => {
+    const db = fresh();
+    const failed = createRun(db, '/tmp/repo');
+    finishRun(db, failed.id, 'failed');
+
+    expect(latestRun(db)).toBeNull();
+    expect(noCompletedRunMessage(db, 'x.db')).toMatch(
+      new RegExp(`no completed run in x\\.db — run ${failed.id} failed.*--run ${failed.id}`),
+    );
+    expect(noCompletedRunMessage(fresh(), 'x.db')).toMatch(/^no runs in x\.db/);
   });
 });

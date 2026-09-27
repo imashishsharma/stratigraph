@@ -9,7 +9,7 @@ import { topHotspots } from '../src/analysis/hotspots.js';
 import { HistoryError, runHistory } from '../src/commands/history.js';
 import { runInit } from '../src/commands/init.js';
 import { openDatabase } from '../src/db/database.js';
-import { createRun } from '../src/db/run.js';
+import { createRun, finishRun } from '../src/db/run.js';
 import { setQuiet } from '../src/log.js';
 
 setQuiet(true);
@@ -216,6 +216,7 @@ describe.skipIf(!GIT)('runHistory against a real repository', () => {
     const { cwd, dbPath } = freshStore();
     const db = openDatabase(dbPath, { mustExist: true });
     const fresh = createRun(db, repo).id;
+    finishRun(db, fresh, 'ok');
     db.close();
 
     expect(await runHistory({ repo, cwd })).toMatchObject({ runId: fresh, reusedRun: true });
@@ -224,7 +225,7 @@ describe.skipIf(!GIT)('runHistory against a real repository', () => {
   it('refuses to attach history to a run holding another repository', async () => {
     const { cwd, dbPath } = freshStore();
     const db = openDatabase(dbPath, { mustExist: true });
-    createRun(db, mkdtempSync(join(tmpdir(), 'stratigraph-other-')));
+    finishRun(db, createRun(db, mkdtempSync(join(tmpdir(), 'stratigraph-other-'))).id, 'ok');
     db.close();
 
     await expect(runHistory({ repo, cwd })).rejects.toThrow(/two different repositories/);

@@ -3,7 +3,7 @@ import { createInterface } from 'node:readline';
 
 import { loadConfig, type ConfigOverrides, type StratigraphConfig } from '../config.js';
 import { assertSchemaCurrent, openDatabase, requireStore, type Db } from '../db/database.js';
-import { createRun, finishRun } from '../db/run.js';
+import { createRun, finishRun, recordExtractor } from '../db/run.js';
 import { ingestInto } from '../facts/ingest.js';
 import type { FactWriterStats } from '../facts/writer.js';
 import { info, warn } from '../log.js';
@@ -36,6 +36,11 @@ export interface ExtractOptions extends ConfigOverrides {
   env?: NodeJS.ProcessEnv | undefined;
   /** Overridable so tests can drive a fake extractor without a JVM or a build. */
   spawnExtractor?: SpawnExtractor | undefined;
+  /**
+   * Overridable toolchain resolution, so tests can make one extractor's
+   * toolchain missing. Throws when the extractor cannot run on this machine.
+   */
+  resolveSpawner?: ((language: Language) => SpawnExtractor) | undefined;
 }
 
 export interface ExtractResult extends FactWriterStats {
@@ -90,31 +95,26 @@ export async function runExtract(options: ExtractOptions): Promise<ExtractResult
     );
   }
 
-  // Resolve every toolchain before opening the database, so a missing JDK is
-  // reported before a run row exists rather than halfway through one.
+  // Resolve every toolchain before spawning anything, so every skip is known
+  // before the first fact is written.
+  const resolve =
+    options.resolveSpawner ??
+    ((language: Language) =>
+      options.spawnExtractor ?? spawnerFor(language, options, config, env));
   const runnable: Array<{ language: Language; spawn: SpawnExtractor }> = [];
   const skipped: ExtractResult['skipped'] = [];
   for (const language of selected) {
-    if (options.spawnExtractor) {
-      runnable.push({ language, spawn: options.spawnExtractor });
-      continue;
-    }
     try {
-      runnable.push({ language, spawn: spawnerFor(language, options, config, env) });
+      runnable.push({ language, spawn: resolve(language) });
     } catch (err) {
       // ADR-0004: a missing JDK disables the Java extractor and nothing else.
       // A repository that is half Angular still gets its Angular half — the
       // alternative is that one absent toolchain costs the whole analysis.
-      if (selected.length === 1) throw err;
+      // ADR-0032: and the skip is recorded on the run, below.
       skipped.push({ language, reason: (err as Error).message });
     }
   }
 
-  if (runnable.length === 0) {
-    throw new ExtractError(
-      skipped.map((entry) => `${entry.language}: ${entry.reason}`).join('\n\n'),
-    );
-  }
   for (const entry of skipped) {
     warn(`skipping the ${entry.language} extractor — ${entry.reason.split('\n')[0]}`);
   }
@@ -127,6 +127,13 @@ export async function runExtract(options: ExtractOptions): Promise<ExtractResult
   ];
 
   if (options.emit) {
+    // No store to record a gap in: the stream is the whole output, and an
+    // empty one would read as a repository with nothing in it.
+    if (runnable.length === 0) {
+      throw new ExtractError(
+        skipped.map((entry) => `${entry.language}: ${entry.reason}`).join('\n\n'),
+      );
+    }
     // NDJSON is the product here, so it goes to stdout untouched. This is how a
     // golden gets captured and how a run is replayed through `ingest --from`.
     // Each extractor's `meta` line keeps the concatenation self-describing.
@@ -159,6 +166,19 @@ export async function runExtract(options: ExtractOptions): Promise<ExtractResult
     const total: FactWriterStats = { files: 0, nodes: 0, stubs: 0, edges: 0, diagnostics: 0 };
     const ran: Language[] = [];
 
+    // A run whose every extractor was skipped is still recorded, and still
+    // finishes ok: it is a true description of what this machine could read,
+    // and the report built from it says so rather than never being built.
+    for (const entry of skipped) {
+      recordExtractor(db, run.id, entry.language, 'skipped', entry.reason);
+    }
+    if (runnable.length === 0) {
+      warn(
+        `run ${run.id}: no extractor could run, so the run holds no code facts. The report ` +
+          `will say so and withhold every view built from code; fix the toolchain and extract again.`,
+      );
+    }
+
     for (const { language, spawn: spawner } of runnable) {
       const child = start(spawner, language, config.repoPath, args);
 
@@ -166,6 +186,7 @@ export async function runExtract(options: ExtractOptions): Promise<ExtractResult
       try {
         stats = await ingestInto(db, run.id, child.stdout);
       } catch (err) {
+        recordExtractor(db, run.id, language, 'failed', (err as Error).message);
         finishRun(db, run.id, 'failed');
         throw err;
       }
@@ -175,6 +196,7 @@ export async function runExtract(options: ExtractOptions): Promise<ExtractResult
       // analysis, and recording it as one would silently under-report.
       const code = await exitCode(child);
       if (code !== 0) {
+        recordExtractor(db, run.id, language, 'failed', `exited with status ${code}`);
         finishRun(db, run.id, 'failed');
         throw new ExtractError(
           `the ${language} extractor exited with status ${code}; run ${run.id} is marked ` +
@@ -182,6 +204,7 @@ export async function runExtract(options: ExtractOptions): Promise<ExtractResult
         );
       }
 
+      recordExtractor(db, run.id, language, 'ok', null);
       ran.push(language);
       accumulate(total, stats);
       info(`${language.padEnd(10)}  ${summarise(run.id, stats)}`);

@@ -17,7 +17,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 
 import { loadConfig, type ConfigOverrides } from '../config.js';
 import { assertSchemaCurrent, openDatabase, type Db } from '../db/database.js';
-import { findRun, latestRun } from '../db/run.js';
+import { findRun, latestRun, noCompletedRunMessage } from '../db/run.js';
 import { info } from '../log.js';
 import { createServer } from '../mcp/server.js';
 
@@ -66,8 +66,7 @@ export async function runMcp(options: McpOptions): Promise<McpServing> {
     if (run === null) {
       throw new McpError(
         options.run === undefined
-          ? `${config.dbPath} contains no runs. Run \`stratigraph extract\` or ` +
-            `\`stratigraph history\` first.`
+          ? noCompletedRunMessage(db, config.dbPath)
           : `run ${options.run} is not in ${config.dbPath}.`,
       );
     }
