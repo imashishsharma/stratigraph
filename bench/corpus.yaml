@@ -1,0 +1,312 @@
+# Benchmark corpus for stratigraph (ADR-0035).
+#
+# All 20 repos were cloned with full history (no --depth) into
+# ~/.cache/stratigraph/corpus/<name> and verified locally:
+#   - <dir> exists
+#   - `git -C <dir> rev-parse HEAD` matches the `sha` below
+#   - java/kt/ts file counts below are `git ls-files | grep -cE '\.(java|kt|tsx?)$'`
+#     on the pinned commit
+#   - "commits in the 12 months before HEAD" is `git log --since="12 months ago" --oneline | wc -l`
+#     run the day of cloning (2026-09-28); repos flagged "dormant" had 0.
+#
+# Two repos required by the product plan needed a substitution after
+# verification showed the obvious pick didn't actually match the criterion;
+# see the `why` text on spring-boot-realworld-example-app (#7), and the rejected list at the
+# bottom of this file.
+
+repos:
+  # --- 1: small baseline (required) ---
+  - name: spring-petclinic
+    url: https://github.com/spring-projects/spring-petclinic.git
+    sha: 818c4136ea971c21674525f9053de0d9c7ad8cfe
+    why: >
+      Small sanity baseline. Canonical Spring Boot + Spring Data JPA CRUD app.
+      50 Java files, 0 Kotlin, 0 TS. 57 commits in the 12 months before HEAD.
+    stacks: [java]
+    config: {}
+
+  # --- 2: Spring + Angular, Liquibase, lockfile (required) ---
+  - name: jhipster-sample-app
+    url: https://github.com/jhipster/jhipster-sample-app.git
+    sha: 6b000b5d23a36c45e01472471b84a44fa2464044
+    why: >
+      Full-stack JHipster reference app: Spring Boot backend + Angular
+      frontend (angular.json, NgModule-era JHipster client), Liquibase
+      changelogs under src/main/resources/config/liquibase. 136 Java files,
+      288 TS files. Note: no package-lock.json is actually committed in this
+      repo (checked git ls-files at root; only package.json is tracked), so
+      the "lockfile" characterization does not hold for this specific pin —
+      flag this when writing truth/jhipster-sample-app.yaml roles. 7 commits
+      in the 12 months before HEAD (template repo, low organic churn, mostly
+      bot dependency bumps).
+    stacks: [java, angular]
+    config: {}
+
+  # --- 3: Lombok-heavy multi-module Spring Boot + JPA (required) ---
+  - name: eladmin
+    url: https://github.com/elunez/eladmin.git
+    sha: 55fbf705956949697dbd68bf9003776609d3d029
+    why: >
+      Maven multi-module Spring Boot admin system (eladmin-common, -logging,
+      -system, -tools, -generator) with Spring Data JPA and pervasive Lombok:
+      274 Java files, 52 using @RequiredArgsConstructor constructor injection,
+      22 @Entity classes. 5 commits in the 12 months before HEAD. Replaced
+      sivaprasadreddy/spring-boot-microservices-series, which used Lombok only
+      for @Data/@Builder and had no @RequiredArgsConstructor injection.
+    stacks: [java]
+    config: {}
+  # --- 4: scale, cycles (required) ---
+  - name: dubbo
+    url: https://github.com/apache/dubbo.git
+    sha: a87b134859e1b3d0871e20b9eac848abd2f0b50c
+    why: >
+      Large-scale Apache RPC/microservice framework: deep module graph,
+      SPI-based plugin architecture prone to dependency cycles. 4050 Java
+      files. 338 commits in the 12 months before HEAD. Default branch is
+      "3.3" (their current stable line).
+    stacks: [java]
+    config: {}
+
+  # --- 5: large Angular/Nx-ish TS monorepo (required) ---
+  - name: bitwarden-clients
+    url: https://github.com/bitwarden/clients.git
+    sha: 45eb0013dc413dab78932c418d209d89371febf6
+    why: >
+      Large Angular monorepo (@angular/core 21.2.17 confirmed in
+      package.json) spanning web vault, desktop (Electron), browser
+      extension, and CLI clients sharing libs/. 6421 TS/TSX files, 0 Java.
+      3804 commits in the 12 months before HEAD (very active). Clone is
+      ~1.56GB on disk — over the ~1.5GB avoid-guideline, but this repo is
+      explicitly required by name in the corpus brief so it was kept anyway;
+      flagging the size here in case stratigraph's own resource budget needs
+      tuning against it.
+    stacks: [angular, typescript]
+    config: {}
+
+  # --- 6: legacy javax + Spring XML config (required) ---
+  - name: spring-framework-petclinic
+    url: https://github.com/spring-petclinic/spring-framework-petclinic.git
+    sha: cd43fc08e272b778e1196d0754ab86d1d42f1d5a
+    why: >
+      Legacy petclinic variant using plain Spring Framework (not Boot) with
+      XML bean configuration and javax.persistence, not Java-config DI. 61
+      Java files. 56 commits in the 12 months before HEAD.
+    stacks: [java]
+    config: {}
+
+  # --- 7: Flyway-driven schema, JPA preferred (required) ---
+  - name: spring-boot-realworld-example-app
+    url: https://github.com/gothinkster/spring-boot-realworld-example-app.git
+    sha: ee17e31aafe733d98c4853c8b9a74d7f2f6c924a
+    why: >
+      Schema comes from Flyway migrations: src/main/resources/db/migration/
+      V1__create_tables.sql, org.flywaydb:flyway-core in build.gradle. 116
+      Java files. NOTE: persistence layer is MyBatis (org.mybatis.spring.boot
+      starter), not JPA — `git grep` found zero @Entity/@Table classes, so
+      the "JPA entities preferred" part of the brief is not met by this pin.
+      0 commits in the 12 months before HEAD (dormant since 2022-06-08).
+      A combined Flyway+JPA real-world app was searched for (web search +
+      dependency inspection of several candidates) but not confidently
+      found within budget; see rejected list.
+    stacks: [java]
+    config: {}
+
+  # --- 8: Kotlin + Spring Boot ---
+  - name: spring-petclinic-kotlin
+    url: https://github.com/spring-petclinic/spring-petclinic-kotlin.git
+    sha: da08609c277f95c37dd91187867f74dbad1090f8
+    why: >
+      Kotlin + Spring Boot + Gradle rewrite of petclinic. 38 Kotlin files, 0
+      Java. 28 commits in the 12 months before HEAD.
+    stacks: [kotlin]
+    config: {}
+
+  # --- 9: Spring microservices monorepo ---
+  - name: piggymetrics
+    url: https://github.com/sqshq/piggymetrics.git
+    sha: 6bb2cf9ddbca980b664d3edbb6ff775d75369278
+    why: >
+      Spring Cloud microservices monorepo (account-service,
+      statistics-service, notification-service, config/gateway/registry).
+      97 Java files. 0 commits in the 12 months before HEAD (dormant since
+      2021-11-15) — kept despite staleness because it's one of the task's
+      own suggested examples for this slot; quiet history noted for anyone
+      relying on churn/hotspot scoring for this repo.
+    stacks: [java]
+    config: {}
+
+  # --- 10: extra Java diversity (mature multi-module, non-JPA DAO layer) ---
+  - name: killbill
+    url: https://github.com/killbill/killbill.git
+    sha: 4bdc2b24ad298f8e47dda5ac1ddeac7f34687377
+    why: >
+      Mature (~15yr) Java multi-module Maven billing platform. Uses JDBI
+      SQL-object DAOs (EntitySqlDaoTransactionalJdbiWrapper), not JPA;
+      schema comes from raw versioned SQL (ddl.sql + migration/V<ts>__*.sql
+      per module — a Flyway-style naming convention but no Flyway/Liquibase
+      dependency in any pom, so it's a hand-rolled runner). profiles/killbill
+      and profiles/killpay package as WAR. 1698 Java files. 192 commits in
+      the 12 months before HEAD (actively maintained; last commit
+      2026-09-24). Originally slotted as "another Liquibase app" but
+      verification found no Liquibase anywhere in the repo — kept anyway for
+      its own diversity value (JDBI DAOs, WAR packaging, very mature
+      history); the "another Liquibase app" requirement is instead already
+      covered by jhipster-sample-app-gradle and jhipster-sample-app-oauth2
+      below, both confirmed to have real Liquibase changelog directories.
+    stacks: [java]
+    config: {}
+
+  # --- 11: Gradle multi-module Java ---
+  - name: initializr
+    url: https://github.com/spring-io/initializr.git
+    sha: d445a056ced904ba5098df1e75b75bebf9840687
+    why: >
+      Gradle multi-module Java app (Spring Initializr itself): generator,
+      generator-spring, metadata, web, actuator, docs, version-resolver
+      modules. 642 Java files. 190 commits in the 12 months before HEAD.
+    stacks: [java]
+    config: {}
+
+  # --- 12: full-stack Spring + Angular #2 (Gradle build variant) ---
+  - name: jhipster-sample-app-gradle
+    url: https://github.com/jhipster/jhipster-sample-app-gradle.git
+    sha: 8bdbaacecdb91cf3bef693e01294e82e00c2ac06
+    why: >
+      Same JHipster full-stack shape as jhipster-sample-app but built with
+      Gradle (build.gradle, settings.gradle, buildSrc) instead of Maven.
+      Liquibase changelogs confirmed under
+      src/main/resources/config/liquibase. 128 Java files, 291 TS files. 7
+      commits in the 12 months before HEAD (template repo).
+    stacks: [java, angular]
+    config: {}
+
+  # --- 13: full-stack Spring + Angular #3 (OAuth2/Keycloak variant) ---
+  - name: jhipster-sample-app-oauth2
+    url: https://github.com/jhipster/jhipster-sample-app-oauth2.git
+    sha: dd599c66fa087a3864cf89c11c8bc402cdb228b6
+    why: >
+      JHipster full-stack sample configured for OAuth2/Keycloak security
+      instead of JWT. Liquibase changelogs confirmed under
+      src/main/resources/config/liquibase. 95 Java files, 175 TS files. 7
+      commits in the 12 months before HEAD (template repo).
+    stacks: [java, angular]
+    config: {}
+
+  # --- 14: NgModule Angular app ---
+  - name: spring-petclinic-angular
+    url: https://github.com/spring-petclinic/spring-petclinic-angular.git
+    sha: 1978a75eab0c803595d5cde75acc6a0a9bcff4de
+    why: >
+      Angular frontend for spring-petclinic-rest, built the pre-standalone
+      way with NgModules. 95 TS files, 0 Java. 38 commits in the 12 months
+      before HEAD.
+    stacks: [angular]
+    config: {}
+
+  # --- 15: standalone-components Angular app ---
+  - name: analog
+    url: https://github.com/analogjs/analog.git
+    sha: 40cc8b45586549ff95679eef245901122613acd3
+    why: >
+      Angular meta-framework (Vite/Nitro-based, "the fullstack meta-framework
+      for Angular"), @angular/core confirmed in package.json, built entirely
+      on standalone components — 61 files use `standalone: true` (`git grep`).
+      837 TS files, 0 Java. 835 commits in the 12 months before HEAD (very
+      active). Default branch is "beta".
+    stacks: [angular, typescript]
+    config: {}
+
+  # --- 16: Spring Data JPA with @Query and JdbcTemplate side by side ---
+  - name: spring-petclinic-rest
+    url: https://github.com/spring-petclinic/spring-petclinic-rest.git
+    sha: 4cd8e1b0cd42578e882247d8801f6be5d402f118
+    why: >
+      REST-only petclinic backend with two parallel repository
+      implementations: repository/springdatajpa (Spring Data JPA,
+      @Query-annotated) and repository/jdbc (hand-written JdbcTemplate DAOs,
+      e.g. JdbcOwnerRepositoryImpl) — both confirmed present via `git grep`.
+      109 Java files. 83 commits in the 12 months before HEAD.
+    stacks: [java]
+    config: {}
+
+  # --- 17: heavy @Bean/@Configuration wiring ---
+  - name: nacos
+    url: https://github.com/alibaba/nacos.git
+    sha: 1b6309f5086c163a1ff9c0469fabd4494ec09093
+    why: >
+      Service-discovery/config-center with heavy Spring @Configuration/@Bean
+      wiring across its config, naming, and console modules — 42 files carry
+      @Configuration, 108 total @Bean declarations (`git grep -c`). 5291 Java
+      files. Console frontend (console-ui, console-ui-next) is React, not
+      Angular (confirmed "react" in both package.json files) — 286 TS files
+      counted but tagged `typescript`, not `angular`. 762 commits in the 12
+      months before HEAD. Default branch is "develop".
+    stacks: [java, typescript]
+    config: {}
+
+  # --- 18: Spring WebFlux ---
+  - name: spring-cloud-gateway
+    url: https://github.com/spring-cloud/spring-cloud-gateway.git
+    sha: 88a92c065767a20a5d37753437d15975a8c06c28
+    why: >
+      Reactive API gateway built on Spring WebFlux, Gradle multi-module
+      (spring-cloud-gateway-server, -server-webflux, -server-webmvc, etc.).
+      680 Java files, 3 Kotlin files. 475 commits in the 12 months before
+      HEAD.
+    stacks: [java, kotlin]
+    config: {}
+
+  # --- 19: WAR packaging, legacy Hibernate/JPA at scale ---
+  - name: openmrs-core
+    url: https://github.com/openmrs/openmrs-core.git
+    sha: a521ee30a53909c48e4567ddab1ec758b9b59be0
+    why: >
+      Mature (~20yr) Java EHR platform; webapp module packages as WAR
+      (<packaging>war</packaging> confirmed). Hibernate/JPA-heavy — 225 files
+      reference org.hibernate directly (`git grep`). 1361 Java files. 606
+      commits in the 12 months before HEAD.
+    stacks: [java]
+    config: {}
+
+  # --- 20: extra diversity — Maven multi-module, Lombok, WebFlux, non-Angular TS UI ---
+  - name: spring-boot-admin
+    url: https://github.com/codecentric/spring-boot-admin.git
+    sha: 9d667167671483d93c1265545c68c0c6d6618405
+    why: >
+      Maven multi-module (server, server-ui, server-mcp, client,
+      starter-server, starter-client, samples) Spring Boot monitoring tool.
+      Lombok-heavy: 44 of 403 Java files use Lombok. Server uses WebFlux for
+      its SSE notification stream — 20 files import
+      org.springframework.web.reactive (`git grep`). UI (spring-boot-admin-
+      server-ui) depends on both "vue" and "react" per package.json, not
+      Angular, so tagged `typescript` rather than `angular`. 234 TS files.
+      935 commits in the 12 months before HEAD.
+    stacks: [java, typescript]
+    config: {}
+
+# --- Rejected candidates (tried, not used) ---
+#
+# - spring-petclinic/spring-petclinic-microservices: first pick for slot #3
+#   (Lombok-heavy multi-module + JPA). `git grep -l lombok` and a pom.xml
+#   search for the lombok groupId both came back empty across every module —
+#   the repo does not use Lombok at all. Rejected; cloned copy deleted.
+#
+# - shopizer-ecommerce/shopizer: considered for slot #3 as a larger
+#   alternative (553MB, real multi-module Maven e-commerce platform, pushed
+#   2025-03-23). Checked root pom.xml and all 5 first-level module poms via
+#   raw GitHub content fetch for a lombok or hibernate-core dependency —
+#   found neither (dependency versions are likely pinned deeper in a BOM/
+#   nested-module pom not fetched). Not confidently a Lombok/JPA app within
+#   the research budget available, so not cloned.
+#
+# - raeperd/springboot-realworld-example-app: guessed URL for the Flyway+JPA
+#   slot; does not exist (`git ls-remote` failed). Used
+#   gothinkster/spring-boot-realworld-example-app instead (same RealWorld
+#   app, different fork/owner) — see its `why` above for the JPA caveat.
+#
+# - Several small "spring-boot-multi-module" / "hexagonal-architecture"
+#   personal/tutorial repos surfaced by web search while hunting for a
+#   stronger slot-#3 candidate (e.g. seonwoo960000/hexagonal-multi-module,
+#   narendracode/modular-app, various "RequiredArgsConstructor + JPA +
+#   multi-module" hits) were rejected as too small / unverified quality —
+#   effectively the "tutorial with 3 files" pattern the brief says to avoid.

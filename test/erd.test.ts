@@ -1,4 +1,4 @@
-import { mkdtempSync } from 'node:fs';
+import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -119,6 +119,11 @@ function seedSchema(): void {
       ['annotation', 'jakarta.persistence.OneToMany'],
     ),
     edge('annotated_with', ['field', 'shop.BaseEntity#id'], ['annotation', 'jakarta.persistence.Id']),
+    edge(
+      'annotated_with',
+      ['class', 'shop.BaseEntity'],
+      ['annotation', 'jakarta.persistence.MappedSuperclass'],
+    ),
   ]);
 }
 
@@ -139,16 +144,8 @@ describe('the ER model', () => {
     seedSchema();
     const orders = buildErModel(db, runId).entities.find((e) => e.table === 'orders');
 
+    // Mapped-superclass columns first, top-down, as a table definition reads.
     expect(orders?.columns).toEqual([
-      {
-        name: 'customer_ref',
-        field: 'customerRef',
-        type: 'String',
-        primaryKey: false,
-        inherited: false,
-        path: 'src/Shop.java',
-        line: 10,
-      },
       {
         name: 'id',
         field: 'id',
@@ -157,6 +154,15 @@ describe('the ER model', () => {
         inherited: true,
         path: 'src/Shop.java',
         line: 6,
+      },
+      {
+        name: 'customer_ref',
+        field: 'customerRef',
+        type: 'String',
+        primaryKey: false,
+        inherited: false,
+        path: 'src/Shop.java',
+        line: 10,
       },
     ]);
   });
@@ -567,5 +573,64 @@ describe('the dependency matrix', () => {
 
   it('is empty for a run with no packages', () => {
     expect(buildDependencyMatrix(db, runId, 10).packages).toEqual([]);
+  });
+});
+
+describe('the ER model, as JPA maps it (ADR-0036)', () => {
+  /** The Java extractor's own golden output for fixtures/jpa-model. */
+  function seedJpaModel(): void {
+    const golden = readFileSync(join(REPO_ROOT, 'fixtures', 'jpa-model', 'expected-facts.ndjson'), 'utf8');
+    seed(golden.split('\n').filter((line) => line.trim() !== '').map((line) => JSON.parse(line)));
+  }
+
+  function columns(table: string): string[] {
+    const entity = buildErModel(db, runId).entities.find((e) => e.table === table);
+    return (entity?.columns ?? []).map((c) => `${c.name}${c.primaryKey ? ' PK' : ''}${c.inherited ? ' (inherited)' : ''}`);
+  }
+
+  it('has one entity per table, single-table subclasses folded into their root', () => {
+    seedJpaModel();
+    const model = buildErModel(db, runId);
+    expect(model.entities.map((e) => [e.table, e.className, e.classes])).toEqual([
+      ['ambulance_van', 'com.example.clinic.domain.AmbulanceVan', ['com.example.clinic.domain.AmbulanceVan']],
+      ['clinic.pets', 'com.example.clinic.domain.Pet', ['com.example.clinic.domain.Pet']],
+      ['owner', 'com.example.clinic.domain.Owner', ['com.example.clinic.domain.Owner']],
+      [
+        'payment',
+        'com.example.clinic.domain.Payment',
+        ['com.example.clinic.domain.Payment', 'com.example.clinic.domain.CardPayment'],
+      ],
+      ['vehicle', 'com.example.clinic.domain.Vehicle', ['com.example.clinic.domain.Vehicle']],
+      ['visit', 'com.example.clinic.domain.VisitRecord', ['com.example.clinic.domain.VisitRecord']],
+    ]);
+  });
+
+  it('inherits only mapped-superclass fields, and skips static and transient ones', () => {
+    seedJpaModel();
+    // BaseEntity is a @MappedSuperclass: its id is a column, its
+    // serialVersionUID is static. Auditable is a plain class: its auditNote is
+    // not persistent. scratch is transient, displayName @Transient.
+    expect(columns('owner')).toEqual(['id PK (inherited)', 'first_name', 'street', 'city']);
+    expect(columns('visit')).toEqual(['id PK (inherited)', 'description']);
+  });
+
+  it('names default columns by the strategy the mapping cites, and explicit ones through it too', () => {
+    seedJpaModel();
+    // Spring Boot's CamelCaseToUnderscores applies to @Column(name = "petName").
+    expect(columns('clinic.pets')).toEqual(['id PK (inherited)', 'pet_name']);
+  });
+
+  it('puts single-table subclass columns in the root table, and keys a joined child by the root id', () => {
+    seedJpaModel();
+    expect(columns('payment')).toEqual(['id PK (inherited)', 'amount_cents', 'card_last4']);
+    expect(columns('ambulance_van')).toEqual(['id PK (inherited)', 'stretchers']);
+  });
+
+  it('draws a bidirectional association once, from the owning side', () => {
+    seedJpaModel();
+    const model = buildErModel(db, runId);
+    expect(model.relationships.map((r) => `${r.fromTable} ${r.cardinality} ${r.toTable} via ${r.via}`)).toEqual([
+      'clinic.pets many-to-one owner via owner',
+    ]);
   });
 });

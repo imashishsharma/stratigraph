@@ -103,6 +103,36 @@ final class FrameworkAnnotations {
     static final Set<String> JPA_TABLE = new HashSet<>(bothNamespaces("persistence.Table"));
     static final Set<String> JPA_COLUMN = new HashSet<>(bothNamespaces("persistence.Column"));
     static final Set<String> JPA_ID = new HashSet<>(bothNamespaces("persistence.Id"));
+    static final Set<String> JPA_INHERITANCE = new HashSet<>(bothNamespaces("persistence.Inheritance"));
+    static final Set<String> JPA_EMBEDDED = new HashSet<>();
+    static final Set<String> JPA_MAPPED_BY = new HashSet<>();
+
+    static {
+        JPA_EMBEDDED.addAll(bothNamespaces("persistence.Embedded"));
+        JPA_EMBEDDED.addAll(bothNamespaces("persistence.EmbeddedId"));
+        for (String association : List.of("OneToMany", "OneToOne", "ManyToMany")) {
+            JPA_MAPPED_BY.addAll(bothNamespaces("persistence." + association));
+        }
+    }
+
+    // ------------------------------------------------------- Spring Data
+
+    static final String SPRING_DATA_QUERY = "org.springframework.data.jpa.repository.Query";
+
+    /** Repository supertypes whose first type argument is a JPA entity. */
+    static final Set<String> SPRING_DATA_REPOSITORIES = Set.of(
+            "org.springframework.data.repository.Repository",
+            "org.springframework.data.repository.CrudRepository",
+            "org.springframework.data.repository.ListCrudRepository",
+            "org.springframework.data.repository.PagingAndSortingRepository",
+            "org.springframework.data.repository.ListPagingAndSortingRepository",
+            "org.springframework.data.jpa.repository.JpaRepository",
+            "org.springframework.data.jpa.repository.JpaSpecificationExecutor");
+
+    /** JDBC entry points whose first argument is a SQL string. */
+    static final Set<String> JDBC_SQL_METHODS = Set.of(
+            "query", "queryForObject", "queryForList", "queryForMap", "queryForRowSet",
+            "queryForStream", "update", "batchUpdate", "execute", "sql");
 
     /** True when the extractor understands what this annotation means. */
     static boolean isKnown(String fqn) {

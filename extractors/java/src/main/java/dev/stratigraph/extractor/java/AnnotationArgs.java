@@ -66,16 +66,51 @@ final class AnnotationArgs {
         return out;
     }
 
+    /** A boolean literal for an element, or false. */
+    boolean bool(String element) {
+        for (Expression argument : arguments) {
+            if (argument instanceof J.Assignment) {
+                J.Assignment assignment = (J.Assignment) argument;
+                if (element.equals(nameOf(assignment.getVariable()))
+                        && assignment.getAssignment() instanceof J.Literal) {
+                    return Boolean.TRUE.equals(((J.Literal) assignment.getAssignment()).getValue());
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
+     * A string literal, or a concatenation made only of string literals —
+     * {@code "select o " + "from Owner o"} is one query split across lines.
+     * Anything else yields null.
+     */
+    static String literal(Expression expression) {
+        if (expression instanceof J.Literal) {
+            Object value = ((J.Literal) expression).getValue();
+            return value instanceof String ? (String) value : null;
+        }
+        if (expression instanceof J.Binary
+                && ((J.Binary) expression).getOperator() == J.Binary.Type.Addition) {
+            String left = literal(((J.Binary) expression).getLeft());
+            String right = literal(((J.Binary) expression).getRight());
+            return left == null || right == null ? null : left + right;
+        }
+        if (expression instanceof J.Parentheses) {
+            Object tree = ((J.Parentheses<?>) expression).getTree();
+            return tree instanceof Expression ? literal((Expression) tree) : null;
+        }
+        return null;
+    }
+
     boolean isEmpty() {
         return arguments.isEmpty();
     }
 
     private static void collectStrings(Expression expression, List<String> out) {
-        if (expression instanceof J.Literal) {
-            Object value = ((J.Literal) expression).getValue();
-            if (value instanceof String) {
-                out.add((String) value);
-            }
+        String text = literal(expression);
+        if (text != null) {
+            out.add(text);
             return;
         }
         if (expression instanceof J.NewArray) {

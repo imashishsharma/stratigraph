@@ -96,3 +96,13 @@ records `"resolution": "import"` for them. Installing any of those as a
 dependency of `stratigraph` would change the golden. That is a failure worth
 having — it is the difference between the two resolution paths, and it should be
 noticed rather than absorbed.
+
+## `jpa-model`
+
+A Spring Boot JPA domain with every mapping rule ADR-0036 applies: a
+`@MappedSuperclass` with a static field, a plain (non-mapped) superclass whose
+field must not become a column, default-named entities under Spring Boot's
+snake-case naming, `@Entity(name)`, `@Table(name, schema)`, single-table and
+joined inheritance, an `@Embedded` value, transient fields, a bidirectional
+association, a Spring Data repository with JPQL and native `@Query`, and JDBC
+literal SQL.

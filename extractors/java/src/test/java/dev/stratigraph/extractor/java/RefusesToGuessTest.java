@@ -280,12 +280,14 @@ class RefusesToGuessTest {
     }
 
     @Test
-    void willNotNameATableTheSourceDoesNotName(@TempDir Path repo) throws Exception {
-        // An @Entity with no @Table gets its table name from the persistence
-        // provider's naming strategy at runtime -- `Order` could become
-        // `order`, `orders` or `ORDER` depending on configuration we cannot
-        // see. Any of those would look right in a report and be a guess.
-        write(repo, "src/Order.java", """
+    void willNotNameATableUnderANamingStrategyItDoesNotKnow(@TempDir Path repo) throws Exception {
+        // ADR-0036: a default-named entity's table is its name put through the
+        // module's physical naming strategy. A custom strategy class could do
+        // anything to `Order`; naming a table after it would be a guess.
+        write(repo, "pom.xml", "<project><artifactId>app</artifactId></project>");
+        write(repo, "src/main/resources/application.properties",
+                "spring.jpa.hibernate.naming.physical-strategy=com.acme.PrefixingStrategy\n");
+        write(repo, "src/main/java/app/Order.java", """
                 package app;
                 import javax.persistence.Entity;
                 @Entity
@@ -295,17 +297,29 @@ class RefusesToGuessTest {
         List<JsonNode> facts = extract(repo);
 
         assertFalse(has(facts, "edge", node -> "maps_to".equals(node.path("kind").asText())),
-                "invented a table name from a naming strategy it cannot see");
+                "invented a table name from a naming strategy it cannot read");
         assertFalse(has(facts, "node", node -> "table".equals(node.path("kind").asText())));
         assertTrue(has(facts, "diagnostic", node ->
-                        node.path("message").asText().contains("naming strategy")),
-                "stayed silent about the entity whose table it could not name");
+                node.path("message").asText().contains("com.acme.PrefixingStrategy")));
+    }
 
-        // The entity annotation itself is still recorded -- javax, not jakarta.
-        assertTrue(has(facts, "edge", node ->
-                        "annotated_with".equals(node.path("kind").asText())
-                                && "javax.persistence.Entity".equals(node.path("dst").path("fqn").asText())),
-                "missed a javax-namespace annotation");
+    @Test
+    void namesADefaultTableByTheRuleItCanCite(@TempDir Path repo) throws Exception {
+        // Plain JPA with no Spring Boot and no override: the physical name is
+        // the logical one as written, and the edge says which rule applied.
+        write(repo, "src/Order.java", """
+                package app;
+                import javax.persistence.Entity;
+                @Entity
+                public class Order {}
+                """);
+
+        List<JsonNode> facts = extract(repo);
+
+        assertTrue(has(facts, "edge", node -> "maps_to".equals(node.path("kind").asText())
+                && "order".equals(node.path("dst").path("fqn").asText())
+                && "as-written".equals(node.path("attrs").path("strategy").asText())
+                && "class-name".equals(node.path("attrs").path("naming").asText())));
     }
 
     @Test

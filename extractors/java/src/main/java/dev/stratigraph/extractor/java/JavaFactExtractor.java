@@ -44,6 +44,12 @@ final class JavaFactExtractor {
     /** Type fqn → the file that declared it, so a second declaration can be reported. */
     private final Map<String, String> declaredIn = new LinkedHashMap<>();
 
+    /** Entities, repositories and queries, resolved after every file is read (ADR-0036). */
+    private final Persistence persistence = new Persistence();
+
+    /** The build module directory of the file being visited. */
+    private Path currentModuleDir;
+
     JavaFactExtractor(Path repoRoot, FactEmitter emitter, SourceDiscovery discovery) {
         this.repoRoot = repoRoot;
         this.emitter = emitter;
@@ -148,10 +154,23 @@ final class JavaFactExtractor {
                 continue;
             }
 
-            SourceDiscovery.ModuleId module =
-                    discovery.moduleOf(found, repoRoot.resolve(sourceFile.getSourcePath()));
+            Path absolute = repoRoot.resolve(sourceFile.getSourcePath());
+            SourceDiscovery.ModuleId module = discovery.moduleOf(found, absolute);
+            currentModuleDir = moduleDirOf(found, absolute);
             visit(cu, path, module, declaredTypeNames);
         }
+
+        persistence.finish(emitter, repoRoot);
+    }
+
+    /** Same walk as {@link SourceDiscovery#moduleOf}, answering with the directory. */
+    private Path moduleDirOf(SourceDiscovery.Result found, Path source) {
+        for (Path dir : found.modules.keySet()) {
+            if (source.startsWith(dir)) {
+                return dir;
+            }
+        }
+        return found.modules.isEmpty() ? repoRoot : found.modules.keySet().iterator().next();
     }
 
     /** Every type simple name the parsed source set declares, mapped to one file declaring it. */
@@ -340,7 +359,7 @@ final class JavaFactExtractor {
             ClassContext context = new ClassContext(kind, fqn, annotations, declaration);
             contexts.put(fqn, context);
 
-            emitEntityMapping(context, self, declaration);
+            recordPersistence(context, declaration);
             emitConstructorInjection(context, self, declaration);
 
             return super.visitClassDeclaration(declaration, unused);
@@ -382,31 +401,104 @@ final class JavaFactExtractor {
         }
 
         /**
-         * `@Entity` plus `@Table(name = ...)` maps a type to a table.
-         *
-         * Only with an explicit name. An `@Entity` with no `@Table` gets its
-         * table name from the persistence provider's naming strategy at
-         * runtime -- `Order` becomes `order`, `orders` or `ORDER` depending on
-         * configuration we cannot see -- so the honest output is a diagnostic
-         * rather than a plausible table.
+         * What this type says about persistence, recorded for the whole-build
+         * pass in {@link Persistence} (ADR-0036): an {@code @Entity}'s names,
+         * schema, inheritance strategy and superclass, or a Spring Data
+         * repository's entity type argument. No table is decided here.
          */
-        private void emitEntityMapping(ClassContext context, NodeRef self, J.ClassDeclaration declaration) {
-            if (!context.hasAny(FrameworkAnnotations.JPA_ENTITY)) {
+        private void recordPersistence(ClassContext context, J.ClassDeclaration declaration) {
+            if (context.hasAny(FrameworkAnnotations.JPA_ENTITY)) {
+                Persistence.EntityInfo info = new Persistence.EntityInfo(
+                        context.fqn, declaration.getSimpleName(), path, line(declaration), currentModuleDir);
+                ResolvedAnnotation entity = context.first(FrameworkAnnotations.JPA_ENTITY);
+                info.entityName = new AnnotationArgs(entity.node).string("name");
+                ResolvedAnnotation table = context.first(FrameworkAnnotations.JPA_TABLE);
+                if (table != null) {
+                    AnnotationArgs args = new AnnotationArgs(table.node);
+                    info.tableName = args.string("name");
+                    info.schema = args.string("schema");
+                    info.tableLine = line(table.node);
+                }
+                ResolvedAnnotation inheritance = context.first(FrameworkAnnotations.JPA_INHERITANCE);
+                if (inheritance != null) {
+                    List<String> strategy = new AnnotationArgs(inheritance.node).enumNames("strategy");
+                    info.inheritance = strategy.isEmpty() ? "SINGLE_TABLE" : strategy.get(0);
+                }
+                if (declaration.getExtends() != null) {
+                    TypeResolver.Resolved parent = resolver.resolve(
+                            declaration.getExtends().getType(), writtenName(declaration.getExtends()));
+                    if (parent.isResolved()) {
+                        info.superclass = parent.fqn;
+                    }
+                }
+                persistence.entity(info);
+            }
+
+            if (declaration.getKind() == J.ClassDeclaration.Kind.Type.Interface
+                    && declaration.getImplements() != null) {
+                for (TypeTree supertype : declaration.getImplements()) {
+                    if (!(supertype instanceof J.ParameterizedType)) {
+                        continue;
+                    }
+                    J.ParameterizedType parameterized = (J.ParameterizedType) supertype;
+                    TypeResolver.Resolved raw = resolver.resolve(
+                            parameterized.getClazz().getType(), writtenName((TypeTree) parameterized.getClazz()));
+                    if (!raw.isResolved() || !FrameworkAnnotations.SPRING_DATA_REPOSITORIES.contains(raw.fqn)
+                            || parameterized.getTypeParameters() == null
+                            || parameterized.getTypeParameters().isEmpty()
+                            || !(parameterized.getTypeParameters().get(0) instanceof TypeTree)) {
+                        continue;
+                    }
+                    TypeTree entityType = (TypeTree) parameterized.getTypeParameters().get(0);
+                    TypeResolver.Resolved entity = resolver.resolve(entityType.getType(), writtenName(entityType));
+                    if (entity.isResolved()) {
+                        persistence.repository(new Persistence.RepositoryInfo(
+                                context.fqn, entity.fqn, path, line(supertype)));
+                    }
+                }
+            }
+        }
+
+        /** A Spring Data {@code @Query}: the string, and whether it is native SQL or JPQL. */
+        private void recordQuery(List<ResolvedAnnotation> annotations, JavaType.Method type) {
+            for (ResolvedAnnotation annotation : annotations) {
+                if (!FrameworkAnnotations.SPRING_DATA_QUERY.equals(annotation.fqn)) {
+                    continue;
+                }
+                AnnotationArgs args = new AnnotationArgs(annotation.node);
+                String query = args.string("value");
+                if (query == null || query.isBlank()) {
+                    continue;
+                }
+                boolean nativeSql = args.bool("nativeQuery");
+                persistence.query(new Persistence.QueryInfo(Fqn.method(type), query, nativeSql,
+                        nativeSql ? "native-query" : "jpql-query", path, line(annotation.node)));
+            }
+        }
+
+        /**
+         * A literal SQL string passed to a JDBC-style method ({@code jdbc.query("SELECT ...")}).
+         *
+         * Recognised by the literal, not by the receiver's type: without a
+         * classpath {@code JdbcTemplate} is unattributed, but a first argument
+         * that is a literal beginning with a SQL verb, passed to one of the
+         * JDBC method names, is SQL whichever library receives it.
+         */
+        private void recordJdbc(J.MethodInvocation invocation) {
+            if (!FrameworkAnnotations.JDBC_SQL_METHODS.contains(invocation.getSimpleName())
+                    || invocation.getArguments().isEmpty()) {
                 return;
             }
-            ResolvedAnnotation table = context.first(FrameworkAnnotations.JPA_TABLE);
-            String name = table == null ? null : new AnnotationArgs(table.node).string("name");
-            if (name == null || name.isBlank()) {
-                emitter.diagnostic("info",
-                        context.fqn + " is an entity with no explicit @Table(name=...); its table "
-                                + "name comes from the persistence provider's naming strategy and "
-                                + "was not recorded",
-                        path, line(declaration));
+            String sql = AnnotationArgs.literal(invocation.getArguments().get(0));
+            if (sql == null || !Persistence.Sql.looksLikeSql(sql)) {
                 return;
             }
-            emitter.node("table", Fqn.table(name), name, null, null, null, null, null);
-            emitter.edge("maps_to", self, new NodeRef("table", Fqn.table(name)),
-                    path, line(table.node), null);
+            J.MethodDeclaration enclosing = getCursor().firstEnclosing(J.MethodDeclaration.class);
+            if (enclosing == null || enclosing.getMethodType() == null) {
+                return;
+            }
+            persistence.query(new Persistence.QueryInfo(Fqn.method(enclosing.getMethodType()), sql, true,
+                    "sql-literal", path, line(invocation)));
         }
 
         /**
@@ -511,6 +603,7 @@ final class JavaFactExtractor {
 
             emitEndpoints(owner, self, annotations, declaration);
             emitSetterInjection(owner, annotations, declaration);
+            recordQuery(annotations, type);
             return super.visitMethodDeclaration(declaration, unused);
         }
 
@@ -631,6 +724,9 @@ final class JavaFactExtractor {
             ResolvedAnnotation column = first(annotations, FrameworkAnnotations.JPA_COLUMN);
             String columnName = column == null ? null : new AnnotationArgs(column.node).string("name");
             boolean isId = first(annotations, FrameworkAnnotations.JPA_ID) != null;
+            boolean embedded = first(annotations, FrameworkAnnotations.JPA_EMBEDDED) != null;
+            ResolvedAnnotation inverse = first(annotations, FrameworkAnnotations.JPA_MAPPED_BY);
+            String mappedBy = inverse == null ? null : new AnnotationArgs(inverse.node).string("mappedBy");
 
             for (J.VariableDeclarations.NamedVariable variable : declaration.getVariables()) {
                 Map<String, Object> attrs = new LinkedHashMap<>();
@@ -659,6 +755,14 @@ final class JavaFactExtractor {
                 if (isId) {
                     attrs.put("id", true);
                 }
+                if (embedded) {
+                    attrs.put("embedded", true);
+                }
+                // The inverse side of a bidirectional association: the owning
+                // side's field is the one that holds the key (ADR-0036).
+                if (mappedBy != null && !mappedBy.isBlank()) {
+                    attrs.put("mappedBy", mappedBy);
+                }
 
                 NodeRef self = new NodeRef("field",
                         Fqn.field(ownerFqn, variable.getSimpleName()));
@@ -682,6 +786,7 @@ final class JavaFactExtractor {
         @Override
         public J.MethodInvocation visitMethodInvocation(J.MethodInvocation invocation, Void unused) {
             emitCall(invocation.getMethodType(), line(invocation));
+            recordJdbc(invocation);
             return super.visitMethodInvocation(invocation, unused);
         }
 

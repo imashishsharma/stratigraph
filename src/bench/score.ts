@@ -148,7 +148,9 @@ function tableRecall(db: Db, runId: number, expected: string[]): Ratio {
 
 function entityRecall(db: Db, runId: number, expected: Truth['entities'] & object): Ratio {
   const byClass = new Map(
-    buildErModel(db, runId).entities.map((entity) => [entity.className, bareTable(entity.table)]),
+    buildErModel(db, runId).entities.flatMap((entity) =>
+      entity.classes.map((className) => [className, bareTable(entity.table)] as const),
+    ),
   );
   const missed: string[] = [];
   for (const { class: className, table } of expected) {

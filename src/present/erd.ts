@@ -37,6 +37,13 @@ const ID_ANNOTATIONS = new Set([
   'javax.persistence.EmbeddedId',
 ]);
 
+const MAPPED_SUPERCLASS = new Set([
+  'jakarta.persistence.MappedSuperclass',
+  'javax.persistence.MappedSuperclass',
+]);
+
+const EMBEDDABLE = new Set(['jakarta.persistence.Embeddable', 'javax.persistence.Embeddable']);
+
 /** Fields the ORM never maps to a column. */
 const TRANSIENT_ANNOTATIONS = new Set([
   'jakarta.persistence.Transient',
@@ -65,8 +72,10 @@ export interface ErEntity {
   id: string;
   /** The table name, which is what the mapping declared. */
   table: string;
-  /** The class mapped to it. */
+  /** The class mapped to it — the inheritance root when several share the table. */
   className: string;
+  /** Every class mapped to this table, root first (single-table inheritance). */
+  classes: string[];
   columns: ErColumn[];
   path: string | null;
   line: number | null;
@@ -137,6 +146,7 @@ export function buildErModel(db: Db, runId: number): ErModel {
 
   const tableOfClass = new Map(mappings.map((m) => [m.className, m.table]));
   const superclasses = loadSuperclasses(db, runId);
+  const classAnnotations = loadClassAnnotations(db, runId);
   const fields = loadFields(db, runId);
   const fieldAnnotations = loadFieldAnnotations(db, runId);
 
@@ -147,28 +157,96 @@ export function buildErModel(db: Db, runId: number): ErModel {
     else byOwner.set(field.ownerFqn, [field]);
   }
 
+  const isMappedSuperclass = (fqn: string) =>
+    (classAnnotations.get(fqn) ?? []).some((a) => MAPPED_SUPERCLASS.has(a));
+  const isEmbeddable = (fqn: string) =>
+    (classAnnotations.get(fqn) ?? []).some((a) => EMBEDDABLE.has(a));
+
+  // One entity per table. Single-table subclasses map to their root's table,
+  // so several mappings can share one; the root — the class with no `root`
+  // attribute — names the entity, and the others are listed with it.
+  const byTable = new Map<string, Mapping[]>();
+  for (const mapping of mappings) {
+    const existing = byTable.get(mapping.table);
+    if (existing) existing.push(mapping);
+    else byTable.set(mapping.table, [mapping]);
+  }
+
   const entities: ErEntity[] = [];
   const relationships: ErRelationship[] = [];
   const unreadable: ErUnreadable[] = [];
 
-  for (const mapping of mappings) {
+  for (const [table, group] of byTable) {
+    const ordered = [...group].sort(
+      (a, b) => Number(a.root !== null) - Number(b.root !== null) || depthOf(a.className, superclasses) - depthOf(b.className, superclasses),
+    );
+    const primary = ordered[0] as Mapping;
     const columns: ErColumn[] = [];
+    const seen = new Set<string>();
+    const push = (column: ErColumn) => {
+      if (seen.has(column.name)) return;
+      seen.add(column.name);
+      columns.push(column);
+    };
 
-    // Own fields first, then inherited, walking up the extends chain. JPA maps
-    // a mapped superclass's fields into the subclass's table, so `id` declared
-    // on a BaseEntity is a column of every table below it.
-    for (const [depth, owner] of ancestry(mapping.className, superclasses).entries()) {
-      for (const field of byOwner.get(owner) ?? []) {
+    for (const mapping of ordered) {
+      // The class's own chain up to the next entity: mapped superclasses
+      // contribute their fields, top-down; any other non-entity class
+      // contributes nothing (JPA: its state is not persistent).
+      const chain = ancestry(mapping.className, superclasses);
+      const upToEntity: string[] = [mapping.className];
+      let parentEntity: string | null = null;
+      for (const ancestor of chain.slice(1)) {
+        if (tableOfClass.has(ancestor)) {
+          parentEntity = ancestor;
+          break;
+        }
+        upToEntity.push(ancestor);
+      }
+
+      // A joined child's table is keyed by its parent's primary key.
+      if (parentEntity !== null && mapping.inheritance === 'JOINED') {
+        for (const column of primaryKeyColumns(parentEntity)) push({ ...column, inherited: true });
+      }
+
+      for (const owner of [...upToEntity].reverse()) {
+        if (owner !== mapping.className && !isMappedSuperclass(owner)) continue;
+        for (const field of byOwner.get(owner) ?? []) {
+          addField(mapping, field, owner !== mapping.className && mapping.root === null);
+        }
+      }
+
+      function primaryKeyColumns(entity: string): ErColumn[] {
+        const keys: ErColumn[] = [];
+        for (const owner of ancestry(entity, superclasses)) {
+          if (owner !== entity && !isMappedSuperclass(owner) && !tableOfClass.has(owner)) continue;
+          for (const field of byOwner.get(owner) ?? []) {
+            const annotations = fieldAnnotations.get(field.id) ?? [];
+            const attrs = parseAttrs(field.attrs);
+            if (attrs['id'] === true || annotations.some((a) => ID_ANNOTATIONS.has(a))) {
+              keys.push(toColumn(mapping, field, attrs, annotations, true));
+            }
+          }
+        }
+        return keys;
+      }
+
+      function addField(target: Mapping, field: FieldRow, inherited: boolean): void {
         const annotations = fieldAnnotations.get(field.id) ?? [];
-        if (annotations.some((a) => TRANSIENT_ANNOTATIONS.has(a))) continue;
-
         const attrs = parseAttrs(field.attrs);
+        const modifiers = Array.isArray(attrs['modifiers']) ? attrs['modifiers'] : [];
+        if (modifiers.includes('static') || modifiers.includes('transient')) return;
+        if (annotations.some((a) => TRANSIENT_ANNOTATIONS.has(a))) return;
+
         const association = annotations.find((a) => a in CARDINALITY);
         const type = typeof attrs['type'] === 'string' ? attrs['type'] : '?';
 
         if (association !== undefined) {
+          // The inverse side of a bidirectional association holds no key; the
+          // owning side draws it (ADR-0036).
+          if (typeof attrs['mappedBy'] === 'string') return;
           recordRelationship({
-            mapping,
+            mapping: { ...target, table },
             field,
             attrs,
             type,
@@ -177,30 +255,31 @@ export function buildErModel(db: Db, runId: number): ErModel {
             relationships,
             unreadable,
           });
-          // An association is a foreign key, not a scalar column; it is drawn
-          // as the line between two tables rather than listed inside one.
-          continue;
+          return;
         }
 
-        columns.push({
-          name: typeof attrs['column'] === 'string' ? attrs['column'] : field.name,
-          field: field.name,
-          type: shortType(type),
-          primaryKey: attrs['id'] === true || annotations.some((a) => ID_ANNOTATIONS.has(a)),
-          inherited: depth > 0,
-          path: field.path,
-          line: field.line,
-        });
+        const primaryKey = attrs['id'] === true || annotations.some((a) => ID_ANNOTATIONS.has(a));
+        if (attrs['embedded'] === true || isEmbeddable(type)) {
+          for (const part of byOwner.get(type) ?? []) {
+            const partAttrs = parseAttrs(part.attrs);
+            const partModifiers = Array.isArray(partAttrs['modifiers']) ? partAttrs['modifiers'] : [];
+            if (partModifiers.includes('static') || partModifiers.includes('transient')) continue;
+            push({ ...toColumn(target, part, partAttrs, [], primaryKey), inherited });
+          }
+          return;
+        }
+        push({ ...toColumn(target, field, attrs, annotations, primaryKey), inherited });
       }
     }
 
     entities.push({
-      id: entityId(mapping.table),
-      table: mapping.table,
-      className: mapping.className,
+      id: entityId(table),
+      table,
+      className: primary.className,
+      classes: ordered.map((mapping) => mapping.className),
       columns,
-      path: mapping.path,
-      line: mapping.line,
+      path: primary.path,
+      line: primary.line,
     });
   }
 
@@ -214,6 +293,72 @@ export function buildErModel(db: Db, runId: number): ErModel {
   unreadable.sort((a, b) => a.fromTable.localeCompare(b.fromTable) || a.via.localeCompare(b.via));
 
   return { entities, relationships, unreadable, notes: notesFor(entities, unreadable) };
+}
+
+/** A field as a column, named the way the mapping's naming strategy names it. */
+function toColumn(
+  mapping: Mapping,
+  field: FieldRow,
+  attrs: Record<string, unknown>,
+  annotations: string[],
+  primaryKey: boolean,
+): ErColumn {
+  const type = typeof attrs['type'] === 'string' ? attrs['type'] : '?';
+  const logical = typeof attrs['column'] === 'string' ? attrs['column'] : field.name;
+  return {
+    name: physicalName(logical, mapping.strategy),
+    field: field.name,
+    type: shortType(type),
+    primaryKey: primaryKey || attrs['id'] === true || annotations.some((a) => ID_ANNOTATIONS.has(a)),
+    inherited: false,
+    path: field.path,
+    line: field.line,
+  };
+}
+
+/**
+ * The physical name a naming strategy gives a logical one — the same rule the
+ * Java extractor applied to the table, named on the `maps_to` edge (ADR-0036).
+ */
+export function physicalName(logical: string, strategy: string | null): string {
+  if (logical.length > 1 && (logical.startsWith('`') || logical.startsWith('"'))) {
+    return logical.slice(1, -1);
+  }
+  if (strategy !== 'spring-boot-snake-case') return logical;
+  const chars = [...logical.replace(/\./g, '_')];
+  const out: string[] = [];
+  for (let i = 0; i < chars.length; i += 1) {
+    const c = chars[i] as string;
+    const before = chars[i - 1];
+    const after = chars[i + 1];
+    if (
+      i > 0 &&
+      i < chars.length - 1 &&
+      before !== undefined &&
+      after !== undefined &&
+      (isLower(before) || isDigit(before)) &&
+      isUpper(c) &&
+      (isLower(after) || isDigit(after))
+    ) {
+      out.push('_');
+    }
+    out.push(c);
+  }
+  return out.join('').toLowerCase();
+}
+
+function isLower(c: string): boolean {
+  return c !== c.toUpperCase() && c === c.toLowerCase();
+}
+function isUpper(c: string): boolean {
+  return c !== c.toLowerCase() && c === c.toUpperCase();
+}
+function isDigit(c: string): boolean {
+  return c >= '0' && c <= '9';
+}
+
+function depthOf(className: string, superclasses: Map<string, string>): number {
+  return ancestry(className, superclasses).length;
 }
 
 function recordRelationship(input: {
@@ -286,13 +431,20 @@ interface Mapping {
   table: string;
   path: string | null;
   line: number | null;
+  /** The naming strategy the extractor applied, from the edge; null when it recorded none. */
+  strategy: string | null;
+  /** `JOINED`, `SINGLE_TABLE`, `TABLE_PER_CLASS`, or null outside a hierarchy. */
+  inheritance: string | null;
+  /** The single-table root this class shares a table with, or null. */
+  root: string | null;
 }
 
 function loadMappings(db: Db, runId: number): Mapping[] {
   return db
     .prepare(
       /* sql */ `
-      SELECT src.fqn AS className, dst.fqn AS table_, f.path AS path, src.start_line AS line
+      SELECT src.fqn AS className, dst.fqn AS table_, f.path AS path, src.start_line AS line,
+             e.attrs AS attrs
         FROM edge e
         JOIN node src ON src.id = e.src_id
         JOIN node dst ON dst.id = e.dst_id AND dst.kind = 'table'
@@ -302,8 +454,23 @@ function loadMappings(db: Db, runId: number): Mapping[] {
     )
     .all({ runId })
     .map((row) => {
-      const typed = row as { className: string; table_: string; path: string | null; line: number | null };
-      return { className: typed.className, table: typed.table_, path: typed.path, line: typed.line };
+      const typed = row as {
+        className: string;
+        table_: string;
+        path: string | null;
+        line: number | null;
+        attrs: string | null;
+      };
+      const attrs = parseAttrs(typed.attrs);
+      return {
+        className: typed.className,
+        table: typed.table_,
+        path: typed.path,
+        line: typed.line,
+        strategy: typeof attrs['strategy'] === 'string' ? attrs['strategy'] : null,
+        inheritance: typeof attrs['inheritance'] === 'string' ? attrs['inheritance'] : null,
+        root: typeof attrs['root'] === 'string' ? attrs['root'] : null,
+      };
     });
 }
 
@@ -353,6 +520,26 @@ function loadFields(db: Db, runId: number): FieldRow[] {
        ORDER BY n.id`,
     )
     .all({ runId }) as FieldRow[];
+}
+
+/** Annotations on types, for `@MappedSuperclass` and `@Embeddable`. */
+function loadClassAnnotations(db: Db, runId: number): Map<string, string[]> {
+  const rows = db
+    .prepare(
+      `SELECT src.fqn AS owner, dst.fqn AS annotation
+         FROM edge e
+         JOIN node src ON src.id = e.src_id AND src.kind IN ('class', 'interface', 'enum')
+         JOIN node dst ON dst.id = e.dst_id
+        WHERE e.run_id = @runId AND e.kind = 'annotated_with'`,
+    )
+    .all({ runId }) as Array<{ owner: string; annotation: string }>;
+  const byClass = new Map<string, string[]>();
+  for (const row of rows) {
+    const existing = byClass.get(row.owner);
+    if (existing) existing.push(row.annotation);
+    else byClass.set(row.owner, [row.annotation]);
+  }
+  return byClass;
 }
 
 function loadFieldAnnotations(db: Db, runId: number): Map<number, string[]> {
