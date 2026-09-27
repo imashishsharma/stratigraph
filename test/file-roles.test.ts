@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -6,7 +7,9 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { migrate, openDatabase, type Db } from '../src/db/database.js';
 import { createRun } from '../src/db/run.js';
+import { listRepoFiles } from '../src/files/inventory.js';
 import { assignFileRoles, classifyPath, parseCheckAttr } from '../src/files/roles.js';
+import { pathScope } from '../src/history/paths.js';
 
 const NONE = { generated: false, vendored: false };
 
@@ -159,5 +162,47 @@ describe('assignFileRoles', () => {
       { path: 'src/main/java/Foo.java', role: 'source', rule: 'ext:.java', line: null },
       { path: 'src/main/java/Gen.java', role: 'generated', rule: 'header:@generated', line: 1 },
     ]);
+  });
+});
+
+describe('listRepoFiles', () => {
+  function tree(files: Record<string, string>): string {
+    const root = mkdtempSync(join(tmpdir(), 'stratigraph-inventory-'));
+    for (const [path, text] of Object.entries(files)) {
+      mkdirSync(dirname(join(root, path)), { recursive: true });
+      writeFileSync(join(root, path), text);
+    }
+    return root;
+  }
+
+  it('lists tracked files in a git repository, and nothing untracked', () => {
+    const root = tree({ 'src/A.java': 'class A {}', 'scratch.txt': 'x' });
+    execFileSync('git', ['init', '-q'], { cwd: root });
+    execFileSync('git', ['add', 'src/A.java'], { cwd: root });
+
+    expect(listRepoFiles(root, pathScope([], []))).toEqual({
+      source: 'git',
+      files: ['src/A.java'],
+    });
+  });
+
+  it('walks a directory that is not a repository, pruning excluded directories', () => {
+    // No git is no reason to have no denominator: the coverage of a tarball
+    // is as real as the coverage of a clone.
+    const root = tree({
+      'src/A.java': 'class A {}',
+      'node_modules/x/index.ts': 'export {}',
+      'web/app.ts': 'export {}',
+    });
+
+    expect(listRepoFiles(root, pathScope(['node_modules'], []))).toEqual({
+      source: 'walk',
+      files: ['src/A.java', 'web/app.ts'],
+    });
+  });
+
+  it('applies include prefixes either way', () => {
+    const root = tree({ 'src/A.java': 'class A {}', 'web/app.ts': 'export {}' });
+    expect(listRepoFiles(root, pathScope([], ['web/'])).files).toEqual(['web/app.ts']);
   });
 });

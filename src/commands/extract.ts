@@ -5,6 +5,9 @@ import { loadConfig, type ConfigOverrides, type StratigraphConfig } from '../con
 import { assertSchemaCurrent, openDatabase, requireStore, type Db } from '../db/database.js';
 import { createRun, finishRun, recordExtractor } from '../db/run.js';
 import { ingestInto } from '../facts/ingest.js';
+import { listRepoFiles } from '../files/inventory.js';
+import { assignFileRoles } from '../files/roles.js';
+import { pathScope } from '../history/paths.js';
 import type { FactWriterStats } from '../facts/writer.js';
 import { info, warn } from '../log.js';
 import {
@@ -165,6 +168,12 @@ export async function runExtract(options: ExtractOptions): Promise<ExtractResult
     const run = createRun(db, config.repoPath);
     const total: FactWriterStats = { files: 0, nodes: 0, stubs: 0, edges: 0, diagnostics: 0 };
     const ran: Language[] = [];
+
+    // What the repository holds, classified before any extractor runs: the
+    // denominator of every coverage ratio (ADR-0033) and the test/main split
+    // (ADR-0034) must not depend on whether `history` is ever run.
+    const inventory = listRepoFiles(config.repoPath, pathScope(config.exclude, config.include));
+    assignFileRoles(db, run.id, config.repoPath, inventory.files);
 
     // A run whose every extractor was skipped is still recorded, and still
     // finishes ok: it is a true description of what this machine could read,

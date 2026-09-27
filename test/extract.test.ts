@@ -326,6 +326,33 @@ describe('runExtract across two stacks', () => {
     db.close();
   });
 
+  it('classifies the repository\'s files at extract time, without needing history', async () => {
+    // Coverage denominators and the test/main split both come from file_role;
+    // a run that was only ever extracted must have them too.
+    const repo = fullStack();
+    mkdirSync(join(repo, 'backend', 'src', 'test'), { recursive: true });
+    writeFileSync(join(repo, 'backend', 'src', 'test', 'AppTest.java'), 'class AppTest {}');
+    const dir = scratch();
+    runInit({ repo, cwd: dir });
+
+    const result = await runExtract({ repo, cwd: dir, resolveSpawner: noJdk(dir) });
+
+    const db = openDatabase(join(dir, '.stratigraph', `${basename(repo)}.db`), {
+      mustExist: true,
+      readonly: true,
+    });
+    expect(
+      db
+        .prepare('SELECT path, role FROM file_role WHERE run_id = ? ORDER BY path')
+        .all(result.runId),
+    ).toEqual([
+      { path: 'backend/App.java', role: 'source' },
+      { path: 'backend/src/test/AppTest.java', role: 'test' },
+      { path: 'frontend/app.ts', role: 'source' },
+    ]);
+    db.close();
+  });
+
   it('records a run even when every extractor was skipped, so the report can say why', async () => {
     const repo = scratch();
     writeFileSync(join(repo, 'App.java'), 'class App {}');
