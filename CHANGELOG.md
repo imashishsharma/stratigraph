@@ -10,6 +10,79 @@ schema carries a `user_version` and is migrated forward, and every JSON
 document carries `format`, which moves only for a change a parser could trip
 over.
 
+## [2.0.0] — unreleased
+
+v1.6.1 was run on a real enterprise repository and produced output a senior
+engineer rejects in thirty seconds: lockfiles ranked riskiest, an empty ER
+diagram, aggregator poms drawn as containers, and nothing saying how much of
+the code had been read. 2.0 makes every view right or honest about why not,
+and measures it against 20 public repositories labelled by hand.
+
+### Breaking
+
+- **Fact-store schema 2** (migration 0002): file roles, the hotspot window,
+  per-extractor outcomes. Run `stratigraph init` to migrate; re-extract.
+- **Hotspots rank recent change in source files** — commits in a 12-month
+  window, sweeps and `.git-blame-ignore-revs` excluded, complexity compared
+  within file type — and `find_hotspots` ranks by `change-complexity`
+  ([ADR-0031](docs/adr/0031-hotspots-rank-recent-change-in-source.md)).
+- **`extract` no longer fails when no extractor can run**; it records a run
+  whose extractors were skipped, and commands default to the latest
+  *completed* run ([ADR-0032](docs/adr/0032-honest-runs.md)).
+- **Test code is not architecture**: package graph, cycles, C4, class diagrams
+  and clustering leave it out, and say how much
+  ([ADR-0034](docs/adr/0034-test-code-is-not-architecture.md)).
+- **A C4 container is a deployable** — a Boot app, a WAR or an Angular/Nx
+  application, proved by a build file or a main class; aggregator, BOM and
+  library modules are not containers
+  ([ADR-0040](docs/adr/0040-containers-are-deployables.md)).
+- **Angular packages are structural boundaries** (NgModule, lazy route,
+  project), not directories — package fqns change for Angular repositories
+  ([ADR-0042](docs/adr/0042-angular-structure.md)).
+
+### Added
+
+- **Every file has a role** — source, test, generated, vendored, lockfile,
+  manifest, migration, config, docs, asset — each citing the rule that assigned
+  it ([ADR-0030](docs/adr/0030-every-file-has-a-role.md)).
+- **Coverage on every view and every MCP answer**: a ratio per extractor and
+  per view, with the reasons they differ; a view below its threshold
+  (`coverage.minRatio`, default 50%) is withheld with the reason
+  ([ADR-0033](docs/adr/0033-coverage-is-a-ratio.md)). The report's Summary
+  shows the run's status and what each extractor read.
+- **`stratigraph bench`**: the pipeline scored against a pinned 20-repository
+  corpus and ground truth labelled without the tool; `--private` for a local
+  repository, aggregates only; a nightly CI job
+  ([ADR-0035](docs/adr/0035-quality-is-measured.md)).
+- **The data model as JPA maps it**: default table names through the module's
+  naming strategy, inheritance, `schema=`, embedded values, `@MappedSuperclass`
+  only; repositories, `@Query` and JDBC SQL read and write tables
+  ([ADR-0036](docs/adr/0036-the-data-model-as-jpa-maps-it.md)).
+- **A migrations extractor** — Liquibase (XML/YAML/JSON/SQL, with includes),
+  Flyway in version order, standalone DDL — overlaid on the mapping, with
+  disagreements as `schema-drift` findings
+  ([ADR-0037](docs/adr/0037-the-schema-as-migrations-define-it.md)).
+- **Wildcard imports resolved through complete package listings** of common
+  frameworks ([ADR-0038](docs/adr/0038-complete-package-listings.md)).
+- **An offline Maven classpath when the cache has it**, Lombok constructor
+  injection, `@Bean` parameters, and a count of unresolved injection points
+  ([ADR-0039](docs/adr/0039-classpath-lombok-and-spring-wiring.md)).
+- **Split packages** belong to each module that declares them
+  ([ADR-0041](docs/adr/0041-split-packages.md)); **TypeScript service calls**
+  are edges.
+- **The first hour**: the report opens with five answers — the parts, the
+  data, the risk, what is changing, who holds the knowledge — each with its
+  coverage.
+- **MCP tools** `what_breaks_if`, `who_knows`, `where_is_table_written` and
+  `explain_hotspot`.
+- **`stratigraph scan [repo]`**: the whole pipeline in one command, ending
+  with what was and was not seen.
+
+### Changed
+
+- Bus-factor findings are `medium` only for a file that is a hotspot or among
+  the most depended-on; otherwise `low`.
+
 ## [1.6.1] — 2026-08-14
 
 - The `--fail-on` tests needed a JDK, which the release workflow does not have
