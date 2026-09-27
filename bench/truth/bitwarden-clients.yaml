@@ -1,0 +1,78 @@
+name: bitwarden-clients
+sha: 45eb0013dc413dab78932c418d209d89371febf6
+labelledBy: >-
+  Read the Nx workspace config (nx.json, angular.json, tsconfig.base.json path-alias map) and each of the 4 apps/* project.json files directly, then used `grep`/`find` across apps/ and libs/ (6421 TS/TSX files — far too many to read exhaustively, so entries below are hand-picked, representative samples rather than a census) to find one example of each role and each injection style. `entities`/`tables` are omitted: this is a pure TypeScript/Angular client monorepo with no ORM or local relational schema of its own (state persistence is a versioned key-value store under libs/state, not tables). `endpoints` is not the empty set some Angular frontends would produce — apps/cli/src/oss-serve-configurator.ts (mounted by apps/cli/src/commands/serve.command.ts, `new Router()` at the app root, no path prefix) defines a genuine local Koa HTTP server for the CLI's `bw serve` command; all 17 of its declared routes are listed (well under the 100-cap, so not sampled). `injections` are 10 edges across web/browser/ desktop and 5 different libs, covering both classic Angular constructor injection (private/readonly constructor params) and the newer `inject(X)` function-call form, written only for tokens resolvable through tsconfig.base.json's `@bitwarden/*` path-alias map to a concrete file in this repo (framework built-ins like DomSanitizer were seen but skipped per instructions). `containers`: apps/web, apps/browser, apps/desktop are Angular applications (@NgModule/bootstrap confirmed via grep in each); apps/cli is also an Nx `projectType: application` but is a plain Node Commander-style CLI with zero Angular usage (no @NgModule/bootstrapApplication anywhere under apps/cli/src) — flagged with kind `node-cli` rather than `angular-app` per the instructions to note non-Angular application projects. bitwarden_license/bit-web, bit-desktop, bit-cli, bit-browser are NOT separate containers: none has its own project.json — they are extra source roots compiled into the corresponding apps/* build, confirmed by `find bitwarden_license -iname project.json` returning nothing. `libs/*` are correctly excluded as libraries, per instructions. Roles follow ADR-0030 exactly: i18n `messages.json` locale bundles are config (named explicitly in the vocabulary), not asset; the app-level `state-migrations/migration-builder.ts` is not a SQL/Liquibase/Flyway schema migration (ADR-0030 scopes `migration` strictly to those), so it is source; `.husky/pre-commit` is a hand-written shell script, so it is source rather than other. `riskyFiles` used `git log --no-merges --since=2025-09-25 --until=2026-09-25 --name-only` (3810 non-merge commits, matching corpus.yaml's "very active"), dropped 231 commits touching >50 files, counted only non-spec/ non-story .ts/.tsx main-source files, and tie-broke the 3-way tie at 43 commits by fix|bug|issue|error-matching commit-subject count. One roles judgment call to flag: libs/common/src/tools/extension/vendor/ is NOT labelled `vendored` despite the directory name — its contents (bitwarden.ts, simplelogin.ts, etc.) are first-party integration code against third-party email-relay *vendors*' APIs, not copied third-party code, confirmed by reading them; no genuine vendored/.min.js bundle was found checked into apps/ or libs/ (all third-party code comes through npm/package-lock.json), so `vendored` is absent from the roles sample rather than forced onto a false match.
+   Role labels normalised to ADR-0030's definitions on review: .storybook/main.ts config→source.
+roles:
+  - { path: package.json, role: manifest }
+  - { path: package-lock.json, role: lockfile }
+  - { path: angular.json, role: manifest }
+  - { path: nx.json, role: manifest }
+  - { path: tsconfig.base.json, role: manifest }
+  - { path: apps/web/project.json, role: manifest }
+  - { path: apps/web/package.json, role: manifest }
+  - { path: apps/browser/src/manifest.json, role: config }
+  - { path: apps/browser/webpack/manifest-beta-overrides.json, role: config }
+  - { path: .storybook/main.ts, role: source }
+  - { path: .github/workflows/cherry-pick.yml, role: config }
+  - { path: apps/web/src/app/settings/appearance.component.ts, role: source }
+  - { path: apps/browser/src/popup/tabs-v2.component.ts, role: source }
+  - { path: apps/cli/src/oss-serve-configurator.ts, role: source }
+  - { path: libs/common/src/vault/services/cipher.service.ts, role: source }
+  - { path: libs/common/src/tools/extension/vendor/bitwarden.ts, role: source }
+  - { path: apps/web/src/app/settings/appearance.component.spec.ts, role: test }
+  - { path: apps/cli/src/utils.spec.ts, role: test }
+  - { path: libs/importer/src/importers/keeper/access/generated/record_pb.ts, role: generated }
+  - { path: libs/common/src/state-migrations/migration-builder.ts, role: source }
+  - { path: apps/web/src/locales/en/messages.json, role: config }
+  - { path: apps/browser/src/_locales/en/messages.json, role: config }
+  - { path: apps/web/src/images/logo-primary@2x.png, role: asset }
+  - { path: apps/browser/src/images/icon128.png, role: asset }
+  - { path: docs/cipher-types.md, role: docs }
+  - { path: docs/using-nx-to-build-projects.md, role: docs }
+  - { path: .husky/pre-commit, role: source }
+containers:
+  - { name: web, kind: angular-app, path: apps/web }
+  - { name: browser, kind: angular-app, path: apps/browser }
+  - { name: desktop, kind: angular-app, path: apps/desktop }
+  - { name: cli, kind: node-cli, path: apps/cli }
+endpoints:
+  - GET /generate
+  - GET /status
+  - GET /list/object/{object}
+  - GET /send/list
+  - POST /sync
+  - POST /lock
+  - POST /unlock
+  - POST /confirm/{object}/{id}
+  - POST /restore/{object}/{id}
+  - POST /move/{id}/{organizationId}
+  - POST /attachment
+  - POST /send/{id}/remove-password
+  - POST /object/{object}
+  - PUT /object/{object}/{id}
+  - GET /object/{object}/{id}
+  - DELETE /object/{object}/{id}
+  - POST /archive/{object}/{id}
+injections:
+  - { from: "apps/web/src/app/settings/appearance.component.ts#AppearanceComponent", to: "libs/common/src/autofill/services/domain-settings.service.ts#DomainSettingsService" }
+  - { from: "apps/web/src/app/settings/appearance.component.ts#AppearanceComponent", to: "libs/common/src/platform/abstractions/i18n.service.ts#I18nService" }
+  - { from: "apps/web/src/app/settings/appearance.component.ts#AppearanceComponent", to: "libs/common/src/platform/abstractions/config/config.service.ts#ConfigService" }
+  - { from: "apps/web/src/app/settings/appearance.component.ts#AppearanceComponent", to: "libs/common/src/platform/theming/theme-state.service.ts#ThemeStateService" }
+  - { from: "apps/web/src/app/vault/individual-vault/vault.component.ts#VaultComponent", to: "libs/common/src/platform/sync/sync.service.ts#SyncService" }
+  - { from: "apps/web/src/app/vault/individual-vault/vault.component.ts#VaultComponent", to: "libs/common/src/vault/abstractions/cipher.service.ts#CipherService" }
+  - { from: "apps/web/src/app/vault/individual-vault/vault.component.ts#VaultComponent", to: "libs/common/src/platform/abstractions/i18n.service.ts#I18nService" }
+  - { from: "apps/browser/src/popup/tabs-v2.component.ts#TabsV2Component", to: "libs/tools/send/send-ui/src/services/send-policy.service.ts#SendPolicyService" }
+  - { from: "apps/desktop/src/app/layout/desktop-side-nav.component.ts#DesktopSideNavComponent", to: "libs/components/src/navigation/side-nav.service.ts#SideNavService" }
+  - { from: "apps/desktop/src/app/layout/desktop-side-nav.component.ts#DesktopSideNavComponent", to: "libs/common/src/platform/abstractions/config/config.service.ts#ConfigService" }
+riskyFiles:
+  - libs/common/src/enums/feature-flag.enum.ts
+  - libs/angular/src/services/jslib-services.module.ts
+  - apps/browser/src/background/main.background.ts
+  - apps/cli/src/service-container/service-container.ts
+  - apps/desktop/src/app/services/services.module.ts
+  - libs/common/src/vault/services/cipher.service.ts
+  - apps/desktop/src/vault/app/vault-v3/vault.component.ts
+  - apps/web/src/app/core/core.module.ts
+  - apps/browser/src/popup/services/services.module.ts
+  - apps/web/src/app/vault/individual-vault/vault.component.ts

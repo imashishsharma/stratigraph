@@ -1,0 +1,94 @@
+name: spring-petclinic-kotlin
+sha: da08609c277f95c37dd91187867f74dbad1090f8
+labelledBy: >
+  Labelled by reading the full `git ls-files` listing, settings.gradle.kts,
+  build.gradle.kts, src/main/resources/db/h2/schema.sql, and every Kotlin file
+  under src/main/kotlin (all 6 @Entity classes and all 6 @Controller classes
+  read in full). Entities/tables are exact (all entities carry explicit
+  @Table(name=...)); endpoints are the full set (18), not a sample. injections
+  covers only 8 edges, not the requested >=10, because this is a genuinely
+  small app (38 Kotlin files) where every constructor-injecting class
+  (4 controllers + 1 formatter) has been listed — repository interfaces and
+  model/config classes have no injected dependencies of their own. riskyFiles
+  is omitted: in the 12 months before the pinned commit (2025-08-25 to
+  2026-08-25, verified via `git log --no-merges --since --until --name-only`),
+  only 1 file under src/main/ was touched (CacheConfig.kt, once) — the other
+  30 commits in that window were Dependabot bumps and doc/config changes,
+  under the "at least 3 source files" bar. Roles follow ADR-0030 exactly:
+  gradle/wrapper/* (including the wrapper jar) is manifest; data.sql is a
+  standalone seed script outside any migration directory, so it is source
+  (only schema.sql, which is DDL, is migration); .less stylesheets are
+  source; the messages_de.properties i18n bundle is config; the jmeter plan
+  under src/test/ is test; dotfiles (.gitignore) are config.
+roles:
+  - { path: build.gradle.kts, role: manifest }
+  - { path: settings.gradle.kts, role: manifest }
+  - { path: gradlew, role: manifest }
+  - { path: gradlew.bat, role: manifest }
+  - { path: gradle/wrapper/gradle-wrapper.properties, role: manifest }
+  - { path: gradle/wrapper/gradle-wrapper.jar, role: manifest }
+  - { path: src/main/resources/db/h2/schema.sql, role: migration }
+  - { path: src/main/resources/db/mysql/schema.sql, role: migration }
+  - { path: src/main/resources/db/h2/data.sql, role: source }
+  - { path: src/main/resources/application.properties, role: config }
+  - { path: src/main/resources/application-mysql.properties, role: config }
+  - { path: src/main/wro/wro.properties, role: config }
+  - { path: readme.md, role: docs }
+  - { path: LICENSE, role: docs }
+  - { path: AGENTS.md, role: docs }
+  - { path: src/main/resources/static/resources/images/favicon.png, role: asset }
+  - { path: src/main/resources/static/resources/fonts/montserrat-webfont.woff, role: asset }
+  - { path: src/main/less/petclinic.less, role: source }
+  - { path: src/main/resources/messages/messages_de.properties, role: config }
+  - { path: src/test/jmeter/petclinic_test_plan.jmx, role: test }
+  - { path: src/main/kotlin/org/springframework/samples/petclinic/owner/OwnerController.kt, role: source }
+  - { path: src/main/kotlin/org/springframework/samples/petclinic/owner/Owner.kt, role: source }
+  - { path: src/main/resources/templates/owners/ownerDetails.html, role: source }
+  - { path: src/test/kotlin/org/springframework/samples/petclinic/owner/OwnerControllerTest.kt, role: test }
+  - { path: src/test/kotlin/org/springframework/samples/petclinic/system/MockMvcValidationConfiguration.kt, role: test }
+  - { path: .gitignore, role: config }
+containers:
+  - { name: spring-petclinic-kotlin, kind: spring-boot, path: . }
+entities:
+  - { class: org.springframework.samples.petclinic.owner.Owner, table: owners }
+  - { class: org.springframework.samples.petclinic.owner.Pet, table: pets }
+  - { class: org.springframework.samples.petclinic.owner.PetType, table: types }
+  - { class: org.springframework.samples.petclinic.vet.Vet, table: vets }
+  - { class: org.springframework.samples.petclinic.vet.Specialty, table: specialties }
+  - { class: org.springframework.samples.petclinic.visit.Visit, table: visits }
+tables:
+  - vets
+  - specialties
+  - vet_specialties
+  - types
+  - owners
+  - pets
+  - visits
+endpoints:
+  - GET /owners/new
+  - POST /owners/new
+  - GET /owners/find
+  - GET /owners
+  - GET /owners/{ownerId}/edit
+  - POST /owners/{ownerId}/edit
+  - GET /owners/{ownerId}
+  - GET /owners/{ownerId}/pets/new
+  - POST /owners/{ownerId}/pets/new
+  - GET /owners/{ownerId}/pets/{petId}/edit
+  - POST /owners/{ownerId}/pets/{petId}/edit
+  - GET /owners/*/pets/{petId}/visits/new
+  - POST /owners/{ownerId}/pets/{petId}/visits/new
+  - GET /vets.html
+  - GET /vets.json
+  - GET /vets.xml
+  - GET /oups
+  - GET /
+injections:
+  - { from: org.springframework.samples.petclinic.owner.OwnerController, to: org.springframework.samples.petclinic.owner.OwnerRepository, via: constructor }
+  - { from: org.springframework.samples.petclinic.owner.OwnerController, to: org.springframework.samples.petclinic.visit.VisitRepository, via: constructor }
+  - { from: org.springframework.samples.petclinic.owner.PetController, to: org.springframework.samples.petclinic.owner.PetRepository, via: constructor }
+  - { from: org.springframework.samples.petclinic.owner.PetController, to: org.springframework.samples.petclinic.owner.OwnerRepository, via: constructor }
+  - { from: org.springframework.samples.petclinic.owner.VisitController, to: org.springframework.samples.petclinic.visit.VisitRepository, via: constructor }
+  - { from: org.springframework.samples.petclinic.owner.VisitController, to: org.springframework.samples.petclinic.owner.PetRepository, via: constructor }
+  - { from: org.springframework.samples.petclinic.vet.VetController, to: org.springframework.samples.petclinic.vet.VetRepository, via: constructor }
+  - { from: org.springframework.samples.petclinic.owner.PetTypeFormatter, to: org.springframework.samples.petclinic.owner.PetRepository, via: constructor }

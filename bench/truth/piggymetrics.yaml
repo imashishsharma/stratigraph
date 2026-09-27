@@ -1,0 +1,87 @@
+name: piggymetrics
+sha: 6bb2cf9ddbca980b664d3edbb6ff775d75369278
+labelledBy: >
+  Labelled by reading the full `git ls-files` listing, the root aggregator
+  pom.xml (packaging=pom, 9 modules), each module's pom.xml (all packaging=jar
+  with spring-boot-maven-plugin) and its `@SpringBootApplication` main class,
+  every `@RestController` under the 4 modules that expose HTTP (account,
+  auth, notification, statistics), and the `@Autowired` field-injection sites
+  in each controller/service-impl. This is a Spring Data MongoDB app
+  (`@Document(collection=...)` on 5 domain classes, confirmed via
+  `git grep @Document`/`@Entity`/`@Table`) — there is no JPA and no relational
+  schema, so both `entities` and `tables` are omitted rather than forced onto
+  a document store. riskyFiles is omitted: `git log --no-merges` in the 12
+  months before the pinned commit's own date (2020-11-15 to 2021-11-15) shows
+  only 2 non-merge commits, both "Update README.md" with zero source files
+  touched — well under the 3-source-file bar. No package.json/lockfile exists
+  anywhere in the repo (pure Maven multi-module backend). Roles follow
+  ADR-0030 exactly: the gateway's style.css and static index.html are source
+  (styles and HTML templates), not asset; mongodb/init.sh (hand-written shell)
+  and mongodb/dump/account-service-dump.js (a hand-written demo-data seed
+  script with comments, not a tool-generated mongodump export) are source,
+  not other; .gitignore is config (dotfile).
+roles:
+  - { path: pom.xml, role: manifest }
+  - { path: account-service/pom.xml, role: manifest }
+  - { path: statistics-service/pom.xml, role: manifest }
+  - { path: account-service/src/main/resources/bootstrap.yml, role: config }
+  - { path: config/src/main/resources/shared/account-service.yml, role: config }
+  - { path: config/src/main/resources/application.yml, role: config }
+  - { path: docker-compose.yml, role: config }
+  - { path: account-service/Dockerfile, role: config }
+  - { path: .env, role: config }
+  - { path: .travis.yml, role: config }
+  - { path: .gitignore, role: config }
+  - { path: README.md, role: docs }
+  - { path: LICENCE, role: docs }
+  - { path: .github/ISSUE_TEMPLATE/bug-report-or-feature-request.md, role: docs }
+  - { path: gateway/src/main/resources/static/images/piggy.gif, role: asset }
+  - { path: gateway/src/main/resources/static/fonts/museo-100/museo-100.woff, role: asset }
+  - { path: gateway/src/main/resources/static/css/style.css, role: source }
+  - { path: gateway/src/main/resources/static/index.html, role: source }
+  - { path: gateway/src/main/resources/static/js/lib/jquery.min.js, role: vendored }
+  - { path: account-service/src/main/java/com/piggymetrics/account/domain/Account.java, role: source }
+  - { path: account-service/src/main/java/com/piggymetrics/account/controller/AccountController.java, role: source }
+  - { path: statistics-service/src/main/java/com/piggymetrics/statistics/service/StatisticsServiceImpl.java, role: source }
+  - { path: gateway/src/main/java/com/piggymetrics/gateway/GatewayApplication.java, role: source }
+  - { path: mongodb/init.sh, role: source }
+  - { path: mongodb/dump/account-service-dump.js, role: source }
+  - { path: account-service/src/test/java/com/piggymetrics/account/controller/AccountControllerTest.java, role: test }
+  - { path: auth-service/src/test/java/com/piggymetrics/auth/service/UserServiceTest.java, role: test }
+  - { path: notification-service/src/test/java/com/piggymetrics/notification/service/EmailServiceImplTest.java, role: test }
+containers:
+  - { name: account-service, kind: spring-boot, path: account-service }
+  - { name: auth-service, kind: spring-boot, path: auth-service }
+  - { name: config, kind: spring-boot, path: config }
+  - { name: gateway, kind: spring-boot, path: gateway }
+  - { name: monitoring, kind: spring-boot, path: monitoring }
+  - { name: notification-service, kind: spring-boot, path: notification-service }
+  - { name: registry, kind: spring-boot, path: registry }
+  - { name: statistics-service, kind: spring-boot, path: statistics-service }
+  - { name: turbine-stream-service, kind: spring-boot, path: turbine-stream-service }
+endpoints:
+  - GET /{name}
+  - GET /current
+  - PUT /current
+  - POST /
+  - GET /users/current
+  - POST /users
+  - GET /recipients/current
+  - PUT /recipients/current
+  - GET /{accountName}
+  - PUT /{accountName}
+injections:
+  - { from: com.piggymetrics.account.controller.AccountController, to: com.piggymetrics.account.service.AccountService, via: field }
+  - { from: com.piggymetrics.auth.controller.UserController, to: com.piggymetrics.auth.service.UserService, via: field }
+  - { from: com.piggymetrics.notification.controller.RecipientController, to: com.piggymetrics.notification.service.RecipientService, via: field }
+  - { from: com.piggymetrics.statistics.controller.StatisticsController, to: com.piggymetrics.statistics.service.StatisticsService, via: field }
+  - { from: com.piggymetrics.account.service.AccountServiceImpl, to: com.piggymetrics.account.client.StatisticsServiceClient, via: field }
+  - { from: com.piggymetrics.account.service.AccountServiceImpl, to: com.piggymetrics.account.client.AuthServiceClient, via: field }
+  - { from: com.piggymetrics.account.service.AccountServiceImpl, to: com.piggymetrics.account.repository.AccountRepository, via: field }
+  - { from: com.piggymetrics.auth.service.UserServiceImpl, to: com.piggymetrics.auth.repository.UserRepository, via: field }
+  - { from: com.piggymetrics.notification.service.RecipientServiceImpl, to: com.piggymetrics.notification.repository.RecipientRepository, via: field }
+  - { from: com.piggymetrics.notification.service.NotificationServiceImpl, to: com.piggymetrics.notification.client.AccountServiceClient, via: field }
+  - { from: com.piggymetrics.notification.service.NotificationServiceImpl, to: com.piggymetrics.notification.service.RecipientService, via: field }
+  - { from: com.piggymetrics.notification.service.NotificationServiceImpl, to: com.piggymetrics.notification.service.EmailService, via: field }
+  - { from: com.piggymetrics.statistics.service.StatisticsServiceImpl, to: com.piggymetrics.statistics.repository.DataPointRepository, via: field }
+  - { from: com.piggymetrics.statistics.service.StatisticsServiceImpl, to: com.piggymetrics.statistics.service.ExchangeRatesService, via: field }

@@ -1,0 +1,92 @@
+name: dubbo
+sha: a87b134859e1b3d0871e20b9eac848abd2f0b50c
+labelledBy: >
+  Dubbo is an RPC/microservice framework, not a Spring application, so entities/
+  tables/endpoints are skipped entirely (no JPA anywhere: `git grep -l @Entity`
+  is empty; Dubbo's own service exposure model is RPC interfaces, not Spring
+  MVC/JAX-RS HTTP endpoints). containers: found 6 modules under dubbo-demo/ with
+  a real @SpringBootApplication main class (grep across all 4050 Java files) —
+  these are example/tutorial apps bundled in the framework's own repo for
+  documentation purposes, not the Dubbo framework's own shipped product (which is
+  a set of libraries with no deployable of its own), so they are listed but
+  flagged as demo modules rather than "real" product deployables; every other
+  module (dubbo-common, dubbo-remoting, dubbo-rpc, dubbo-registry, etc.) is a
+  plain library jar with no main class and no boot plugin. injections: Dubbo's
+  own internal wiring uses its own SPI plugin mechanism (ExtensionLoader reading
+  META-INF/dubbo/internal/* files), not Spring dependency injection, so genuine
+  Spring-style @Autowired/constructor DI is concentrated almost entirely in the
+  dubbo-spring-boot-project/dubbo-spring-boot-actuator module (Spring Boot
+  Actuator integration) — all 10 sampled edges come from there (field injection
+  via @Autowired; no @RequiredArgsConstructor/Lombok usage found in this repo).
+  roles: no lockfile or vendored role exists (`git ls-files` has no jars, no
+  package-lock.json/yarn.lock anywhere; Maven resolves dependencies remotely) —
+  both omitted. .proto IDL files and *.ftl-equivalent are absent; the closest
+  "generated"-adjacent artifacts are .proto interface definitions themselves,
+  which are hand-authored source (they generate code at build time, so labelled
+  `source`, not `generated`, consistent with the same call made for eladmin's
+  FreeMarker templates). META-INF/services and META-INF/dubbo/internal files
+  (Dubbo's own SPI registration format — one fully-qualified interface name per
+  file, mapping to implementation classes) are labelled `config` as the closest
+  vocabulary fit for a declarative wiring file, distinct from Liquibase/Flyway
+  since there's no migration role in this repo (no database at all).
+  .gitignore is labelled `config` per ADR-0030 (dotfiles). riskyFiles
+  from `git log --no-merges --since=2025-09-23 --until=2026-09-23T17:50:19+0800
+  --name-only`: 343 non-merge commits, 1 dropped for touching >50 files, ranked
+  by commit count on src/main Java files (excluding test) then fix-flavoured
+  commit messages; churn is concentrated in the newer Triple protocol
+  (dubbo-rpc-triple) and HTTP/2 (dubbo-remoting-http12) modules.
+roles:
+  - { path: pom.xml, role: manifest }
+  - { path: mvnw, role: manifest }
+  - { path: .mvn/wrapper/maven-wrapper.properties, role: manifest }
+  - { path: dubbo-common/pom.xml, role: manifest }
+  - { path: dubbo-common/src/main/java/org/apache/dubbo/common/extension/ExtensionLoader.java, role: source }
+  - { path: dubbo-spring-boot-project/dubbo-spring-boot-actuator/src/main/java/org/apache/dubbo/spring/boot/actuate/health/DubboHealthIndicator.java, role: source }
+  - { path: dubbo-plugin/dubbo-security/src/main/proto/ca.proto, role: source }
+  - { path: dubbo-demo/dubbo-demo-spring-boot-idl/dubbo-demo-spring-boot-idl-consumer/src/main/proto/helloworld.proto, role: source }
+  - { path: dubbo-demo/dubbo-demo-spring-boot/dubbo-demo-spring-boot-provider/src/main/java/org/apache/dubbo/springboot/demo/provider/ProviderApplication.java, role: source }
+  - { path: dubbo-maven-plugin/src/main/java/org/apache/dubbo/maven/plugin/protoc/DubboProtocCompilerMojo.java, role: source }
+  - { path: dubbo-common/src/test/java/org/apache/dubbo/common/BaseServiceMetadataTest.java, role: test }
+  - { path: dubbo-common/src/test/resources/dubbo.properties, role: test }
+  - { path: dubbo-common/src/test/resources/special_spi.properties, role: test }
+  - { path: dubbo-common/src/main/resources/META-INF/services/org.apache.dubbo.common.extension.LoadingStrategy, role: config }
+  - { path: dubbo-common/src/main/resources/META-INF/dubbo/internal/org.apache.dubbo.common.threadpool.ThreadPool, role: config }
+  - { path: codestyle/checkstyle.xml, role: config }
+  - { path: .github/workflows/build-and-test-scheduled-3.3.yml, role: config }
+  - { path: .github/dependabot.yaml, role: config }
+  - { path: README.md, role: docs }
+  - { path: CONTRIBUTING.md, role: docs }
+  - { path: docs/threat-model.md, role: docs }
+  - { path: LICENSE, role: docs }
+  - { path: NOTICE, role: docs }
+  - { path: codestyle/manage_profiles.png, role: asset }
+  - { path: .gitignore, role: config }
+containers:
+  - { name: dubbo-demo-spring-boot-provider, kind: spring-boot, path: dubbo-demo/dubbo-demo-spring-boot/dubbo-demo-spring-boot-provider }
+  - { name: dubbo-demo-spring-boot-consumer, kind: spring-boot, path: dubbo-demo/dubbo-demo-spring-boot/dubbo-demo-spring-boot-consumer }
+  - { name: dubbo-demo-spring-boot-servlet, kind: spring-boot, path: dubbo-demo/dubbo-demo-spring-boot/dubbo-demo-spring-boot-servlet }
+  - { name: dubbo-demo-spring-boot-idl-consumer, kind: spring-boot, path: dubbo-demo/dubbo-demo-spring-boot-idl/dubbo-demo-spring-boot-idl-consumer }
+  - { name: dubbo-demo-spring-boot-idl-provider, kind: spring-boot, path: dubbo-demo/dubbo-demo-spring-boot-idl/dubbo-demo-spring-boot-idl-provider }
+  - { name: dubbo-demo-mcp-server, kind: spring-boot, path: dubbo-demo/dubbo-demo-mcp-server }
+injections:
+  - { from: org.apache.dubbo.spring.boot.actuate.health.DubboHealthIndicator, to: org.apache.dubbo.spring.boot.actuate.health.DubboHealthIndicatorProperties, via: field }
+  - { from: org.apache.dubbo.spring.boot.actuate.health.DubboHealthIndicator, to: org.apache.dubbo.config.context.ConfigManager, via: field }
+  - { from: org.apache.dubbo.spring.boot.actuate.endpoint.DubboQosEndpoints, to: org.apache.dubbo.rpc.model.ApplicationModel, via: field }
+  - { from: org.apache.dubbo.spring.boot.actuate.endpoint.DubboQosEndpoints, to: org.apache.dubbo.spring.boot.actuate.endpoint.metadata.DubboMetadata, via: field }
+  - { from: org.apache.dubbo.spring.boot.actuate.endpoint.DubboQosEndpoints, to: org.apache.dubbo.spring.boot.actuate.endpoint.DubboActuatorProperties, via: field }
+  - { from: org.apache.dubbo.spring.boot.actuate.endpoint.DubboShutdownEndpoint, to: org.apache.dubbo.spring.boot.actuate.endpoint.metadata.DubboShutdownMetadata, via: field }
+  - { from: org.apache.dubbo.spring.boot.actuate.endpoint.DubboConfigsMetadataEndpoint, to: org.apache.dubbo.spring.boot.actuate.endpoint.metadata.DubboConfigsMetadata, via: field }
+  - { from: org.apache.dubbo.spring.boot.actuate.endpoint.DubboServicesMetadataEndpoint, to: org.apache.dubbo.spring.boot.actuate.endpoint.metadata.DubboServicesMetadata, via: field }
+  - { from: org.apache.dubbo.spring.boot.actuate.endpoint.DubboReferencesMetadataEndpoint, to: org.apache.dubbo.spring.boot.actuate.endpoint.metadata.DubboReferencesMetadata, via: field }
+  - { from: org.apache.dubbo.spring.boot.actuate.endpoint.DubboPropertiesMetadataEndpoint, to: org.apache.dubbo.spring.boot.actuate.endpoint.metadata.DubboPropertiesMetadata, via: field }
+riskyFiles:
+  - dubbo-rpc/dubbo-rpc-triple/src/main/java/org/apache/dubbo/rpc/protocol/tri/stream/AbstractTripleClientStream.java
+  - dubbo-rpc/dubbo-rpc-triple/src/main/java/org/apache/dubbo/rpc/protocol/tri/call/TripleClientCall.java
+  - dubbo-remoting/dubbo-remoting-http12/src/main/java/org/apache/dubbo/remoting/http12/message/LengthFieldStreamingDecoder.java
+  - dubbo-rpc/dubbo-rpc-triple/src/main/java/org/apache/dubbo/rpc/protocol/tri/DescriptorUtils.java
+  - dubbo-rpc/dubbo-rpc-triple/src/main/java/org/apache/dubbo/rpc/protocol/tri/h12/grpc/GrpcHttp2ServerTransportListener.java
+  - dubbo-rpc/dubbo-rpc-triple/src/main/java/org/apache/dubbo/rpc/protocol/tri/frame/TriDecoder.java
+  - dubbo-rpc/dubbo-rpc-triple/src/main/java/org/apache/dubbo/rpc/protocol/tri/h12/http2/GenericHttp2ServerTransportListener.java
+  - dubbo-remoting/dubbo-remoting-http12/src/main/java/org/apache/dubbo/remoting/http12/h2/Http2ServerChannelObserver.java
+  - dubbo-rpc/dubbo-rpc-triple/src/main/java/org/apache/dubbo/rpc/protocol/tri/TripleInvoker.java
+  - dubbo-common/src/main/java/org/apache/dubbo/common/utils/StringUtils.java

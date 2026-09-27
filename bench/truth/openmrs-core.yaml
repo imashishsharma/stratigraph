@@ -1,0 +1,289 @@
+name: openmrs-core
+sha: a521ee30a53909c48e4567ddab1ec758b9b59be0
+labelledBy: >
+  Labelled by reading the checked-out repo directly at the pinned commit: git ls-files for
+  roles, root pom.xml <modules> plus per-module <packaging> and grep for
+  @SpringBootApplication (none found - openmrs-core predates Spring Boot entirely) for
+  containers, a script-assisted grep for @Entity across api/src/main plus the resolved
+  @Table(name=...) on every hit for entities, and Liquibase changelog XML for tables.
+  openmrs maps most of its domain model two ways: 86 classes carry JPA/Hibernate's
+  `@Entity` annotation directly (all 86 also carry an explicit `@Table(name=...)`, so no
+  naming-convention guessing was needed), while a separate, larger set of legacy classes
+  (e.g. org.openmrs.notification.Alert) are mapped instead via 20 Hibernate `*.hbm.xml`
+  files under api/src/main/resources/.../hibernate/ - per this task's instructions only the
+  86 `@Entity`-annotated classes are listed in `entities`, but the tables those *.hbm.xml
+  files map to (e.g. notification_alert, notification_alert_recipients) are still present in
+  `tables` since they come from the schema, not from the entity scan. `tables`: the
+  "back-compat" entrypoint api/src/main/resources/liquibase-schema-only.xml only includes
+  the 2.8.x snapshot (117 tables), but api/src/main/resources/org/openmrs/liquibase/
+  snapshots/schema-only/liquibase-schema-only-2.9.x.xml is newer and adds 2 more
+  (outbox_event, shedlock) with liquibase-update-to-latest-3.0.x.xml (the file actually
+  wired into api/src/main/resources/liquibase-update-to-latest.xml, i.e. the modern
+  incremental-update entrypoint) adding no further createTable statements on top of 2.9.x -
+  so the 2.9.x snapshot's 119 tables were used as the base. A 120th table, revision_entity,
+  was added by hand: it is the Hibernate Envers revision-tracking table
+  (api/src/main/java/org/openmrs/api/db/hibernate/envers/OpenmrsRevisionEntity.java,
+  @RevisionEntity, @Table(name="revision_entity")) which Envers manages via Hibernate's own
+  DDL rather than an explicit Liquibase changeset, so it never appears in any changelog XML
+  despite being a real table the running app creates and uses. 120 tables > 100, so
+  deterministically sampled to 100 (sorted, stride 1.2), noted. entities (86) is under 100,
+  not sampled. `endpoints` is omitted entirely: openmrs-core's own web/webapp modules use
+  pre-annotation Spring MVC - controllers implement the legacy
+  org.springframework.web.servlet.mvc.Controller interface (e.g.
+  web/src/main/java/org/openmrs/web/controller/PseudoStaticContentController.java) and are
+  wired through XML `SimpleUrlHandlerMapping`-style bean definitions, not
+  @RequestMapping/@Controller/@RestController annotations; a repo-wide grep for those three
+  annotations across non-test main source returns zero hits (the one incidental @Controller
+  hit, test-suite/module/omod/.../TestModuleController.java, is test-harness scaffolding for
+  module-loading tests, not the application's own HTTP surface, and was excluded).
+  `containers`: only webapp/ has <packaging>war</packaging>; no module anywhere has
+  @SpringBootApplication or a spring-boot-maven-plugin, so it is the sole container, kind
+  war. `injections` samples @Autowired field injection across *ServiceImpl classes into
+  their DAO interfaces (the dominant DI style in this codebase; no Lombok, no constructor
+  injection observed in the sampled classes). `riskyFiles` used git log --no-merges over
+  non-test src/main/*.java in the 12 months before the pinned commit's date (2025-09-26 to
+  2026-09-26), dropping >50-file sweep commits; ties at the bottom of the top-10 were
+  resolved automatically since exactly 5 files tied for 10th place and exactly 5 slots
+  remained. No generated code (no /target committed, no .gitattributes generated markers)
+  and no lockfile exist in this Maven-only repo, so those two roles vocabulary values have no
+  real example here.
+roles:
+  - { path: pom.xml, role: manifest }
+  - { path: api/pom.xml, role: manifest }
+  - { path: webapp/pom.xml, role: manifest }
+  - { path: mvnw, role: manifest }
+  - { path: .mvn/wrapper/maven-wrapper.properties, role: manifest }
+  - { path: api/src/main/resources/liquibase-schema-only.xml, role: migration }
+  - { path: api/src/main/resources/org/openmrs/liquibase/snapshots/schema-only/liquibase-schema-only-2.9.x.xml, role: migration }
+  - { path: api/src/main/resources/org/openmrs/liquibase/updates/liquibase-update-to-latest-3.0.x.xml, role: migration }
+  - { path: api/src/main/resources/org/openmrs/notification/db/hibernate/Alert.hbm.xml, role: config }
+  - { path: api/src/main/resources/messages.properties, role: config }
+  - { path: api/src/main/resources/messages_ar.properties, role: config }
+  - { path: api/src/main/resources/hibernate.cfg.xml, role: config }
+  - { path: docker-compose.yml, role: config }
+  - { path: webapp/src/main/webapp/WEB-INF/view/scripts/jquery/jquery.min.js, role: vendored }
+  - { path: webapp/src/main/webapp/WEB-INF/view/scripts/jquery-ui/js/jquery-ui.custom.min.js, role: vendored }
+  - { path: api/src/main/java/org/openmrs/Allergy.java, role: source }
+  - { path: api/src/main/java/org/openmrs/api/context/Context.java, role: source }
+  - { path: api/src/main/java/org/openmrs/api/impl/PatientServiceImpl.java, role: source }
+  - { path: api/src/main/java/org/openmrs/notification/Alert.java, role: source }
+  - { path: web/src/main/java/org/openmrs/web/controller/PseudoStaticContentController.java, role: source }
+  - { path: api/src/test/java/org/openmrs/PersonTest.java, role: test }
+  - { path: api/src/test/java/org/openmrs/OpenmrsTestAnnotationsTest.java, role: test }
+  - { path: README.md, role: docs }
+  - { path: NOTICE.md, role: docs }
+  - { path: LICENSE, role: docs }
+  - { path: webapp/src/main/webapp/WEB-INF/view/scripts/jquery-ui/css/green/images/ui-anim_basic_16x16.gif, role: asset }
+  - { path: .gitignore, role: config }
+containers:
+  - { name: openmrs-webapp, kind: war, path: webapp }
+entities:
+  - { class: org.openmrs.Allergy, table: allergy }
+  - { class: org.openmrs.AllergyReaction, table: allergy_reaction }
+  - { class: org.openmrs.CareSetting, table: care_setting }
+  - { class: org.openmrs.Cohort, table: cohort }
+  - { class: org.openmrs.CohortMembership, table: cohort_member }
+  - { class: org.openmrs.ConceptAnswer, table: concept_answer }
+  - { class: org.openmrs.ConceptAttribute, table: concept_attribute }
+  - { class: org.openmrs.ConceptAttributeType, table: concept_attribute_type }
+  - { class: org.openmrs.ConceptClass, table: concept_class }
+  - { class: org.openmrs.ConceptDatatype, table: concept_datatype }
+  - { class: org.openmrs.ConceptDescription, table: concept_description }
+  - { class: org.openmrs.ConceptMap, table: concept_reference_map }
+  - { class: org.openmrs.ConceptMapType, table: concept_map_type }
+  - { class: org.openmrs.ConceptName, table: concept_name }
+  - { class: org.openmrs.ConceptNameTag, table: concept_name_tag }
+  - { class: org.openmrs.ConceptProposal, table: concept_proposal }
+  - { class: org.openmrs.ConceptReferenceRange, table: concept_reference_range }
+  - { class: org.openmrs.ConceptReferenceTerm, table: concept_reference_term }
+  - { class: org.openmrs.ConceptReferenceTermMap, table: concept_reference_term_map }
+  - { class: org.openmrs.ConceptSet, table: concept_set }
+  - { class: org.openmrs.ConceptSource, table: concept_reference_source }
+  - { class: org.openmrs.ConceptStateConversion, table: concept_state_conversion }
+  - { class: org.openmrs.Condition, table: conditions }
+  - { class: org.openmrs.Diagnosis, table: encounter_diagnosis }
+  - { class: org.openmrs.DiagnosisAttribute, table: diagnosis_attribute }
+  - { class: org.openmrs.DiagnosisAttributeType, table: diagnosis_attribute_type }
+  - { class: org.openmrs.Drug, table: drug }
+  - { class: org.openmrs.DrugIngredient, table: drug_ingredient }
+  - { class: org.openmrs.DrugOrder, table: drug_order }
+  - { class: org.openmrs.DrugReferenceMap, table: drug_reference_map }
+  - { class: org.openmrs.Encounter, table: encounter }
+  - { class: org.openmrs.EncounterProvider, table: encounter_provider }
+  - { class: org.openmrs.EncounterRole, table: encounter_role }
+  - { class: org.openmrs.EncounterType, table: encounter_type }
+  - { class: org.openmrs.Field, table: field }
+  - { class: org.openmrs.FieldAnswer, table: field_answer }
+  - { class: org.openmrs.FormResource, table: form_resource }
+  - { class: org.openmrs.Location, table: location }
+  - { class: org.openmrs.LocationAttribute, table: location_attribute }
+  - { class: org.openmrs.LocationAttributeType, table: location_attribute_type }
+  - { class: org.openmrs.LocationTag, table: location_tag }
+  - { class: org.openmrs.MedicationDispense, table: medication_dispense }
+  - { class: org.openmrs.ObsReferenceRange, table: obs_reference_range }
+  - { class: org.openmrs.Order, table: orders }
+  - { class: org.openmrs.OrderAttribute, table: order_attribute }
+  - { class: org.openmrs.OrderAttributeType, table: order_attribute_type }
+  - { class: org.openmrs.OrderGroup, table: order_group }
+  - { class: org.openmrs.OrderGroupAttribute, table: order_group_attribute }
+  - { class: org.openmrs.OrderGroupAttributeType, table: order_group_attribute_type }
+  - { class: org.openmrs.OrderSetAttributeType, table: order_set_attribute_type }
+  - { class: org.openmrs.OrderType, table: order_type }
+  - { class: org.openmrs.PatientIdentifier, table: patient_identifier }
+  - { class: org.openmrs.PatientIdentifierType, table: patient_identifier_type }
+  - { class: org.openmrs.PatientProgram, table: patient_program }
+  - { class: org.openmrs.PatientState, table: patient_state }
+  - { class: org.openmrs.PersonAddress, table: person_address }
+  - { class: org.openmrs.PersonAttribute, table: person_attribute }
+  - { class: org.openmrs.PersonAttributeType, table: person_attribute_type }
+  - { class: org.openmrs.Privilege, table: privilege }
+  - { class: org.openmrs.Program, table: program }
+  - { class: org.openmrs.ProgramAttributeType, table: program_attribute_type }
+  - { class: org.openmrs.ProgramWorkflowState, table: program_workflow_state }
+  - { class: org.openmrs.Provider, table: provider }
+  - { class: org.openmrs.ProviderAttribute, table: provider_attribute }
+  - { class: org.openmrs.ProviderAttributeType, table: provider_attribute_type }
+  - { class: org.openmrs.ProviderRole, table: provider_role }
+  - { class: org.openmrs.ReferralOrder, table: referral_order }
+  - { class: org.openmrs.Relationship, table: relationship }
+  - { class: org.openmrs.RelationshipType, table: relationship_type }
+  - { class: org.openmrs.TestOrder, table: test_order }
+  - { class: org.openmrs.User, table: users }
+  - { class: org.openmrs.Visit, table: visit }
+  - { class: org.openmrs.VisitAttribute, table: visit_attribute }
+  - { class: org.openmrs.VisitAttributeType, table: visit_attribute_type }
+  - { class: org.openmrs.VisitType, table: visit_type }
+  - { class: org.openmrs.api.db.ClobDatatypeStorage, table: clob_datatype_storage }
+  - { class: org.openmrs.api.db.LoginCredential, table: users }
+  - { class: org.openmrs.api.db.SerializedObject, table: serialized_object }
+  - { class: org.openmrs.api.db.hibernate.envers.OpenmrsRevisionEntity, table: revision_entity }
+  - { class: org.openmrs.event.outbox.OutboxEvent, table: outbox_event }
+  - { class: org.openmrs.hl7.HL7InArchive, table: hl7_in_archive }
+  - { class: org.openmrs.hl7.HL7InError, table: hl7_in_error }
+  - { class: org.openmrs.notification.AlertRecipient, table: notification_alert_recipient }
+  - { class: org.openmrs.notification.Template, table: notification_template }
+  - { class: org.openmrs.person.PersonMergeLog, table: person_merge_log }
+  - { class: org.openmrs.scheduler.TaskDefinition, table: scheduler_task_config }
+tables:
+  - allergy
+  - allergy_reaction
+  - care_setting
+  - clob_datatype_storage
+  - cohort
+  - concept
+  - concept_answer
+  - concept_attribute
+  - concept_attribute_type
+  - concept_class
+  - concept_complex
+  - concept_description
+  - concept_map_type
+  - concept_name
+  - concept_name_tag
+  - concept_name_tag_map
+  - concept_proposal
+  - concept_proposal_tag_map
+  - concept_reference_map
+  - concept_reference_range
+  - concept_reference_source
+  - concept_reference_term_map
+  - concept_set
+  - concept_state_conversion
+  - concept_stop_word
+  - conditions
+  - diagnosis_attribute_type
+  - drug
+  - drug_ingredient
+  - drug_order
+  - encounter
+  - encounter_diagnosis
+  - encounter_provider
+  - encounter_role
+  - encounter_type
+  - field_answer
+  - field_type
+  - form
+  - form_field
+  - form_resource
+  - hl7_in_archive
+  - hl7_in_error
+  - hl7_in_queue
+  - hl7_source
+  - location
+  - location_attribute_type
+  - location_tag
+  - location_tag_map
+  - medication_dispense
+  - note
+  - notification_alert_recipient
+  - notification_template
+  - obs
+  - obs_reference_range
+  - order_attribute
+  - order_frequency
+  - order_group
+  - order_group_attribute
+  - order_group_attribute_type
+  - order_set
+  - order_set_attribute_type
+  - order_set_member
+  - order_type
+  - order_type_class_map
+  - orders
+  - patient
+  - patient_identifier
+  - patient_identifier_type
+  - patient_program
+  - patient_program_attribute
+  - person
+  - person_address
+  - person_attribute
+  - person_attribute_type
+  - person_merge_log
+  - privilege
+  - program
+  - program_attribute_type
+  - program_workflow
+  - program_workflow_state
+  - provider_attribute
+  - provider_attribute_type
+  - provider_role
+  - referral_order
+  - relationship
+  - report_object
+  - report_schema_xml
+  - revision_entity
+  - role
+  - role_privilege
+  - scheduler_task_config
+  - scheduler_task_config_property
+  - serialized_object
+  - shedlock
+  - test_order
+  - user_role
+  - users
+  - visit
+  - visit_attribute
+  - visit_attribute_type
+injections:
+  - { from: org.openmrs.api.impl.ProviderServiceImpl, to: org.openmrs.api.db.ProviderDAO, via: field }
+  - { from: org.openmrs.api.impl.FormServiceImpl, to: org.openmrs.api.db.FormDAO, via: field }
+  - { from: org.openmrs.api.impl.PatientServiceImpl, to: org.openmrs.api.db.PatientDAO, via: field }
+  - { from: org.openmrs.api.impl.LocationServiceImpl, to: org.openmrs.api.db.LocationDAO, via: field }
+  - { from: org.openmrs.api.impl.DiagnosisServiceImpl, to: org.openmrs.api.db.DiagnosisDAO, via: field }
+  - { from: org.openmrs.api.impl.CohortServiceImpl, to: org.openmrs.api.db.CohortDAO, via: field }
+  - { from: org.openmrs.notification.impl.MessageServiceImpl, to: org.openmrs.notification.db.TemplateDAO, via: field }
+  - { from: org.openmrs.notification.impl.AlertServiceImpl, to: org.openmrs.notification.db.AlertDAO, via: field }
+  - { from: org.openmrs.notification.db.hibernate.HibernateAlertDAO, to: org.hibernate.SessionFactory, via: constructor }
+  - { from: org.openmrs.validator.PersonValidator, to: org.openmrs.validator.PersonNameValidator, via: field }
+riskyFiles:
+  - web/src/main/java/org/openmrs/web/filter/initialization/InitializationFilter.java
+  - api/src/main/java/org/openmrs/api/context/Context.java
+  - api/src/main/java/org/openmrs/util/ConceptReferenceRangeUtility.java
+  - api/src/main/java/org/openmrs/api/context/UserContext.java
+  - api/src/main/java/org/openmrs/module/ModuleUtil.java
+  - api/src/main/java/org/openmrs/api/impl/UserServiceImpl.java
+  - api/src/main/java/org/openmrs/api/context/Daemon.java
+  - api/src/main/java/org/openmrs/api/db/hibernate/HibernateConceptDAO.java
+  - api/src/main/java/org/openmrs/api/impl/PatientServiceImpl.java
+  - api/src/main/java/org/openmrs/module/ModuleClassLoader.java

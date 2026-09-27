@@ -1,0 +1,267 @@
+name: killbill
+sha: 4bdc2b24ad298f8e47dda5ac1ddeac7f34687377
+labelledBy: >
+  Read every pom.xml's packaging/artifactId, every ddl.sql (10 files across
+  the account/api/beatrix/catalog/entitlement/invoice/payment/subscription/
+  tenant/util modules) and every migration/V*__*.sql that contains a DROP
+  TABLE for schema-fix re-creations, and the profiles/killbill and
+  profiles/killpay webapp/resources trees, directly. `entities` is omitted:
+  `git grep` confirms zero @Entity/@Table classes anywhere — persistence is
+  JDBI SQL-object DAOs, matching corpus.yaml. `tables` (63, under the 100
+  cap, no sampling needed) comes from `create table` statements across the 10
+  ddl.sql files; the 5 migration files with DROP TABLE IF EXISTS are
+  drop-and-recreate schema fixes under the same table name (not
+  renames/removals), so they don't change the ddl.sql-derived set. Containers
+  are the two WAR profiles (killbill, killpay) confirmed via
+  <packaging>war</packaging>; all other modules are <packaging>jar</packaging>
+  libraries or the root/`profiles` aggregator poms, not containers.
+  `endpoints` were extracted with a small script (not stratigraph) that
+  parses the 28 JAX-RS resource classes under jaxrs/src/main/java/.../resources,
+  resolves class- and method-level @Path string-literal concatenations
+  against the named constants defined in JaxrsResource.java (e.g.
+  ACCOUNTS_PATH = PREFIX + "/" + ACCOUNTS), and keeps only methods carrying an
+  explicit @GET/@POST/@PUT/@DELETE (JAX-RS has no Spring-style default-GET
+  rule, so a small number of @Path-only helper methods with no HTTP-verb
+  annotation are correctly excluded) — spot-checked several entries
+  (AccountResource#closeAccount, PaymentResource#cancelScheduledPaymentTransactionByExternalKey,
+  PluginResource's deliberately-slash-less "/plugins{subResources:.*}" catch-all)
+  against the source directly. This produced 278 unique "METHOD /path"
+  strings, over the 100 cap, sampled deterministically to exactly 100 by
+  taking indices floor(i*278/100) for i in 0..99 from the sorted unique list.
+  `injections` are @Inject-annotated constructor injection (Killbill's DI is
+  Guice, not Spring; @Inject is used the same way Spring uses constructor
+  injection, so `via: constructor` is used per the given vocabulary), sampled
+  across 3 different JAX-RS resource classes (AccountResource, PaymentResource,
+  InvoiceResource) and their injected killbill-api interfaces. `riskyFiles`
+  used `git log --no-merges --since=2025-09-24 --until=2026-09-24
+  --name-only`, dropped the 2 of 154 commits touching >50 files, counted
+  non-test .java files, and tie-broke same-count files by count of
+  fix|bug|issue|error-matching commit subjects. Roles follow ADR-0030 exactly:
+  the profiles/*/src/main/webapp/*.html admin-console pages are source
+  (HTML templates), corrected from an earlier "static asset" judgment call.
+  killbill has no committed generated code (checked for @Generated/DO NOT
+  EDIT markers — one hit was a false positive, a javadoc comment), no Maven
+  wrapper (no mvnw/.mvn/wrapper present), and no lockfile (pure Maven, and
+  the vendored webapp JS/CSS under webapp/lib and webapp/css are hand-copied
+  static files, not an npm-managed tree) — all three noted as genuinely
+  absent rather than forced into the sample.
+roles:
+  - { path: pom.xml, role: manifest }
+  - { path: account/pom.xml, role: manifest }
+  - { path: profiles/killbill/pom.xml, role: manifest }
+  - { path: profiles/killpay/pom.xml, role: manifest }
+  - { path: account/src/main/resources/org/killbill/billing/account/ddl.sql, role: migration }
+  - { path: invoice/src/main/resources/org/killbill/billing/invoice/migration/V20190924111732__invoice_billing_events.sql, role: migration }
+  - { path: jaxrs/src/main/java/org/killbill/billing/jaxrs/resources/AccountResource.java, role: source }
+  - { path: invoice/src/main/java/org/killbill/billing/invoice/InvoiceDispatcher.java, role: source }
+  - { path: profiles/killbill/src/main/java/org/killbill/billing/server/listeners/KillbillGuiceListener.java, role: source }
+  - { path: account/src/test/java/org/killbill/billing/account/AccountTestSuiteNoDB.java, role: test }
+  - { path: account/src/test/java/org/killbill/billing/account/AccountTestUtils.java, role: test }
+  - { path: profiles/killbill/src/main/resources/killbill-server.properties, role: config }
+  - { path: profiles/killbill/src/main/resources/logback.xml, role: config }
+  - { path: profiles/killbill/src/main/resources/shiro.ini, role: config }
+  - { path: profiles/killbill/src/main/webapp/WEB-INF/web.xml, role: config }
+  - { path: spotbugs-exclude.xml, role: config }
+  - { path: .circleci/config.yml, role: config }
+  - { path: profiles/killbill/src/main/webapp/lib/jquery-1.8.0.min.js, role: vendored }
+  - { path: profiles/killbill/src/main/webapp/lib/swagger-ui-bundle.js, role: vendored }
+  - { path: profiles/killbill/src/main/webapp/css/bootstrap.min.css, role: vendored }
+  - { path: profiles/killbill/src/main/webapp/index.html, role: source }
+  - { path: profiles/killbill/src/main/webapp/images/killbill_logo.png, role: asset }
+  - { path: profiles/killbill/src/main/jettyconsole/killbill.png, role: asset }
+  - { path: README.md, role: docs }
+  - { path: LICENSE, role: docs }
+  - { path: NEWS, role: docs }
+  - { path: .github/CONTRIBUTING.md, role: docs }
+containers:
+  - { name: killbill-profiles-killbill, kind: war, path: profiles/killbill }
+  - { name: killbill-profiles-killpay, kind: war, path: profiles/killpay }
+tables:
+  - account_email_history
+  - account_emails
+  - account_history
+  - accounts
+  - audit_log
+  - blocking_state_history
+  - blocking_states
+  - bundle_history
+  - bundles
+  - bus_events
+  - bus_events_history
+  - bus_ext_events
+  - bus_ext_events_history
+  - catalog_override_block_definition
+  - catalog_override_phase_definition
+  - catalog_override_phase_usage
+  - catalog_override_plan_definition
+  - catalog_override_plan_phase
+  - catalog_override_tier_block
+  - catalog_override_tier_definition
+  - catalog_override_usage_definition
+  - catalog_override_usage_tier
+  - custom_field_history
+  - custom_fields
+  - invoice_billing_events
+  - invoice_history
+  - invoice_item_history
+  - invoice_items
+  - invoice_parent_children
+  - invoice_payment_control_plugin_auto_pay_off
+  - invoice_payment_history
+  - invoice_payments
+  - invoice_tracking_id_history
+  - invoice_tracking_ids
+  - invoices
+  - node_infos
+  - notifications
+  - notifications_history
+  - payment_attempt_history
+  - payment_attempts
+  - payment_history
+  - payment_method_history
+  - payment_methods
+  - payment_transaction_history
+  - payment_transactions
+  - payments
+  - roles_permissions
+  - rolled_up_usage
+  - service_broadcasts
+  - sessions
+  - subscription_event_history
+  - subscription_events
+  - subscription_history
+  - subscriptions
+  - tag_definition_history
+  - tag_definitions
+  - tag_history
+  - tags
+  - tenant_broadcasts
+  - tenant_kvs
+  - tenants
+  - user_roles
+  - users
+endpoints:
+  - DELETE /1.0/kb/accounts/{accountId}
+  - DELETE /1.0/kb/accounts/{accountId}/emails/{email}
+  - DELETE /1.0/kb/admin/cache/accounts/{accountId}
+  - DELETE /1.0/kb/bundles/{bundleId}/customFields
+  - DELETE /1.0/kb/invoiceItems/{invoiceItemId}/customFields
+  - DELETE /1.0/kb/invoicePayments/{paymentId}/customFields
+  - DELETE /1.0/kb/invoices/{invoiceId}/tags
+  - DELETE /1.0/kb/paymentMethods/{paymentMethodId}/customFields
+  - DELETE /1.0/kb/payments
+  - DELETE /1.0/kb/payments/{paymentId}/customFields
+  - DELETE /1.0/kb/payments/{paymentTransactionId}/cancelScheduledPaymentTransaction
+  - DELETE /1.0/kb/subscriptions/{subscriptionId}/customFields
+  - DELETE /1.0/kb/tenants/registerNotificationCallback
+  - DELETE /1.0/kb/tenants/uploadPluginPaymentStateMachineConfig/{pluginName}
+  - DELETE /plugins{subResources}
+  - GET /1.0/kb/accounts/pagination
+  - GET /1.0/kb/accounts/{accountId}/allCustomFields
+  - GET /1.0/kb/accounts/{accountId}/auditLogsWithHistory
+  - GET /1.0/kb/accounts/{accountId}/bundles/pagination
+  - GET /1.0/kb/accounts/{accountId}/customFields
+  - GET /1.0/kb/accounts/{accountId}/invoicePayments
+  - GET /1.0/kb/accounts/{accountId}/overdue
+  - GET /1.0/kb/accounts/{accountId}/tags
+  - GET /1.0/kb/admin/queues
+  - GET /1.0/kb/bundles/search/{searchKey}
+  - GET /1.0/kb/bundles/{bundleId}/customFields
+  - GET /1.0/kb/catalog/availableAddons
+  - GET /1.0/kb/catalog/plan
+  - GET /1.0/kb/catalog/product
+  - GET /1.0/kb/credits/{creditId}
+  - GET /1.0/kb/customFields/search/{searchKey}
+  - GET /1.0/kb/invoiceItems/{invoiceItemId}/auditLogsWithHistory
+  - GET /1.0/kb/invoiceItems/{invoiceItemId}/tags
+  - GET /1.0/kb/invoicePayments/{paymentId}/customFields
+  - GET /1.0/kb/invoices/byNumber/{invoiceNumber}
+  - GET /1.0/kb/invoices/pagination
+  - GET /1.0/kb/invoices/translation/{locale}
+  - GET /1.0/kb/invoices/{invoiceId}
+  - GET /1.0/kb/invoices/{invoiceId}/html
+  - GET /1.0/kb/nodesInfo
+  - GET /1.0/kb/paymentMethods
+  - GET /1.0/kb/paymentMethods/search/{searchKey}
+  - GET /1.0/kb/paymentMethods/{paymentMethodId}/customFields
+  - GET /1.0/kb/paymentTransactions/{transactionId}/auditLogsWithHistory
+  - GET /1.0/kb/payments
+  - GET /1.0/kb/payments/search/{searchKey}
+  - GET /1.0/kb/payments/{paymentId}/auditLogsWithHistory
+  - GET /1.0/kb/pluginsInfo
+  - GET /1.0/kb/security/roles/{role}
+  - GET /1.0/kb/subscriptions
+  - GET /1.0/kb/subscriptions/{subscriptionId}/auditLogsWithHistory
+  - GET /1.0/kb/subscriptions/{subscriptionId}/tags
+  - GET /1.0/kb/tagDefinitions/{tagDefinitionId}/auditLogsWithHistory
+  - GET /1.0/kb/tags/{tagId}/auditLogsWithHistory
+  - GET /1.0/kb/tenants/uploadPerTenantConfig
+  - GET /1.0/kb/tenants/uploadPluginConfig/{pluginName}
+  - GET /1.0/kb/tenants/{tenantId}
+  - GET /1.0/kb/usages/{subscriptionId}
+  - GET /swagger.{type}
+  - POST /1.0/kb/accounts
+  - POST /1.0/kb/accounts/{accountId}/block
+  - POST /1.0/kb/accounts/{accountId}/invoicePayments
+  - POST /1.0/kb/accounts/{accountId}/tags
+  - POST /1.0/kb/bundles/{bundleId}/block
+  - POST /1.0/kb/bundles/{bundleId}/tags
+  - POST /1.0/kb/catalog/xml
+  - POST /1.0/kb/invoiceItems/{invoiceItemId}/customFields
+  - POST /1.0/kb/invoicePayments/{paymentId}/chargebacks
+  - POST /1.0/kb/invoicePayments/{paymentId}/tags
+  - POST /1.0/kb/invoices/catalogTranslation/{locale}
+  - POST /1.0/kb/invoices/group
+  - POST /1.0/kb/invoices/taxes/{accountId}
+  - POST /1.0/kb/invoices/{invoiceId}
+  - POST /1.0/kb/invoices/{invoiceId}/payments
+  - POST /1.0/kb/overdue
+  - POST /1.0/kb/paymentGateways/hosted/form/{accountId}
+  - POST /1.0/kb/paymentTransactions/{transactionId}
+  - POST /1.0/kb/payments
+  - POST /1.0/kb/payments/chargebacks
+  - POST /1.0/kb/payments/{paymentId}
+  - POST /1.0/kb/payments/{paymentId}/customFields
+  - POST /1.0/kb/security/roles
+  - POST /1.0/kb/subscriptions
+  - POST /1.0/kb/subscriptions/{subscriptionId}/block
+  - POST /1.0/kb/tagDefinitions
+  - POST /1.0/kb/tenants/uploadPerTenantConfig
+  - POST /1.0/kb/tenants/userKeyValue/{keyName}
+  - POST /1.0/kb/test/invoices/{accountId}/log
+  - PUT /1.0/kb/accounts/{accountId}
+  - PUT /1.0/kb/accounts/{accountId}/paymentMethods/refresh
+  - PUT /1.0/kb/admin/healthcheck
+  - PUT /1.0/kb/bundles/{bundleId}/customFields
+  - PUT /1.0/kb/bundles/{bundleId}/resume
+  - PUT /1.0/kb/invoicePayments/{paymentId}/customFields
+  - PUT /1.0/kb/invoices/{invoiceId}/voidInvoice
+  - PUT /1.0/kb/payments
+  - PUT /1.0/kb/payments/{paymentId}/customFields
+  - PUT /1.0/kb/security/users/{username}/roles
+  - PUT /1.0/kb/subscriptions/{subscriptionId}/customFields
+  - PUT /1.0/kb/subscriptions/{subscriptionId}/undoChangePlan
+injections:
+  - { from: org.killbill.billing.jaxrs.resources.AccountResource, to: org.killbill.billing.account.api.AccountUserApi, via: constructor }
+  - { from: org.killbill.billing.jaxrs.resources.AccountResource, to: org.killbill.billing.invoice.api.InvoiceUserApi, via: constructor }
+  - { from: org.killbill.billing.jaxrs.resources.AccountResource, to: org.killbill.billing.payment.api.PaymentApi, via: constructor }
+  - { from: org.killbill.billing.jaxrs.resources.AccountResource, to: org.killbill.billing.util.api.TagUserApi, via: constructor }
+  - { from: org.killbill.billing.jaxrs.resources.AccountResource, to: org.killbill.billing.util.api.CustomFieldUserApi, via: constructor }
+  - { from: org.killbill.billing.jaxrs.resources.AccountResource, to: org.killbill.billing.entitlement.api.SubscriptionApi, via: constructor }
+  - { from: org.killbill.billing.jaxrs.resources.AccountResource, to: org.killbill.billing.jaxrs.util.JaxrsUriBuilder, via: constructor }
+  - { from: org.killbill.billing.jaxrs.resources.PaymentResource, to: org.killbill.billing.util.api.TagUserApi, via: constructor }
+  - { from: org.killbill.billing.jaxrs.resources.PaymentResource, to: org.killbill.billing.account.api.AccountUserApi, via: constructor }
+  - { from: org.killbill.billing.jaxrs.resources.InvoiceResource, to: org.killbill.billing.account.api.AccountUserApi, via: constructor }
+  - { from: org.killbill.billing.jaxrs.resources.InvoiceResource, to: org.killbill.billing.invoice.api.InvoiceUserApi, via: constructor }
+  - { from: org.killbill.billing.jaxrs.resources.InvoiceResource, to: org.killbill.billing.payment.api.PaymentApi, via: constructor }
+riskyFiles:
+  - invoice/src/main/java/org/killbill/billing/invoice/InvoiceDispatcher.java
+  - jaxrs/src/main/java/org/killbill/billing/jaxrs/resources/TestResource.java
+  - jaxrs/src/main/java/org/killbill/billing/jaxrs/resources/KillBillApiDefinition.java
+  - jaxrs/src/main/java/org/killbill/billing/jaxrs/resources/AdminResource.java
+  - profiles/killbill/src/main/java/org/killbill/billing/server/listeners/KillbillGuiceListener.java
+  - jaxrs/src/main/java/org/killbill/billing/jaxrs/resources/AccountResource.java
+  - jaxrs/src/main/java/org/killbill/billing/jaxrs/resources/CatalogResource.java
+  - jaxrs/src/main/java/org/killbill/billing/jaxrs/resources/ExportResource.java
+  - invoice/src/main/java/org/killbill/billing/invoice/InvoicePluginDispatcher.java
+  - invoice/src/main/java/org/killbill/billing/invoice/InvoiceListener.java
