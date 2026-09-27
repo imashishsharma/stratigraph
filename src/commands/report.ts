@@ -25,7 +25,8 @@ import { buildC4Model } from '../present/c4.js';
 import { buildClassDiagrams } from '../present/classes.js';
 import { buildErModel } from '../present/erd.js';
 import { evaluateGate, rankFindings, type GateSeverity } from '../present/findings.js';
-import { toHtml, type ReportContext, type ReportData } from '../present/html.js';
+import { toHtml, type FirstHourData, type ReportContext, type ReportData } from '../present/html.js';
+import { busFactorRisks } from '../analysis/hotspots.js';
 import { toMarkdown } from '../present/markdown.js';
 import { toClassMermaid, toErMermaid, toMermaid } from '../present/mermaid.js';
 import { toStructurizr } from '../present/structurizr.js';
@@ -116,6 +117,7 @@ export function runReport(options: ReportOptions): ReportResult {
       matrix: buildDependencyMatrix(db, runId, top),
       hotspots: buildHotspotChart(db, runId, top),
       ranked: rankFindings(db, runId, { top }),
+      firstHour: firstHourData(db, runId, config.history.minCommits),
     };
     const context: ReportContext = {
       run: summary,
@@ -271,6 +273,39 @@ function resolveRun(db: Db, requested: number | undefined, dbPath: string): numb
   const latest = latestRun(db);
   if (latest === null) throw new ReportError(noCompletedRunMessage(db, dbPath));
   return latest.id;
+}
+
+/** Inputs to the first-hour answers that no other panel computes. */
+function firstHourData(db: Db, runId: number, minCommits: number): FirstHourData {
+  const recent = db
+    .prepare(
+      /* sql */ `
+      SELECT m.path AS path, m.recent_commits AS commits
+        FROM file_metric m
+        JOIN file_role r ON r.run_id = m.run_id AND r.path = m.path AND r.role = 'source'
+       WHERE m.run_id = ? AND m.recent_commits > 0`,
+    )
+    .all(runId) as Array<{ path: string; commits: number }>;
+  const byArea = new Map<string, { commits: number; files: number }>();
+  for (const row of recent) {
+    const parts = row.path.split('/');
+    const area = parts.length > 1 ? parts.slice(0, Math.min(parts.length - 1, 4)).join('/') : '.';
+    const entry = byArea.get(area) ?? { commits: 0, files: 0 };
+    entry.commits += row.commits;
+    entry.files += 1;
+    byArea.set(area, entry);
+  }
+  const recentAreas = [...byArea.entries()]
+    .map(([area, entry]) => ({ area, ...entry }))
+    .sort((a, b) => b.commits - a.commits || a.area.localeCompare(b.area))
+    .slice(0, 5);
+  const silos = busFactorRisks(db, runId, 10, minCommits)
+    .filter((h) => h.topAuthorShare >= 0.8)
+    .map((h) => ({ path: h.path, share: h.topAuthorShare, commits: h.commits, authors: h.authors }));
+  const drift = (
+    db.prepare(`SELECT COUNT(*) AS n FROM finding WHERE run_id = ? AND rule = 'schema-drift'`).get(runId) as { n: number }
+  ).n;
+  return { recentAreas, silos, drift };
 }
 
 /** Extractor complaints, grouped. Part of "what this report did not see". */

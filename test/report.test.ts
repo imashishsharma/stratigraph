@@ -412,6 +412,11 @@ describe('a repository with Java sources and no JDK', () => {
       /<div class="coverage withheld" data-view="architecture"><p class="coverage-statement">Withheld: built from only 0 of 2 main source files parsed \(0%\), below the 50% this view needs\.<\/p>/,
     );
     expect(html).toContain('Withheld for low coverage: architecture (C4), class diagrams');
+    // The first hour: five answers, and a withheld view answers with why.
+    expect(html.match(/class="first-hour-answer"/g)?.length).toBe(5);
+    expect(html).toMatch(
+      /<h4>What are the parts\?<\/h4><p class="coverage-statement warn">Withheld: built from only 0 of 2/,
+    );
 
     const written = readdirSync(result.outDir).sort();
     expect(written).toEqual(['findings.md', 'index.html']);

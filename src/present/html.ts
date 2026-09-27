@@ -51,6 +51,18 @@ export interface ReportData {
   matrix: DependencyMatrix;
   hotspots: HotspotChart;
   ranked: RankedFindings;
+  /** The first-hour answers' inputs that no other panel carries. */
+  firstHour?: FirstHourData | undefined;
+}
+
+/** Inputs to the five first-hour answers that no other panel already holds. */
+export interface FirstHourData {
+  /** Directories by recent commits to their source files, most first. */
+  recentAreas: Array<{ area: string; commits: number; files: number }>;
+  /** Source files changed recently where one author made most of the commits. */
+  silos: Array<{ path: string; share: number; commits: number; authors: number }>;
+  /** Mapping/migration disagreements, from the schema-drift rule. */
+  drift: number;
 }
 
 interface Panel {
@@ -362,6 +374,7 @@ function summarySection(data: ReportData, context: ReportContext): string {
   const publishable = data.ranked.total - data.ranked.uncited;
 
   const parts: string[] = [
+    firstHour(data, context),
     '<p class="lead">Everything in this report was read from the source at the commit ' +
       'above, or from that commit&rsquo;s history. Anything a model wrote is marked as ' +
       'inference. Every claim carries the file and line, commit or fact row it came from.</p>',
@@ -421,6 +434,79 @@ function summarySection(data: ReportData, context: ReportContext): string {
 
   parts.push(legend());
   return parts.join('\n');
+}
+
+/**
+ * The first hour: five answers a new owner of the system wants before reading
+ * anything else, each with the coverage it rests on (product plan, Phase C).
+ * Every number is from an object another panel renders in full; a withheld
+ * view's answer is its withholding statement.
+ */
+function firstHour(data: ReportData, context: ReportContext): string {
+  const views = context.run.coverage.views;
+  const answer = (question: string, view: ViewCoverage, body: string) =>
+    '<li class="first-hour-answer">' +
+    `<h4>${escapeText(question)}</h4>` +
+    (view.withheld ? '' : `<p>${body}</p>`) +
+    `<p class="coverage-statement${view.withheld ? ' warn' : ''}">${escapeText(view.statement)}</p>` +
+    '</li>';
+
+  const containers = data.model.container.elements.filter((e) => e.kind === 'container');
+  const parts =
+    containers.length === 0
+      ? 'No deployable was observed.'
+      : `${containers.length} container(s): ${containers
+          .slice(0, 6)
+          .map((c) => `<strong>${escapeText(c.name)}</strong>${c.technology ? ` (${escapeText(c.technology)})` : ''}`)
+          .join(', ')}${containers.length > 6 ? ', …' : ''}; ${context.run.counts.packages} package(s), ${context.run.counts.endpoints} endpoint(s).`;
+
+  const tables = data.er.entities.length;
+  const dataAnswer =
+    tables === 0
+      ? 'No table was read — no O/R mapping and no migration.'
+      : `${tables} table(s), ${data.er.relationships.length} relationship(s)` +
+        (data.firstHour && data.firstHour.drift > 0
+          ? `; <strong>${data.firstHour.drift}</strong> place(s) where the mapping and the migrations disagree (Findings tab).`
+          : '.');
+
+  const risk =
+    data.hotspots.bars.length === 0
+      ? escapeText(data.hotspots.notes[0] ?? 'No file ranks as a hotspot.')
+      : `Hottest source files: ${data.hotspots.bars
+          .slice(0, 3)
+          .map((b) => `<code>${escapeText(b.path)}</code> (${b.recentCommits} recent commits)`)
+          .join(', ')}.`;
+
+  const areas = data.firstHour?.recentAreas ?? [];
+  const recent =
+    areas.length === 0
+      ? 'No source file changed in the hotspot window.'
+      : `Most recent change is in ${areas
+          .slice(0, 3)
+          .map((a) => `<code>${escapeText(a.area)}</code> (${a.commits} commits across ${a.files} file(s))`)
+          .join(', ')}.`;
+
+  const silos = data.firstHour?.silos ?? [];
+  const silo =
+    silos.length === 0
+      ? 'No recently changed source file is dominated by a single author.'
+      : `${silos.length} recently changed file(s) are mostly one person's work, e.g. ${silos
+          .slice(0, 3)
+          .map((s) => `<code>${escapeText(s.path)}</code> (${Math.round(s.share * 100)}% of ${s.commits})`)
+          .join(', ')}.`;
+
+  return [
+    '<section class="first-hour">',
+    '<h3>The first hour</h3>',
+    '<ol class="first-hour-answers">',
+    answer('What are the parts?', views.architecture, parts),
+    answer('What is the data?', views.data, dataAnswer),
+    answer('Where is the risk?', views.hotspots, risk),
+    answer('What is changing?', views.coupling, recent),
+    answer('Who holds the knowledge?', views.coupling, silo),
+    '</ol>',
+    '</section>',
+  ].join('\n');
 }
 
 // ---------------------------------------------------- panels that aggregate
@@ -1216,6 +1302,10 @@ svg.diagram { display: block; max-width: 100%; height: auto; margin: 0 auto; }
 .empty { color: var(--faint); font-style: italic; }
 .warn { color: var(--warn); }
 
+.first-hour-answers { padding-left: 20px; }
+.first-hour-answer { margin: 10px 0; }
+.first-hour-answer h4 { margin: 0 0 2px; font-size: 14px; }
+.first-hour-answer p { margin: 2px 0; }
 .coverage { margin: 8px 0 16px; padding: 10px 14px; border: 1px solid var(--line);
             border-radius: 8px; font-size: 13.5px; color: var(--muted); }
 .coverage.withheld { border-color: var(--warn); color: inherit; }
