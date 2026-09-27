@@ -14,7 +14,9 @@ import java.util.List;
  * all name a path — and a legacy codebase uses all of them. Everything here
  * reads literals only: an argument that is a constant reference
  * ({@code @RequestMapping(Paths.ORDERS)}) has a value we cannot see without
- * resolving it, so it yields nothing rather than the text of the expression.
+ * resolving it, so it yields nothing rather than the text of the expression —
+ * unless it is a compile-time constant declared in the source set, which
+ * {@link Constants} evaluates (ADR-0043).
  */
 final class AnnotationArgs {
 
@@ -86,21 +88,12 @@ final class AnnotationArgs {
      * Anything else yields null.
      */
     static String literal(Expression expression) {
-        if (expression instanceof J.Literal) {
-            Object value = ((J.Literal) expression).getValue();
-            return value instanceof String ? (String) value : null;
+        // Literals, concatenations and compile-time constants declared in the
+        // source set (ADR-0043); anything else is not readable from source.
+        if (expression instanceof J.Literal && !(((J.Literal) expression).getValue() instanceof String)) {
+            return null;
         }
-        if (expression instanceof J.Binary
-                && ((J.Binary) expression).getOperator() == J.Binary.Type.Addition) {
-            String left = literal(((J.Binary) expression).getLeft());
-            String right = literal(((J.Binary) expression).getRight());
-            return left == null || right == null ? null : left + right;
-        }
-        if (expression instanceof J.Parentheses) {
-            Object tree = ((J.Parentheses<?>) expression).getTree();
-            return tree instanceof Expression ? literal((Expression) tree) : null;
-        }
-        return null;
+        return Constants.evaluate(expression);
     }
 
     boolean isEmpty() {

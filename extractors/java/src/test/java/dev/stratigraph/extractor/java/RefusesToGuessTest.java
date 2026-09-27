@@ -382,6 +382,18 @@ class RefusesToGuessTest {
     }
 
     @Test
+    void doesNotMakeANodeOfAKotlinObjectExpression(@TempDir Path repo) throws Exception {
+        write(repo, "src/main/kotlin/app/Uses.kt", """
+                package app
+                class Uses {
+                    val listener = object : Runnable { override fun run() {} }
+                }
+                """);
+        assertFalse(has(extract(repo), "node", node -> node.path("name").asText().isEmpty()),
+                "emitted a node with an empty name");
+    }
+
+    @Test
     void willNotNameATableUnderANamingStrategyItDoesNotKnow(@TempDir Path repo) throws Exception {
         // ADR-0036: a default-named entity's table is its name put through the
         // module's physical naming strategy. A custom strategy class could do

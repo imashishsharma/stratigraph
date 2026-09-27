@@ -66,6 +66,35 @@ final class Fqn {
         return ownerFqn + "#" + fieldName;
     }
 
+    /**
+     * A path template without its variables' regular expressions:
+     * {@code /accounts/{id:[0-9a-f-]+}} is {@code /accounts/{id}} — the regex
+     * constrains the route, it does not name a different one.
+     */
+    static String pathTemplate(String path) {
+        StringBuilder out = new StringBuilder();
+        int i = 0;
+        while (i < path.length()) {
+            char c = path.charAt(i);
+            if (c != '{') {
+                out.append(c);
+                i++;
+                continue;
+            }
+            int depth = 0;
+            int end = i;
+            for (; end < path.length(); end++) {
+                if (path.charAt(end) == '{') depth++;
+                if (path.charAt(end) == '}' && --depth == 0) break;
+            }
+            String inner = path.substring(i + 1, Math.min(end, path.length()));
+            int colon = inner.indexOf(':');
+            out.append('{').append(colon < 0 ? inner : inner.substring(0, colon).trim()).append('}');
+            i = end + 1;
+        }
+        return out.toString();
+    }
+
     /** {@code GET /api/orders/{id}} — framework-neutral by design. */
     static String endpoint(String httpMethod, String path) {
         return httpMethod + " " + path;

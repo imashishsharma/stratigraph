@@ -136,6 +136,7 @@ final class JavaFactExtractor {
         // the loss is visible rather than silent.
         Map<String, String> declaredTypeNames = declaredTypeNames(parsed);
         Set<String> declaredPackages = declaredPackages(parsed);
+        Constants.collect(parsed);
 
         for (SourceFile sourceFile : parsed) {
             String path = sourceFile.getSourcePath().toString().replace('\\', '/');
@@ -361,6 +362,11 @@ final class JavaFactExtractor {
 
         @Override
         public J.ClassDeclaration visitClassDeclaration(J.ClassDeclaration declaration, Void unused) {
+            // A Kotlin `object : T { }` expression parses as a class with no
+            // name. It is not a declared type and has no identity of its own.
+            if (declaration.getSimpleName().isBlank()) {
+                return super.visitClassDeclaration(declaration, unused);
+            }
             JavaType.FullyQualified type = declaration.getType();
             if (type == null) {
                 emitter.diagnostic("warn",
@@ -760,7 +766,9 @@ final class JavaFactExtractor {
 
                 String shorthand = FrameworkAnnotations.SPRING_METHOD_MAPPINGS.get(annotation.fqn);
                 if (shorthand != null) {
-                    emitEndpoint(method, basePaths, args.strings("value"), List.of(shorthand),
+                    List<String> paths = new ArrayList<>(args.strings("value"));
+                    paths.addAll(args.strings("path"));
+                    emitEndpoint(method, basePaths, paths, List.of(shorthand),
                             "spring-mvc", line(annotation.node));
                     continue;
                 }
@@ -805,7 +813,7 @@ final class JavaFactExtractor {
 
             for (String base : bases) {
                 for (String suffix : suffixes) {
-                    String full = joinPath(base, suffix);
+                    String full = Fqn.pathTemplate(joinPath(base, suffix));
                     for (String verb : verbs) {
                         String fqn = Fqn.endpoint(verb, full);
                         Map<String, Object> attrs = new LinkedHashMap<>();
