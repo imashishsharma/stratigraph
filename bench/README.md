@@ -50,7 +50,9 @@ endpoints:          # every HTTP endpoint as "METHOD /path", path variables as {
   - GET /owners/{ownerId}
 injections:         # a sample (≥5 where the repo has them) of dependency-injection edges
                     # from the class that receives the dependency to the declared
-                    # type of what it receives; include Lombok constructor injection
+                    # type of what it receives; include Lombok constructor injection.
+                    # Java/Kotlin types by fqn; TypeScript classes as
+                    # `<repo-relative path>#<ClassName>`
   - { from: org.x.OwnerController, to: org.x.OwnerRepository, via: constructor }
 riskyFiles:         # up to 10 source files a senior engineer would call riskiest:
                     # most commits in the 12 months before the pinned commit

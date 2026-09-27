@@ -1,0 +1,43 @@
+name: Bench
+
+# Nightly, not per-PR: it clones the whole corpus (ADR-0035).
+on:
+  schedule:
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+
+jobs:
+  bench:
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+      - run: npm ci
+      - run: npm run build
+      - name: Build the Java extractor
+        working-directory: extractors/java
+        run: ./mvnw -q -B package -DskipTests
+      - name: Cache corpus clones
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/stratigraph/corpus
+          key: corpus-${{ hashFiles('bench/corpus.yaml') }}
+          restore-keys: corpus-
+      - name: Run the benchmark
+        run: node dist/cli.js bench --fetch --extractor-jar extractors/java/target/stratigraph-java-extractor.jar
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: scorecard
+          path: |
+            .stratigraph/bench/scorecard.md
+            .stratigraph/bench/scorecard.json

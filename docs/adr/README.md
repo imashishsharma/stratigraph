@@ -42,6 +42,7 @@ the code when it is incidental. Either way, before the commit.
 | [0032](0032-honest-runs.md) | A run records what each extractor did; only a completed run is the latest | accepted |
 | [0033](0033-coverage-is-a-ratio.md) | Coverage is a ratio per extractor and per view; a view below threshold is withheld | accepted |
 | [0034](0034-test-code-is-not-architecture.md) | Test code is left out of every structural aggregate, and counted | accepted |
+| [0035](0035-quality-is-measured.md) | Quality is scored by `bench` against ground truth labelled without the tool | accepted |
 
 Format: context, decision, alternatives considered (with why each was rejected),
 consequences — including the costs, not only the benefits.

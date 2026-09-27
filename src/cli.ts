@@ -8,6 +8,7 @@ import { AnalysisError, DEFAULT_TOP, GateError, runAnalyze } from './commands/an
 import { runConfigPaths, runConfigSetKey } from './commands/config.js';
 import { runDoctor } from './commands/doctor.js';
 import { DiffError, runDiff } from './commands/diff.js';
+import { runBench } from './commands/bench.js';
 import { ExtractError, runExtract } from './commands/extract.js';
 import { runFetchExtractor } from './commands/fetch-extractor.js';
 import { HistoryError, runHistory } from './commands/history.js';
@@ -152,6 +153,45 @@ export function buildProgram(): Command {
         if (outputFormat() === 'json' && !options.emit) {
           printJson(extractDocument(result));
         }
+      },
+    );
+
+  program
+    .command('bench')
+    .description('score the pipeline against the pinned corpus and its hand-labelled ground truth')
+    .option('--corpus <file>', 'corpus manifest (default: bench/corpus.yaml)')
+    .option('--truth <dir>', 'ground-truth directory (default: bench/truth)')
+    .option('--cache <dir>', 'where corpus clones live (default: ~/.cache/stratigraph/corpus)')
+    .option('--out <dir>', 'stores, reports and the scorecard (default: .stratigraph/bench)')
+    .option('--only <names>', 'comma-separated corpus names')
+    .option('--fetch', 'clone repositories that are missing (the only network step)')
+    .option('--private <repo>', 'score a local repository; print aggregates only, never a name')
+    .option('--verbose', "keep the pipeline's own progress output")
+    .action(
+      async (options: {
+        corpus?: string;
+        truth?: string;
+        cache?: string;
+        out?: string;
+        only?: string;
+        fetch?: boolean;
+        private?: string;
+        verbose?: boolean;
+      }) => {
+        const global = overrides(program);
+        const card = await runBench({
+          corpus: options.corpus,
+          truth: options.truth,
+          cache: options.cache,
+          out: options.out,
+          only: options.only?.split(',').map((name) => name.trim()).filter(Boolean),
+          fetch: options.fetch,
+          privateRepo: options.private,
+          verbose: options.verbose,
+          javaHome: global.javaHome,
+          extractorJar: global.extractorJar,
+        });
+        if (outputFormat() === 'json') printJson(card);
       },
     );
 
