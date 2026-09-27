@@ -43,6 +43,9 @@ the code when it is incidental. Either way, before the commit.
 | [0033](0033-coverage-is-a-ratio.md) | Coverage is a ratio per extractor and per view; a view below threshold is withheld | accepted |
 | [0034](0034-test-code-is-not-architecture.md) | Test code is left out of every structural aggregate, and counted | accepted |
 | [0035](0035-quality-is-measured.md) | Quality is scored by `bench` against ground truth labelled without the tool | accepted |
+| [0040](0040-containers-are-deployables.md) | A C4 container is a deployable, proved by a build file or a main class | accepted |
+| [0041](0041-split-packages.md) | A split package is one node with a `contains` edge from each module | accepted |
+| [0042](0042-angular-structure.md) | An Angular package is a structural boundary, not a directory; service calls are edges | accepted |
 
 Format: context, decision, alternatives considered (with why each was rejected),
 consequences — including the costs, not only the benefits.
