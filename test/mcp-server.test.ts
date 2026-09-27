@@ -27,12 +27,16 @@ const TOOLS = [
   'check_cycle',
   'describe_module',
   'describe_run',
+  'explain_hotspot',
   'find_callers',
   'find_hotspots',
   'find_node',
   'list_endpoints',
   'query_dependencies',
   'trace_to_table',
+  'what_breaks_if',
+  'where_is_table_written',
+  'who_knows',
 ];
 
 let cwd: string;
@@ -295,6 +299,10 @@ describe('coverage on every answer', () => {
     ['find_hotspots', {}, 'hotspots'],
     ['trace_to_table', { table: 'orders' }, 'data'],
     ['check_cycle', { from: 'shop.web', to: 'shop.service' }, 'cycles'],
+    ['what_breaks_if', { fqn: 'shop.service.OrderService' }, 'architecture'],
+    ['who_knows', { path: 'src/shop/web/OrderController.java' }, 'coupling'],
+    ['where_is_table_written', { table: 'orders' }, 'data'],
+    ['explain_hotspot', { path: 'src/shop/web/OrderController.java' }, 'hotspots'],
   ];
 
   async function withInventory(): Promise<Client> {
@@ -357,5 +365,22 @@ describe('coverage on every answer', () => {
 
     expect(result.content[0]?.text).toContain('Coverage by view:');
     expect(result.content[0]?.text).toContain('  data model: Withheld: built from only 2 of 5');
+  });
+});
+
+describe('the questions an engineer asks (product plan, Phase C)', () => {
+  it('what_breaks_if follows dependents to the endpoints they serve', async () => {
+    const result = (await client.callTool({
+      name: 'what_breaks_if',
+      arguments: { fqn: 'shop.service.OrderService' },
+    })) as { structuredContent?: { impacted: Array<{ fqn: string; depth: number }>; endpoints: Array<{ endpoint: string }> } };
+    expect(result.structuredContent?.impacted.map((i) => `${i.depth} ${i.fqn}`)).toContain('1 shop.web.OrderController');
+    expect(result.structuredContent?.endpoints.length).toBeGreaterThan(0);
+  });
+
+  it('explain_hotspot says why an unranked file is unranked', async () => {
+    const text = await callText('explain_hotspot', { path: 'nowhere/Missing.java' });
+    expect(text).toContain('is not ranked');
+    expect(text).toContain('not in this run');
   });
 });

@@ -30,6 +30,14 @@ import type { Db } from '../db/database.js';
 import { NODE_KINDS } from '../facts/types.js';
 import { TOOL_VERSION } from '../version.js';
 import {
+  explainHotspot,
+  whatBreaksIf,
+  whereIsTableWritten,
+  whoKnows,
+  type Impact,
+  type TableAccess,
+} from './questions.js';
+import {
   checkCycle,
   DEFAULT_LIMIT,
   describeModule,
@@ -470,6 +478,129 @@ export function createServer(context: McpContext): McpServer {
       if (result.forward !== null) lines.push('', ...pathLines(result.forward));
       if (result.backward !== null) lines.push('', ...pathLines(result.backward));
       return answer('cycles', lines.join('\n'), result);
+    },
+  );
+
+  server.registerTool(
+    'what_breaks_if',
+    {
+      title: 'What breaks if this changes',
+      description:
+        'Everything that depends on a method or type, transitively, over observed call, ' +
+        'injection and inheritance edges — each with the edge that put it there — plus the ' +
+        'tests that reach it and the HTTP endpoints served by impacted code.',
+      inputSchema: {
+        fqn: z.string().min(1).describe('exact fqn of a type or method; use find_node to get one'),
+        depth: z.number().int().min(1).max(6).optional().describe('hops to follow (default 3)'),
+        limit: limitArg,
+      },
+      annotations: readOnly,
+    },
+    (args) => {
+      const result = whatBreaksIf(db, runId, args);
+      if (!result.found) return answer('architecture', notFound(args.fqn, true), result);
+      const line = (impact: Impact) =>
+        `  [${impact.depth}] ${impact.fqn} — ${impact.via.edgeKind} ${impact.via.to} ${at(impact.via.file, impact.via.line)}`;
+      const lines = [
+        `${result.impacted.length} element(s) depend on ${result.subject} within ${result.depth} hop(s):`,
+        ...(result.impacted.length === 0 ? ['  none observed'] : result.impacted.map(line)),
+        '',
+        `${result.tests.length} test element(s) reach it:`,
+        ...result.tests.map(line),
+        '',
+        `${result.endpoints.length} HTTP endpoint(s) served by impacted code:`,
+        ...result.endpoints.map((e) => `  ${e.endpoint} — ${e.handler} ${at(e.file, e.line)}`),
+        ...(result.truncated ? ['', 'Truncated at the limit; raise `limit` for more.'] : []),
+      ];
+      return answer('architecture', lines.join('\n'), result);
+    },
+  );
+
+  server.registerTool(
+    'who_knows',
+    {
+      title: 'Who knows this file',
+      description:
+        'The authors who changed a file, how many commits each, their share and most recent ' +
+        'change, and the latest commits with their shas — from git history.',
+      inputSchema: { path: z.string().min(1).describe('repository-relative file path') },
+      annotations: readOnly,
+    },
+    (args) => {
+      const result = whoKnows(db, runId, args);
+      if (!result.found) {
+        return answer('coupling', `No commit in this run's history touches ${args.path}.`, result);
+      }
+      const lines = [
+        `${result.commits} commit(s) to ${result.path}:`,
+        ...result.authors.map(
+          (a) => `  ${a.author} — ${a.commits} commit(s), ${Math.round(a.share * 100)}%, last ${a.last.slice(0, 10)}`,
+        ),
+        '',
+        'most recent:',
+        ...result.recent.map((c) => `  ${c.sha.slice(0, 10)} ${c.date.slice(0, 10)} ${c.author}: ${c.subject ?? ''}`),
+      ];
+      return answer('coupling', lines.join('\n'), result);
+    },
+  );
+
+  server.registerTool(
+    'where_is_table_written',
+    {
+      title: 'Where is this table written',
+      description:
+        'Code that writes a table — Spring Data repositories of its entity, @Query and JDBC ' +
+        'statements naming it — with what reads it and which classes map to it, each cited.',
+      inputSchema: { table: z.string().min(1).describe('table name, any case, e.g. "orders"') },
+      annotations: readOnly,
+    },
+    (args) => {
+      const result = whereIsTableWritten(db, runId, args);
+      if (!result.found) {
+        return answer('data', `No table named ${args.table} is in this run.`, result);
+      }
+      const list = (title: string, rows: TableAccess[]) => [
+        `${title} (${rows.length}):`,
+        ...(rows.length === 0 ? ['  none observed'] : rows.map((r) => `  ${r.by}${r.via ? ` [${r.via}]` : ''} ${at(r.file, r.line)}`)),
+      ];
+      const lines = [
+        ...list(`written by`, result.writers),
+        '',
+        ...list('read by', result.readers),
+        '',
+        ...list('mapped by', result.mappedBy),
+        '',
+        'An ORM write through a mapped class that is not a repository or a query is not a ' +
+          'statement a parser can see; the mapped classes are where such writes start.',
+      ];
+      return answer('data', lines.join('\n'), result);
+    },
+  );
+
+  server.registerTool(
+    'explain_hotspot',
+    {
+      title: 'Explain a hotspot',
+      description:
+        "A file's rank in the hotspot ranking and every number behind it — recent commits, " +
+        'complexity, both percentiles, authors — or why it is not ranked.',
+      inputSchema: { path: z.string().min(1).describe('repository-relative file path') },
+      annotations: readOnly,
+    },
+    (args) => {
+      const result = explainHotspot(db, runId, args);
+      if (result.hotspot === null) {
+        return answer('hotspots', `${args.path} is not ranked. ${result.reason ?? ''}`, result);
+      }
+      const h = result.hotspot;
+      const lines = [
+        `${result.path} is #${result.rank} of ${result.ranked} ranked source files.`,
+        `  recent commits: ${h.recentCommits} (percentile ${Math.round(h.recentPercentile * 100)})`,
+        `  complexity: ${h.complexity} (percentile within its file type ${Math.round(h.complexityPercentile * 100)})`,
+        `  score: ${h.score.toFixed(3)} = recent percentile x complexity percentile`,
+        `  all-time commits: ${h.commits}, authors: ${h.authors}, last change ${h.lastChangeAt?.slice(0, 10) ?? 'unknown'}`,
+      ];
+      return answer('hotspots', lines.join('\n'), result);
     },
   );
 

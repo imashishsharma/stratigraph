@@ -800,8 +800,9 @@ export function traceToTable(
     runId,
   ) > 0;
   const limits =
-    'Mappings are declared `@Entity`/`@Table` correspondences. This run has no ' +
-    'statement-level table reads or writes, so nothing here claims that a query ran.';
+    'Mappings are declared `@Entity`/`@Table` correspondences; "reached from" is what calls ' +
+    'or injects the mapped types, and nothing here claims that a query ran. Statement-level ' +
+    'reads and writes (repositories, @Query, JDBC SQL) are answered by where_is_table_written.';
 
   // ADR-0007 lower-cases a table fqn; a caller who types the declared spelling
   // must still find it.
