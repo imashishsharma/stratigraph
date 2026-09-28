@@ -460,6 +460,50 @@ class RefusesToGuessTest {
     }
 
     @Test
+    void joinsAnApiFirstControllerToItsOpenApiOperations(@TempDir Path repo) throws Exception {
+        // ADR-0044: the generated interface is not in the source set; the spec
+        // is, and the override's name is the operation's operationId.
+        write(repo, "src/main/resources/openapi.yml", """
+                openapi: 3.0.1
+                info:
+                  title: x
+                paths:
+                  /owners:
+                    get:
+                      operationId: listOwners
+                    post:
+                      operationId: addOwner
+                  /owners/{ownerId}:
+                    get:
+                      operationId: getOwner
+                components: {}
+                """);
+        write(repo, "src/main/java/app/OwnerController.java", """
+                package app;
+                import org.springframework.web.bind.annotation.RestController;
+                import org.springframework.web.bind.annotation.RequestMapping;
+                @RestController
+                @RequestMapping("/api")
+                public class OwnerController implements OwnersApi {
+                    @Override public Object listOwners() { return null; }
+                    @Override public Object getOwner(int ownerId) { return null; }
+                    public Object addOwner() { return null; }
+                }
+                """);
+        List<String> endpoints = extract(repo).stream()
+                .filter(node -> "node".equals(node.path("type").asText())
+                        && "endpoint".equals(node.path("kind").asText()))
+                .map(node -> node.path("fqn").asText() + " @" + node.path("file").asText() + ":"
+                        + node.path("startLine").asInt())
+                .sorted()
+                .toList();
+        // addOwner is not an @Override, so it is not joined to the route.
+        assertEquals(List.of(
+                "GET /api/owners @src/main/resources/openapi.yml:6",
+                "GET /api/owners/{ownerId} @src/main/resources/openapi.yml:11"), endpoints);
+    }
+
+    @Test
     void willNotNameATableUnderANamingStrategyItDoesNotKnow(@TempDir Path repo) throws Exception {
         // ADR-0036: a default-named entity's table is its name put through the
         // module's physical naming strategy. A custom strategy class could do

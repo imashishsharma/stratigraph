@@ -51,6 +51,7 @@ the code when it is incidental. Either way, before the commit.
 | [0041](0041-split-packages.md) | A split package is one node with a `contains` edge from each module | accepted |
 | [0042](0042-angular-structure.md) | An Angular package is a structural boundary, not a directory; service calls are edges | accepted |
 | [0043](0043-what-the-compiler-would-fold.md) | Source-set constants, first-party meta-annotations and @Bean-built classes are read | accepted |
+| [0044](0044-api-first-controllers.md) | A controller override named for an OpenAPI operationId serves that operation | accepted |
 
 Format: context, decision, alternatives considered (with why each was rejected),
 consequences — including the costs, not only the benefits.

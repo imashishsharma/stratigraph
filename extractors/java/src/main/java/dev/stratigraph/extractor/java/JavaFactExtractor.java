@@ -57,6 +57,12 @@ final class JavaFactExtractor {
      */
     private final Map<String, List<Runnable>> pendingBeanInjections = new LinkedHashMap<>();
 
+    /** OpenAPI operations declared in the repository, for API-first controllers (ADR-0044). */
+    private OpenApiSpecs specs;
+
+    /** Spec files already announced with a `file` fact. */
+    private final Set<String> specFilesEmitted = new LinkedHashSet<>();
+
     /** Classes a {@code @Bean} method returns or constructs. */
     private final Set<String> beanClasses = new LinkedHashSet<>();
 
@@ -147,6 +153,8 @@ final class JavaFactExtractor {
         Map<String, String> declaredTypeNames = declaredTypeNames(parsed);
         Set<String> declaredPackages = declaredPackages(parsed);
         Constants.collect(parsed);
+        specs = OpenApiSpecs.discover(repoRoot,
+                Set.of("node_modules", "target", "build", "dist", ".git", ".idea", ".gradle"));
         META.clear();
         META.putAll(metaAnnotations(parsed, declaredTypeNames, declaredPackages));
 
@@ -893,6 +901,7 @@ final class JavaFactExtractor {
                 return;
             }
             List<String> basePaths = owner.basePaths();
+            emitSpecEndpoints(owner, method, basePaths, declaration);
 
             for (ResolvedAnnotation annotation : annotations) {
                 AnnotationArgs args = new AnnotationArgs(annotation.node);
@@ -956,6 +965,48 @@ final class JavaFactExtractor {
                     }
                     emitEndpoint(method, basePaths, paths, List.of(jaxrs), "jaxrs",
                             line(annotation.node));
+                }
+            }
+        }
+
+        /**
+         * ADR-0044: a controller method that overrides a generated API
+         * interface and is named for an OpenAPI operation serves that
+         * operation. The endpoint is cited at the spec; the handler at the
+         * method. Only for a controller-stereotyped class, and only for an
+         * {@code @Override}, so an unrelated method of the same name is not
+         * joined to a route.
+         */
+        private void emitSpecEndpoints(ClassContext owner, NodeRef method, List<String> basePaths,
+                                       J.MethodDeclaration declaration) {
+            if (specs == null || specs.isEmpty()) {
+                return;
+            }
+            String stereotype = owner.stereotype();
+            if (!"controller".equals(stereotype) && !"rest-controller".equals(stereotype)) {
+                return;
+            }
+            boolean overrides = declaration.getLeadingAnnotations().stream()
+                    .anyMatch(a -> "Override".equals(writtenName(a.getAnnotationType()))
+                            || "java.lang.Override".equals(writtenName(a.getAnnotationType())));
+            if (!overrides) {
+                return;
+            }
+            List<String> bases = basePaths.isEmpty() ? List.of("") : basePaths;
+            for (OpenApiSpecs.Operation operation : specs.operations(declaration.getSimpleName())) {
+                if (specFilesEmitted.add(operation.file())) {
+                    emitter.file(operation.file(), "openapi", countLines(repoRoot.resolve(operation.file())));
+                }
+                for (String base : bases) {
+                    String full = Fqn.pathTemplate(joinPath(base, operation.path()));
+                    String fqn = Fqn.endpoint(operation.method(), full);
+                    Map<String, Object> attrs = new LinkedHashMap<>();
+                    attrs.put("method", operation.method());
+                    attrs.put("path", full);
+                    attrs.put("framework", "openapi");
+                    attrs.put("operationId", operation.operationId());
+                    emitter.node("endpoint", fqn, full, null, operation.file(), operation.line(), null, attrs);
+                    emitter.edge("handles", method, new NodeRef("endpoint", fqn), path, line(declaration), null);
                 }
             }
         }
