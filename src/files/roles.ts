@@ -212,6 +212,12 @@ export function classifyPath(
     if (pattern.test(name)) return role('test', rule);
   }
 
+  // A documentation tree is prose and its site, whatever the extensions:
+  // `docs/index.html` is not program text (the product plan's hotspots rank
+  // source only).
+  const docsDir = mainRoot < 0 ? /(^|\/)(docs?|documentation)\//.exec(dir) : null;
+  if (docsDir !== null && SOURCE_EXTENSIONS.has(ext)) return role('docs', `path:${docsDir[2]}/`);
+
   // Migrations recognised by what they are, wherever they sit: a Flyway
   // versioned script by its name, DDL and Liquibase changelogs by their first
   // kilobyte (ADR-0037).

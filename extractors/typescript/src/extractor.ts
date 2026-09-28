@@ -8,6 +8,7 @@ import { countLines, moduleOf, type Discovery } from './discovery.js';
 import { fieldFqn, methodFqn, modulePath, typeFqn } from './fqn.js';
 import { createProgram, Resolver } from './program.js';
 import type { FactEmitter, NodeKind, NodeRef } from './protocol.js';
+import { serverRoutes } from './server-routes.js';
 import { PackageStructure } from './structure.js';
 
 /**
@@ -94,6 +95,33 @@ export class TypeScriptExtractor {
         this.extractFunction(path, source, packageFqn, module, statement);
       } else if (ts.isVariableStatement(statement)) {
         this.extractVariables(path, source, packageFqn, module, statement);
+      }
+    }
+
+    this.extractServerRoutes(path, source, module);
+  }
+
+  /** Koa and Express routes this file registers (ADR-0045). */
+  private extractServerRoutes(path: string, source: ts.SourceFile, module: string): void {
+    for (const route of serverRoutes(source, this.program.getTypeChecker())) {
+      const fqn = `${route.method} ${route.path.startsWith('/') ? route.path : `/${route.path}`}`;
+      this.emitter.node({
+        kind: 'endpoint',
+        fqn,
+        name: fqn.slice(fqn.indexOf(' ') + 1),
+        file: path,
+        startLine: route.line,
+        attrs: { method: route.method, path: fqn.slice(fqn.indexOf(' ') + 1), framework: route.framework },
+      });
+      const handler = handlerFqn(module, route.enclosing);
+      if (handler !== null) {
+        this.emitter.edge({
+          kind: 'handles',
+          src: { kind: 'method', fqn: handler },
+          dst: { kind: 'endpoint', fqn },
+          file: path,
+          line: route.line,
+        });
       }
     }
   }
@@ -620,3 +648,19 @@ function attrsOf(
 }
 
 export type { NodeRef };
+
+/** The method fqn a route's enclosing declaration was emitted under, when it was. */
+function handlerFqn(module: string, enclosing: ts.Node | null): string | null {
+  if (enclosing === null) return null;
+  if (ts.isFunctionDeclaration(enclosing)) {
+    return enclosing.name ? methodFqn(module, enclosing.name.text) : null;
+  }
+  const owner = enclosing.parent;
+  if (!ts.isClassDeclaration(owner) || owner.name === undefined) return null;
+  const member = ts.isConstructorDeclaration(enclosing)
+    ? 'constructor'
+    : ts.isMethodDeclaration(enclosing) && ts.isIdentifier(enclosing.name)
+      ? enclosing.name.text
+      : null;
+  return member === null ? null : methodFqn(typeFqn(module, owner.name.text), member);
+}

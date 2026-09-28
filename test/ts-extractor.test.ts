@@ -291,3 +291,47 @@ describe('Angular structure and service calls (ADR-0040, ADR-0042)', () => {
     expect(packages.every((p) => p.attrs === undefined)).toBe(true);
   });
 });
+
+describe('Koa and Express routes (ADR-0045)', () => {
+  it('reads routes registered on a router from a router import, and nothing else', async () => {
+    const { mkdtempSync, writeFileSync, mkdirSync } = await import('node:fs');
+    const { tmpdir } = await import('node:os');
+    const { join } = await import('node:path');
+    const repo = mkdtempSync(join(tmpdir(), 'stratigraph-koa-'));
+    mkdirSync(join(repo, 'src'));
+    writeFileSync(join(repo, 'package.json'), '{"name":"cli"}');
+    writeFileSync(
+      join(repo, 'src', 'serve.ts'),
+      [
+        'import { Router } from "@koa/router";',
+        'import express from "express";',
+        'export class OssServeConfigurator {',
+        '  configureRouter(router: Router) {',
+        '    router.get("/status", async () => {});',
+        '    router.post("/object/:type/:id", async () => {});',
+        '  }',
+        '}',
+        'const app = express();',
+        'app.delete("/cache", () => {});',
+        'const notARouter = { get: (_: string) => 1 };',
+        'notARouter.get("/nope");',
+        '',
+      ].join('\n'),
+    );
+    const stdout: string[] = [];
+    const status = await run(['--repo', repo], {
+      stdout: { write: (line) => stdout.push(line) },
+      stderr: { write: () => undefined },
+    });
+    expect(status).toBe(0);
+    const all = stdout.map((line) => JSON.parse(line) as { type: string; kind?: string; fqn?: string; src?: { fqn: string } });
+    expect(all.filter((f) => f.type === 'node' && f.kind === 'endpoint').map((f) => f.fqn).sort()).toEqual([
+      'DELETE /cache',
+      'GET /status',
+      'POST /object/{type}/{id}',
+    ]);
+    expect(
+      all.filter((f) => f.type === 'edge' && f.kind === 'handles').map((f) => f.src?.fqn),
+    ).toContain('src/serve:OssServeConfigurator#configureRouter()');
+  });
+});

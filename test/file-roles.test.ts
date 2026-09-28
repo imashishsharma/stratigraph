@@ -236,3 +236,11 @@ describe('classifyPath under a main source root', () => {
     expect(classifyPath('module/src/test/java/org/x/AppTest.java', NONE, () => '')).toMatchObject({ role: 'test' });
   });
 });
+
+describe('classifyPath in a documentation tree', () => {
+  it('reads a generated doc site as docs, and keeps its images assets', () => {
+    expect(classifyPath('docs/index.html', NONE, () => '')).toMatchObject({ role: 'docs', rule: 'path:docs/' });
+    expect(classifyPath('docs/modules/ROOT/assets/images/a.png', NONE, () => '')).toMatchObject({ role: 'asset' });
+    expect(classifyPath('api/src/main/java/org/x/docs/Page.java', NONE, () => '')).toMatchObject({ role: 'source' });
+  });
+});

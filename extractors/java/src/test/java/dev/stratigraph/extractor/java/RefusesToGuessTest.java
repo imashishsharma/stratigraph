@@ -504,6 +504,31 @@ class RefusesToGuessTest {
     }
 
     @Test
+    void readsAConstantFromANestedClass(@TempDir Path repo) throws Exception {
+        write(repo, "src/main/java/app/constant/Constants.java", """
+                package app.constant;
+                public class Constants {
+                    public static class A2A {
+                        public static final String ADMIN_PATH = "/v3/admin/ai/a2a";
+                    }
+                }
+                """);
+        write(repo, "src/main/java/app/A2aController.java", """
+                package app;
+                import app.constant.Constants;
+                import org.springframework.web.bind.annotation.GetMapping;
+                import org.springframework.web.bind.annotation.RequestMapping;
+                import org.springframework.web.bind.annotation.RestController;
+                @RestController
+                @RequestMapping(Constants.A2A.ADMIN_PATH)
+                public class A2aController {
+                    @GetMapping("/detail") public String detail() { return ""; }
+                }
+                """);
+        assertTrue(has(extract(repo), "node", node -> "GET /v3/admin/ai/a2a/detail".equals(node.path("fqn").asText())));
+    }
+
+    @Test
     void willNotNameATableUnderANamingStrategyItDoesNotKnow(@TempDir Path repo) throws Exception {
         // ADR-0036: a default-named entity's table is its name put through the
         // module's physical naming strategy. A custom strategy class could do

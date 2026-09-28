@@ -15,6 +15,17 @@ import { declaredInTest, moduleAncestry } from './package-graph.js';
 
 const SPRING_BOOT_APPLICATION = 'org.springframework.boot.autoconfigure.SpringBootApplication';
 
+/**
+ * `@SpringBootApplication` is `@SpringBootConfiguration` + `@EnableAutoConfiguration`
+ * (+ `@ComponentScan`); a class carrying either of the first two by hand is a
+ * Boot application class too.
+ */
+const BOOT_MAIN_ANNOTATIONS = [
+  SPRING_BOOT_APPLICATION,
+  'org.springframework.boot.SpringBootConfiguration',
+  'org.springframework.boot.autoconfigure.EnableAutoConfiguration',
+];
+
 export interface DeployableProof {
   kind: DeployableKind;
   /** `maven:packaging=war`, `annotation:@SpringBootApplication`, … */
@@ -104,23 +115,27 @@ function springBootApplications(db: Db, runId: number): Map<number, DeployablePr
       WITH RECURSIVE
         main_class(id) AS (
           SELECT e.src_id FROM edge e JOIN node a ON a.id = e.dst_id
-           WHERE e.run_id = @runId AND e.kind = 'annotated_with' AND a.fqn = @annotation
+           WHERE e.run_id = @runId AND e.kind = 'annotated_with'
+             AND a.fqn IN (${BOOT_MAIN_ANNOTATIONS.map((fqn) => `'${fqn}'`).join(', ')})
         ),
         ${moduleAncestry('main_class')}
-      SELECT ao.ancestor_id AS moduleId, n.fqn AS subject, f.path AS path, e.line AS line
+      SELECT ao.ancestor_id AS moduleId, n.fqn AS subject, f.path AS path, e.line AS line,
+             a.fqn AS annotation
         FROM edge e
         JOIN node a ON a.id = e.dst_id
         JOIN node n ON n.id = e.src_id
         JOIN ancestor_of ao ON ao.node_id = e.src_id
         LEFT JOIN source_file f ON f.id = e.file_id
-       WHERE e.run_id = @runId AND e.kind = 'annotated_with' AND a.fqn = @annotation
+       WHERE e.run_id = @runId AND e.kind = 'annotated_with'
+         AND a.fqn IN (${BOOT_MAIN_ANNOTATIONS.map((fqn) => `'${fqn}'`).join(', ')})
        ORDER BY ao.ancestor_id, f.path, e.line`,
     )
-    .all({ runId, annotation: SPRING_BOOT_APPLICATION }) as Array<{
+    .all({ runId }) as Array<{
     moduleId: number;
     subject: string;
     path: string | null;
     line: number | null;
+    annotation: string;
   }>;
 
   const byModule = new Map<number, DeployableProof[]>();
@@ -128,7 +143,7 @@ function springBootApplications(db: Db, runId: number): Map<number, DeployablePr
     const list = byModule.get(row.moduleId) ?? [];
     list.push({
       kind: 'spring-boot',
-      rule: 'annotation:@SpringBootApplication',
+      rule: `annotation:@${row.annotation.split('.').pop()}`,
       path: row.path,
       line: row.line,
       source: 'edge',

@@ -23,6 +23,8 @@ JARS=(
   org/springframework/boot/spring-boot/3.2.3/spring-boot-3.2.3.jar
   org/springframework/boot/spring-boot-autoconfigure/3.2.3/spring-boot-autoconfigure-3.2.3.jar
   org/hibernate/orm/hibernate-core/6.4.4.Final/hibernate-core-6.4.4.Final.jar
+  io/swagger/swagger-annotations/1.6.14/swagger-annotations-1.6.14.jar
+  io/swagger/core/v3/swagger-annotations-jakarta/2.2.19/swagger-annotations-jakarta-2.2.19.jar
 )
 tmp=$(mktemp)
 for jar in "${JARS[@]}"; do
