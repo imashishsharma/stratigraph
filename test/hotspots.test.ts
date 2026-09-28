@@ -70,13 +70,25 @@ function commit(author: string, files: string[], churn = 1): string {
 }
 
 describe('topHotspots', () => {
-  it('ranks by recent change and complexity together, not by either alone', () => {
-    // Changed often but flat, and complicated but untouched, are both uninteresting.
+  it('ranks recent change first, scaled by complexity, and an untouched complex file last', () => {
+    // ADR-0031 as amended after the M11 scorecard: complexity scales the
+    // change term between half and full weight. Change leads; complexity
+    // cannot lift a file nobody touches.
     metric('busy-but-flat.java', { recent: 40, complexity: 1 });
     metric('deep-but-still.java', { recent: 1, complexity: 1000 });
     metric('hotspot.java', { recent: 30, complexity: 800 });
 
-    expect(topHotspots(db, runId, 10).map((h) => h.path)[0]).toBe('hotspot.java');
+    expect(topHotspots(db, runId, 10).map((h) => h.path)).toEqual([
+      'busy-but-flat.java',
+      'hotspot.java',
+      'deep-but-still.java',
+    ]);
+  });
+
+  it('lets complexity decide between files changed about as often', () => {
+    metric('flat.java', { recent: 20, complexity: 10 });
+    metric('deep.java', { recent: 20, complexity: 900 });
+    expect(topHotspots(db, runId, 10).map((h) => h.path)[0]).toBe('deep.java');
   });
 
   it('does not let a much larger file win on size alone', () => {
@@ -88,8 +100,8 @@ describe('topHotspots', () => {
     metric('Quiet.java', { recent: 1, complexity: 100, churn: 20 });
 
     const ranked = topHotspots(db, runId, 10);
-    expect(ranked.map((h) => h.path)).toEqual(['Busy.java', 'Giant.java', 'Mid.java', 'Quiet.java']);
-    expect(ranked[0]).toMatchObject({ recentPercentile: 1, complexityPercentile: 0.75, score: 0.75 });
+    expect(ranked.map((h) => h.path)).toEqual(['Busy.java', 'Mid.java', 'Giant.java', 'Quiet.java']);
+    expect(ranked[0]).toMatchObject({ recentPercentile: 1, complexityPercentile: 0.75, score: 0.875 });
   });
 
   it('compares complexity within a file type, so markup does not outrank code by nesting', () => {

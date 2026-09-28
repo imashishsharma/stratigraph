@@ -72,3 +72,22 @@ and still useful context — it just no longer decides rank.
   rather than ranking ancient history.
 - The finding text states the window, the exclusions and that indentation is a
   proxy, so the evidence describes exactly how the rank was produced.
+
+## Amendment (M11 scorecard, 2026-09-28)
+
+The score is now `recentPercentile × (0.5 + 0.5 × complexityPercentile)`.
+Measured on the 15 benchmark repositories with labelled risky files (138
+labels), top-10 overlap was:
+
+| score | overlap |
+|---|---|
+| recent × complexity (as first decided) | 57% |
+| recent × (0.5 + 0.5 × complexity) | 63% |
+| recent² × complexity | 62% |
+| recent only | 78% |
+
+Recent change alone agrees best, but the labels were defined by commit counts,
+so part of that agreement is with the labelling method; and a hotspot is where
+change meets complexity (product plan §5). The chosen form keeps complexity as
+a factor that orders files changed about as often, while no longer letting it
+sink a file that changes more than almost any other.

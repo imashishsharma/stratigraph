@@ -597,7 +597,7 @@ export function createServer(context: McpContext): McpServer {
         `${result.path} is #${result.rank} of ${result.ranked} ranked source files.`,
         `  recent commits: ${h.recentCommits} (percentile ${Math.round(h.recentPercentile * 100)})`,
         `  complexity: ${h.complexity} (percentile within its file type ${Math.round(h.complexityPercentile * 100)})`,
-        `  score: ${h.score.toFixed(3)} = recent percentile x complexity percentile`,
+        `  score: ${h.score.toFixed(3)} = recent percentile x (0.5 + 0.5 x complexity percentile)`,
         `  all-time commits: ${h.commits}, authors: ${h.authors}, last change ${h.lastChangeAt?.slice(0, 10) ?? 'unknown'}`,
       ];
       return answer('hotspots', lines.join('\n'), result);

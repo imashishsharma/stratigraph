@@ -73,7 +73,10 @@ export function topHotspots(db: Db, runId: number, limit: number): Hotspot[] {
         ...row,
         recentPercentile,
         complexityPercentile,
-        score: recentPercentile * complexityPercentile,
+        // Complexity scales the change term between half and full weight
+        // (ADR-0031, amended after the M11 scorecard): a heavily changed file
+        // stays near the top however simple, and complexity orders the rest.
+        score: recentPercentile * (0.5 + 0.5 * complexityPercentile),
       };
     })
     .sort(
