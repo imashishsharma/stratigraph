@@ -103,46 +103,42 @@ The whole pipeline runs with `--no-llm` and still produces a useful report.
 
 ## Measured on real repositories
 
-Every milestone ended with an acceptance run against a repository that is not a
-fixture. The numbers below come from those runs, each recorded in an ADR with
-what produced it — including the runs that produced nothing.
+Quality is measured, not asserted ([ADR-0035](docs/adr/0035-quality-is-measured.md)).
+`stratigraph bench` runs the whole pipeline over **20 public repositories**, each
+pinned to a commit in [`bench/corpus.yaml`](bench/corpus.yaml), and scores the
+output against ground truth labelled **without** the tool — from each
+repository's source, build files, migrations and `git log` — in
+[`bench/truth/`](bench/truth). Every number below is from
+[`bench/scorecard.md`](bench/scorecard.md), which lists every miss by name.
 
-**[apache/dubbo](https://github.com/apache/dubbo)** — 4,053 Java files, no
-Spring Boot, `javax.*`, Spring XML wiring: 47,350 nodes and 163,693 edges in
-18 seconds; 17 package cycles across 652 packages, three verified by hand
-against the cited lines. History: 8,893 commits mined in 4.5 seconds (332 MB
-peak), 6,189 paths resolved through rename chains, 3,303 co-changing file
-pairs the dependency graph cannot explain. The interpretation layer's citation
-check held at 38 of 38 grounded cluster descriptions accepted, zero
-fabrications missed — and it is re-run against five kinds of mutated
-identifier on every change to the rule.
+| Metric | Target | 2.0 |
+| --- | --- | --- |
+| Non-source files (lockfiles, manifests, tests, generated) in the hotspot top 20 | 0 | **0** |
+| Hotspot top-10 overlap with a senior engineer's labelled list | ≥ 60% | **66%** (92/138) |
+| JPA entity recall, with the physical table name | ≥ 90% | **100%** (146/146) |
+| Table recall | ≥ 90% | **100%** (274/274) |
+| HTTP endpoint recall | ≥ 95% | **99%** (519/520) |
+| Injection edges resolved | ≥ 85% | **95%** (215/226) |
+| Deployables found as containers / containers that are deployables | 100% | **100%** (67/67) / **100%** (67/67) |
+| File roles matching the labels | ≥ 95% | **96%** (535/557) |
+| Views rendered without a coverage statement | 0 | **0** |
+| Repositories the pipeline completed on | 20/20 | **20/20** |
 
-**[bitwarden/clients](https://github.com/bitwarden/clients)** — 5,788
-TypeScript sources, analysed with no `node_modules` present: 42,016 nodes and
-76,179 edges in 5.6 seconds, including 7,024 DI edges, 165 routes and 4,013
-component relationships read out of templates. 87% of the DI edges resolve
-through the type checker, which is what follows a barrel re-export to the file
-the class is actually declared in.
+The corpus spans Spring Boot monoliths and microservices (petclinic and its
+Kotlin, REST, legacy-XML and Angular variants, JHipster in Maven, Gradle and
+OAuth2 flavours, eladmin, piggymetrics, killbill, initializr, OpenMRS, nacos,
+Spring Cloud Gateway, Spring Boot Admin), Apache Dubbo at 4,000 Java files, and
+two large TypeScript workspaces (bitwarden/clients at 6,400 files, analog). The
+labels are only as good as their labelling: where a miss turned out to be a
+label contradicting the source at the pinned commit, the label was corrected
+and the evidence recorded in the truth file.
 
-**[spring-petclinic](https://github.com/spring-projects/spring-petclinic)** —
-49 Java sources, 1,040 commits: 6 tables with 4 relationships, 6 class
-diagrams, 17 endpoints and 44 ranked findings, every one carrying a
-`file:line` or a commit sha.
+Run it yourself:
 
-**[jhipster-sample-app](https://github.com/jhipster/jhipster-sample-app)** —
-the wildcard-import stress test. JHipster generates every REST controller with
-`import org.springframework.web.bind.annotation.*;`, which a source-only
-resolver must not guess through — a repository can declare its own
-`@GetMapping`. v1.3 read 2 endpoints out of 136 Java sources and said why on
-every refusal. v1.4 *earns* the resolution instead
-([ADR-0023](docs/adr/0023-earning-resolution-through-a-wildcard-import.md))
-and reads 41 — while still refusing the 8 that are genuinely ambiguous,
-naming the competing imports on each one.
-
-And over MCP: a fresh Claude Code session, with dubbo out of its context,
-answered five structural questions from the store correctly — every answer
-checked by hand against the lines it cited. One of its numbers disagreed with
-`git log --follow`, and the tool turned out to be right.
+```sh
+stratigraph bench --fetch     # clones the corpus into ~/.cache/stratigraph/corpus
+stratigraph bench --private ../your-repo   # aggregates only, nothing that names a file
+```
 
 ## Install
 

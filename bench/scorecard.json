@@ -1,0 +1,2216 @@
+{
+  "generatedAt": "2026-09-28T04:21:35.561Z",
+  "repos": [
+    {
+      "name": "spring-petclinic",
+      "sha": "818c4136ea971c21674525f9053de0d9c7ad8cfe",
+      "seconds": 2.799,
+      "error": null,
+      "runId": 1,
+      "extractors": [
+        {
+          "language": "migrations",
+          "status": "ok",
+          "parsed": 3,
+          "found": 3
+        },
+        {
+          "language": "java",
+          "status": "ok",
+          "parsed": 30,
+          "found": 30
+        }
+      ],
+      "coverage": {
+        "architecture": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "code": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "cycles": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "matrix": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "api": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "data": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "hotspots": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "coupling": {
+          "ratio": 1,
+          "withheld": false
+        }
+      },
+      "counts": {
+        "sourceFiles": 51,
+        "packages": 6,
+        "endpoints": 17,
+        "tables": 7
+      },
+      "metrics": {
+        "nonSourceInHotspotTop20": {
+          "count": 0,
+          "paths": []
+        },
+        "hotspotOverlapTop10": {
+          "hit": 10,
+          "of": 10,
+          "missed": []
+        },
+        "entityRecall": {
+          "hit": 6,
+          "of": 6,
+          "missed": []
+        },
+        "tableRecall": {
+          "hit": 7,
+          "of": 7,
+          "missed": []
+        },
+        "endpointRecall": {
+          "hit": 17,
+          "of": 17,
+          "missed": []
+        },
+        "injectionRecall": {
+          "hit": 6,
+          "of": 6,
+          "missed": []
+        },
+        "containerRecall": {
+          "hit": 1,
+          "of": 1,
+          "missed": []
+        },
+        "containerPrecision": {
+          "hit": 1,
+          "of": 1,
+          "missed": []
+        },
+        "roleAccuracy": {
+          "hit": 32,
+          "of": 32,
+          "missed": []
+        },
+        "viewsWithoutCoverage": []
+      }
+    },
+    {
+      "name": "jhipster-sample-app",
+      "sha": "6b000b5d23a36c45e01472471b84a44fa2464044",
+      "seconds": 6.263,
+      "error": null,
+      "runId": 1,
+      "extractors": [
+        {
+          "language": "migrations",
+          "status": "ok",
+          "parsed": 7,
+          "found": 7
+        },
+        {
+          "language": "java",
+          "status": "ok",
+          "parsed": 80,
+          "found": 80
+        },
+        {
+          "language": "typescript",
+          "status": "ok",
+          "parsed": 185,
+          "found": 185
+        }
+      ],
+      "coverage": {
+        "architecture": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "code": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "cycles": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "matrix": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "api": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "data": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "hotspots": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "coupling": {
+          "ratio": 1,
+          "withheld": false
+        }
+      },
+      "counts": {
+        "sourceFiles": 337,
+        "packages": 51,
+        "endpoints": 48,
+        "tables": 8
+      },
+      "metrics": {
+        "nonSourceInHotspotTop20": {
+          "count": 0,
+          "paths": []
+        },
+        "hotspotOverlapTop10": null,
+        "entityRecall": {
+          "hit": 5,
+          "of": 5,
+          "missed": []
+        },
+        "tableRecall": {
+          "hit": 8,
+          "of": 8,
+          "missed": []
+        },
+        "endpointRecall": {
+          "hit": 38,
+          "of": 38,
+          "missed": []
+        },
+        "injectionRecall": {
+          "hit": 13,
+          "of": 13,
+          "missed": []
+        },
+        "containerRecall": {
+          "hit": 2,
+          "of": 2,
+          "missed": []
+        },
+        "containerPrecision": {
+          "hit": 2,
+          "of": 2,
+          "missed": []
+        },
+        "roleAccuracy": {
+          "hit": 31,
+          "of": 31,
+          "missed": []
+        },
+        "viewsWithoutCoverage": []
+      }
+    },
+    {
+      "name": "eladmin",
+      "sha": "55fbf705956949697dbd68bf9003776609d3d029",
+      "seconds": 4.002,
+      "error": null,
+      "runId": 1,
+      "extractors": [
+        {
+          "language": "migrations",
+          "status": "ok",
+          "parsed": 2,
+          "found": 2
+        },
+        {
+          "language": "java",
+          "status": "ok",
+          "parsed": 269,
+          "found": 269
+        }
+      ],
+      "coverage": {
+        "architecture": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "code": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "cycles": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "matrix": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "api": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "data": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "hotspots": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "coupling": {
+          "ratio": 1,
+          "withheld": false
+        }
+      },
+      "counts": {
+        "sourceFiles": 281,
+        "packages": 55,
+        "endpoints": 139,
+        "tables": 38
+      },
+      "metrics": {
+        "nonSourceInHotspotTop20": {
+          "count": 0,
+          "paths": []
+        },
+        "hotspotOverlapTop10": {
+          "hit": 7,
+          "of": 10,
+          "missed": [
+            "eladmin-common/src/main/java/me/zhengjie/config/AsyncExecutor.java",
+            "eladmin-system/src/main/java/me/zhengjie/modules/system/service/dto/MenuDto.java",
+            "eladmin-system/src/main/java/me/zhengjie/AppRun.java"
+          ]
+        },
+        "entityRecall": {
+          "hit": 21,
+          "of": 21,
+          "missed": []
+        },
+        "tableRecall": {
+          "hit": 37,
+          "of": 37,
+          "missed": []
+        },
+        "endpointRecall": {
+          "hit": 100,
+          "of": 100,
+          "missed": []
+        },
+        "injectionRecall": {
+          "hit": 10,
+          "of": 10,
+          "missed": []
+        },
+        "containerRecall": {
+          "hit": 1,
+          "of": 1,
+          "missed": []
+        },
+        "containerPrecision": {
+          "hit": 1,
+          "of": 1,
+          "missed": []
+        },
+        "roleAccuracy": {
+          "hit": 18,
+          "of": 18,
+          "missed": []
+        },
+        "viewsWithoutCoverage": []
+      }
+    },
+    {
+      "name": "dubbo",
+      "sha": "a87b134859e1b3d0871e20b9eac848abd2f0b50c",
+      "seconds": 33.773,
+      "error": null,
+      "runId": 1,
+      "extractors": [
+        {
+          "language": "java",
+          "status": "ok",
+          "parsed": 2466,
+          "found": 2466
+        }
+      ],
+      "coverage": {
+        "architecture": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "code": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "cycles": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "matrix": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "api": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "data": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "hotspots": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "coupling": {
+          "ratio": 1,
+          "withheld": false
+        }
+      },
+      "counts": {
+        "sourceFiles": 2485,
+        "packages": 652,
+        "endpoints": 72,
+        "tables": 0
+      },
+      "metrics": {
+        "nonSourceInHotspotTop20": {
+          "count": 0,
+          "paths": []
+        },
+        "hotspotOverlapTop10": {
+          "hit": 5,
+          "of": 10,
+          "missed": [
+            "dubbo-rpc/dubbo-rpc-triple/src/main/java/org/apache/dubbo/rpc/protocol/tri/DescriptorUtils.java",
+            "dubbo-rpc/dubbo-rpc-triple/src/main/java/org/apache/dubbo/rpc/protocol/tri/h12/grpc/GrpcHttp2ServerTransportListener.java",
+            "dubbo-rpc/dubbo-rpc-triple/src/main/java/org/apache/dubbo/rpc/protocol/tri/frame/TriDecoder.java",
+            "dubbo-rpc/dubbo-rpc-triple/src/main/java/org/apache/dubbo/rpc/protocol/tri/h12/http2/GenericHttp2ServerTransportListener.java",
+            "dubbo-remoting/dubbo-remoting-http12/src/main/java/org/apache/dubbo/remoting/http12/h2/Http2ServerChannelObserver.java"
+          ]
+        },
+        "entityRecall": null,
+        "tableRecall": null,
+        "endpointRecall": null,
+        "injectionRecall": {
+          "hit": 10,
+          "of": 10,
+          "missed": []
+        },
+        "containerRecall": {
+          "hit": 6,
+          "of": 6,
+          "missed": []
+        },
+        "containerPrecision": {
+          "hit": 6,
+          "of": 6,
+          "missed": []
+        },
+        "roleAccuracy": {
+          "hit": 25,
+          "of": 25,
+          "missed": []
+        },
+        "viewsWithoutCoverage": []
+      }
+    },
+    {
+      "name": "bitwarden-clients",
+      "sha": "45eb0013dc413dab78932c418d209d89371febf6",
+      "seconds": 66.328,
+      "error": null,
+      "runId": 1,
+      "extractors": [
+        {
+          "language": "typescript",
+          "status": "ok",
+          "parsed": 5014,
+          "found": 5014
+        }
+      ],
+      "coverage": {
+        "architecture": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "code": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "cycles": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "matrix": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "api": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "data": {
+          "ratio": null,
+          "withheld": false
+        },
+        "hotspots": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "coupling": {
+          "ratio": 1,
+          "withheld": false
+        }
+      },
+      "counts": {
+        "sourceFiles": 6254,
+        "packages": 172,
+        "endpoints": 23,
+        "tables": 0
+      },
+      "metrics": {
+        "nonSourceInHotspotTop20": {
+          "count": 0,
+          "paths": []
+        },
+        "hotspotOverlapTop10": {
+          "hit": 6,
+          "of": 10,
+          "missed": [
+            "libs/common/src/enums/feature-flag.enum.ts",
+            "apps/desktop/src/app/services/services.module.ts",
+            "apps/web/src/app/core/core.module.ts",
+            "apps/browser/src/popup/services/services.module.ts"
+          ]
+        },
+        "entityRecall": null,
+        "tableRecall": null,
+        "endpointRecall": {
+          "hit": 17,
+          "of": 17,
+          "missed": []
+        },
+        "injectionRecall": {
+          "hit": 10,
+          "of": 10,
+          "missed": []
+        },
+        "containerRecall": {
+          "hit": 5,
+          "of": 5,
+          "missed": []
+        },
+        "containerPrecision": {
+          "hit": 5,
+          "of": 5,
+          "missed": []
+        },
+        "roleAccuracy": {
+          "hit": 25,
+          "of": 27,
+          "missed": [
+            "libs/common/src/tools/extension/vendor/bitwarden.ts: labelled source, got vendored",
+            ".husky/pre-commit: labelled source, got other"
+          ]
+        },
+        "viewsWithoutCoverage": []
+      }
+    },
+    {
+      "name": "spring-framework-petclinic",
+      "sha": "cd43fc08e272b778e1196d0754ab86d1d42f1d5a",
+      "seconds": 2.289,
+      "error": null,
+      "runId": 1,
+      "extractors": [
+        {
+          "language": "migrations",
+          "status": "ok",
+          "parsed": 4,
+          "found": 4
+        },
+        {
+          "language": "java",
+          "status": "ok",
+          "parsed": 47,
+          "found": 47
+        }
+      ],
+      "coverage": {
+        "architecture": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "code": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "cycles": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "matrix": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "api": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "data": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "hotspots": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "coupling": {
+          "ratio": 1,
+          "withheld": false
+        }
+      },
+      "counts": {
+        "sourceFiles": 74,
+        "packages": 9,
+        "endpoints": 18,
+        "tables": 7
+      },
+      "metrics": {
+        "nonSourceInHotspotTop20": {
+          "count": 0,
+          "paths": []
+        },
+        "hotspotOverlapTop10": {
+          "hit": 9,
+          "of": 10,
+          "missed": [
+            "src/main/java/org/springframework/samples/petclinic/repository/jpa/JpaOwnerRepositoryImpl.java"
+          ]
+        },
+        "entityRecall": {
+          "hit": 6,
+          "of": 6,
+          "missed": []
+        },
+        "tableRecall": {
+          "hit": 7,
+          "of": 7,
+          "missed": []
+        },
+        "endpointRecall": {
+          "hit": 18,
+          "of": 18,
+          "missed": []
+        },
+        "injectionRecall": {
+          "hit": 11,
+          "of": 11,
+          "missed": []
+        },
+        "containerRecall": {
+          "hit": 1,
+          "of": 1,
+          "missed": []
+        },
+        "containerPrecision": {
+          "hit": 1,
+          "of": 1,
+          "missed": []
+        },
+        "roleAccuracy": {
+          "hit": 31,
+          "of": 32,
+          "missed": [
+            "src/main/webapp/WEB-INF/no-spring-config-files-there.txt: labelled other, got docs"
+          ]
+        },
+        "viewsWithoutCoverage": []
+      }
+    },
+    {
+      "name": "spring-boot-realworld-example-app",
+      "sha": "ee17e31aafe733d98c4853c8b9a74d7f2f6c924a",
+      "seconds": 2.019,
+      "error": null,
+      "runId": 1,
+      "extractors": [
+        {
+          "language": "migrations",
+          "status": "ok",
+          "parsed": 1,
+          "found": 1
+        },
+        {
+          "language": "java",
+          "status": "ok",
+          "parsed": 93,
+          "found": 93
+        }
+      ],
+      "coverage": {
+        "architecture": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "code": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "cycles": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "matrix": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "api": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "data": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "hotspots": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "coupling": {
+          "ratio": 1,
+          "withheld": false
+        }
+      },
+      "counts": {
+        "sourceFiles": 94,
+        "packages": 28,
+        "endpoints": 19,
+        "tables": 7
+      },
+      "metrics": {
+        "nonSourceInHotspotTop20": {
+          "count": 0,
+          "paths": []
+        },
+        "hotspotOverlapTop10": {
+          "hit": 3,
+          "of": 4,
+          "missed": [
+            "src/main/java/io/spring/api/UsersApi.java"
+          ]
+        },
+        "entityRecall": null,
+        "tableRecall": {
+          "hit": 7,
+          "of": 7,
+          "missed": []
+        },
+        "endpointRecall": {
+          "hit": 19,
+          "of": 19,
+          "missed": []
+        },
+        "injectionRecall": {
+          "hit": 13,
+          "of": 13,
+          "missed": []
+        },
+        "containerRecall": {
+          "hit": 1,
+          "of": 1,
+          "missed": []
+        },
+        "containerPrecision": {
+          "hit": 1,
+          "of": 1,
+          "missed": []
+        },
+        "roleAccuracy": {
+          "hit": 23,
+          "of": 25,
+          "missed": [
+            "src/main/resources/mapper/ArticleMapper.xml: labelled source, got config",
+            "src/main/resources/mapper/UserMapper.xml: labelled source, got config"
+          ]
+        },
+        "viewsWithoutCoverage": []
+      }
+    },
+    {
+      "name": "spring-petclinic-kotlin",
+      "sha": "da08609c277f95c37dd91187867f74dbad1090f8",
+      "seconds": 2.712,
+      "error": null,
+      "runId": 1,
+      "extractors": [
+        {
+          "language": "migrations",
+          "status": "ok",
+          "parsed": 2,
+          "found": 2
+        },
+        {
+          "language": "java",
+          "status": "ok",
+          "parsed": 24,
+          "found": 24
+        }
+      ],
+      "coverage": {
+        "architecture": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "code": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "cycles": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "matrix": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "api": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "data": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "hotspots": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "coupling": {
+          "ratio": 1,
+          "withheld": false
+        }
+      },
+      "counts": {
+        "sourceFiles": 45,
+        "packages": 6,
+        "endpoints": 18,
+        "tables": 7
+      },
+      "metrics": {
+        "nonSourceInHotspotTop20": {
+          "count": 0,
+          "paths": []
+        },
+        "hotspotOverlapTop10": null,
+        "entityRecall": {
+          "hit": 6,
+          "of": 6,
+          "missed": []
+        },
+        "tableRecall": {
+          "hit": 7,
+          "of": 7,
+          "missed": []
+        },
+        "endpointRecall": {
+          "hit": 18,
+          "of": 18,
+          "missed": []
+        },
+        "injectionRecall": {
+          "hit": 8,
+          "of": 8,
+          "missed": []
+        },
+        "containerRecall": {
+          "hit": 1,
+          "of": 1,
+          "missed": []
+        },
+        "containerPrecision": {
+          "hit": 1,
+          "of": 1,
+          "missed": []
+        },
+        "roleAccuracy": {
+          "hit": 26,
+          "of": 26,
+          "missed": []
+        },
+        "viewsWithoutCoverage": []
+      }
+    },
+    {
+      "name": "piggymetrics",
+      "sha": "6bb2cf9ddbca980b664d3edbb6ff775d75369278",
+      "seconds": 2.423,
+      "error": null,
+      "runId": 1,
+      "extractors": [
+        {
+          "language": "java",
+          "status": "ok",
+          "parsed": 72,
+          "found": 72
+        }
+      ],
+      "coverage": {
+        "architecture": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "code": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "cycles": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "matrix": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "api": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "data": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "hotspots": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "coupling": {
+          "ratio": 1,
+          "withheld": false
+        }
+      },
+      "counts": {
+        "sourceFiles": 85,
+        "packages": 38,
+        "endpoints": 14,
+        "tables": 0
+      },
+      "metrics": {
+        "nonSourceInHotspotTop20": {
+          "count": 0,
+          "paths": []
+        },
+        "hotspotOverlapTop10": null,
+        "entityRecall": null,
+        "tableRecall": null,
+        "endpointRecall": {
+          "hit": 9,
+          "of": 9,
+          "missed": []
+        },
+        "injectionRecall": {
+          "hit": 14,
+          "of": 14,
+          "missed": []
+        },
+        "containerRecall": {
+          "hit": 9,
+          "of": 9,
+          "missed": []
+        },
+        "containerPrecision": {
+          "hit": 9,
+          "of": 9,
+          "missed": []
+        },
+        "roleAccuracy": {
+          "hit": 28,
+          "of": 28,
+          "missed": []
+        },
+        "viewsWithoutCoverage": []
+      }
+    },
+    {
+      "name": "killbill",
+      "sha": "4bdc2b24ad298f8e47dda5ac1ddeac7f34687377",
+      "seconds": 25.327,
+      "error": null,
+      "runId": 1,
+      "extractors": [
+        {
+          "language": "migrations",
+          "status": "ok",
+          "parsed": 84,
+          "found": 84
+        },
+        {
+          "language": "java",
+          "status": "ok",
+          "parsed": 1082,
+          "found": 1082
+        }
+      ],
+      "coverage": {
+        "architecture": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "code": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "cycles": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "matrix": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "api": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "data": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "hotspots": {
+          "ratio": 0.9991095280498664,
+          "withheld": false
+        },
+        "coupling": {
+          "ratio": 0.9991095280498664,
+          "withheld": false
+        }
+      },
+      "counts": {
+        "sourceFiles": 1123,
+        "packages": 223,
+        "endpoints": 281,
+        "tables": 63
+      },
+      "metrics": {
+        "nonSourceInHotspotTop20": {
+          "count": 0,
+          "paths": []
+        },
+        "hotspotOverlapTop10": {
+          "hit": 8,
+          "of": 10,
+          "missed": [
+            "profiles/killbill/src/main/java/org/killbill/billing/server/listeners/KillbillGuiceListener.java",
+            "jaxrs/src/main/java/org/killbill/billing/jaxrs/resources/ExportResource.java"
+          ]
+        },
+        "entityRecall": null,
+        "tableRecall": {
+          "hit": 63,
+          "of": 63,
+          "missed": []
+        },
+        "endpointRecall": {
+          "hit": 100,
+          "of": 100,
+          "missed": []
+        },
+        "injectionRecall": {
+          "hit": 12,
+          "of": 12,
+          "missed": []
+        },
+        "containerRecall": {
+          "hit": 2,
+          "of": 2,
+          "missed": []
+        },
+        "containerPrecision": {
+          "hit": 2,
+          "of": 2,
+          "missed": []
+        },
+        "roleAccuracy": {
+          "hit": 26,
+          "of": 27,
+          "missed": [
+            "profiles/killbill/src/main/webapp/lib/swagger-ui-bundle.js: labelled vendored, got source"
+          ]
+        },
+        "viewsWithoutCoverage": []
+      }
+    },
+    {
+      "name": "initializr",
+      "sha": "d445a056ced904ba5098df1e75b75bebf9840687",
+      "seconds": 6.395,
+      "error": null,
+      "runId": 1,
+      "extractors": [
+        {
+          "language": "java",
+          "status": "ok",
+          "parsed": 384,
+          "found": 384
+        }
+      ],
+      "coverage": {
+        "architecture": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "code": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "cycles": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "matrix": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "api": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "data": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "hotspots": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "coupling": {
+          "ratio": 1,
+          "withheld": false
+        }
+      },
+      "counts": {
+        "sourceFiles": 397,
+        "packages": 57,
+        "endpoints": 22,
+        "tables": 0
+      },
+      "metrics": {
+        "nonSourceInHotspotTop20": {
+          "count": 0,
+          "paths": []
+        },
+        "hotspotOverlapTop10": {
+          "hit": 6,
+          "of": 10,
+          "missed": [
+            "initializr-generator-spring/src/main/java/io/spring/initializr/generator/spring/properties/ApplicationProperties.java",
+            "initializr-web/src/main/java/io/spring/initializr/web/autoconfigure/InitializrAutoConfiguration.java",
+            "initializr-generator-spring/src/main/java/io/spring/initializr/generator/spring/build/maven/ConvertAnnotationProcessorsToPluginConfigBuildCustomizer.java",
+            "initializr-web/src/main/java/io/spring/initializr/web/project/MetadataProjectDescriptionCustomizer.java"
+          ]
+        },
+        "entityRecall": null,
+        "tableRecall": null,
+        "endpointRecall": {
+          "hit": 20,
+          "of": 20,
+          "missed": []
+        },
+        "injectionRecall": {
+          "hit": 8,
+          "of": 11,
+          "missed": [
+            "io.spring.initializr.web.controller.CommandLineMetadataController -> io.spring.initializr.web.support.CommandLineHelpGenerator",
+            "io.spring.initializr.web.project.ProjectGenerationInvoker -> io.spring.initializr.web.project.ProjectRequestToDescriptionConverter",
+            "io.spring.initializr.web.project.DefaultProjectRequestToDescriptionConverter -> io.spring.initializr.web.project.ProjectRequestPlatformVersionTransformer"
+          ]
+        },
+        "containerRecall": {
+          "hit": 1,
+          "of": 1,
+          "missed": []
+        },
+        "containerPrecision": {
+          "hit": 1,
+          "of": 1,
+          "missed": []
+        },
+        "roleAccuracy": {
+          "hit": 25,
+          "of": 28,
+          "missed": [
+            "initializr-generator-test/src/main/java/io/spring/initializr/generator/test/InitializrMetadataTestBuilder.java: labelled test, got source",
+            "initializr-generator-test/src/main/java/io/spring/initializr/generator/test/io/TextTestUtils.java: labelled test, got source",
+            "initializr-generator/src/test/resources/project/build/gradle/sample-build.gradle: labelled test, got no role"
+          ]
+        },
+        "viewsWithoutCoverage": []
+      }
+    },
+    {
+      "name": "jhipster-sample-app-gradle",
+      "sha": "8bdbaacecdb91cf3bef693e01294e82e00c2ac06",
+      "seconds": 5.636,
+      "error": null,
+      "runId": 1,
+      "extractors": [
+        {
+          "language": "migrations",
+          "status": "ok",
+          "parsed": 7,
+          "found": 7
+        },
+        {
+          "language": "java",
+          "status": "ok",
+          "parsed": 78,
+          "found": 78
+        },
+        {
+          "language": "typescript",
+          "status": "ok",
+          "parsed": 188,
+          "found": 188
+        }
+      ],
+      "coverage": {
+        "architecture": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "code": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "cycles": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "matrix": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "api": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "data": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "hotspots": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "coupling": {
+          "ratio": 1,
+          "withheld": false
+        }
+      },
+      "counts": {
+        "sourceFiles": 339,
+        "packages": 49,
+        "endpoints": 49,
+        "tables": 9
+      },
+      "metrics": {
+        "nonSourceInHotspotTop20": {
+          "count": 0,
+          "paths": []
+        },
+        "hotspotOverlapTop10": null,
+        "entityRecall": {
+          "hit": 6,
+          "of": 6,
+          "missed": []
+        },
+        "tableRecall": {
+          "hit": 9,
+          "of": 9,
+          "missed": []
+        },
+        "endpointRecall": {
+          "hit": 39,
+          "of": 39,
+          "missed": []
+        },
+        "injectionRecall": {
+          "hit": 15,
+          "of": 15,
+          "missed": []
+        },
+        "containerRecall": {
+          "hit": 2,
+          "of": 2,
+          "missed": []
+        },
+        "containerPrecision": {
+          "hit": 2,
+          "of": 2,
+          "missed": []
+        },
+        "roleAccuracy": {
+          "hit": 34,
+          "of": 35,
+          "missed": [
+            "src/main/webapp/swagger-ui/index.html: labelled vendored, got source"
+          ]
+        },
+        "viewsWithoutCoverage": []
+      }
+    },
+    {
+      "name": "jhipster-sample-app-oauth2",
+      "sha": "dd599c66fa087a3864cf89c11c8bc402cdb228b6",
+      "seconds": 4.878,
+      "error": null,
+      "runId": 1,
+      "extractors": [
+        {
+          "language": "migrations",
+          "status": "ok",
+          "parsed": 2,
+          "found": 2
+        },
+        {
+          "language": "java",
+          "status": "ok",
+          "parsed": 57,
+          "found": 57
+        },
+        {
+          "language": "typescript",
+          "status": "ok",
+          "parsed": 123,
+          "found": 123
+        }
+      ],
+      "coverage": {
+        "architecture": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "code": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "cycles": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "matrix": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "api": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "data": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "hotspots": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "coupling": {
+          "ratio": 1,
+          "withheld": false
+        }
+      },
+      "counts": {
+        "sourceFiles": 225,
+        "packages": 31,
+        "endpoints": 19,
+        "tables": 4
+      },
+      "metrics": {
+        "nonSourceInHotspotTop20": {
+          "count": 0,
+          "paths": []
+        },
+        "hotspotOverlapTop10": null,
+        "entityRecall": {
+          "hit": 2,
+          "of": 2,
+          "missed": []
+        },
+        "tableRecall": {
+          "hit": 4,
+          "of": 4,
+          "missed": []
+        },
+        "endpointRecall": {
+          "hit": 9,
+          "of": 9,
+          "missed": []
+        },
+        "injectionRecall": {
+          "hit": 13,
+          "of": 13,
+          "missed": []
+        },
+        "containerRecall": {
+          "hit": 2,
+          "of": 2,
+          "missed": []
+        },
+        "containerPrecision": {
+          "hit": 2,
+          "of": 2,
+          "missed": []
+        },
+        "roleAccuracy": {
+          "hit": 32,
+          "of": 33,
+          "missed": [
+            "src/main/webapp/swagger-ui/index.html: labelled vendored, got source"
+          ]
+        },
+        "viewsWithoutCoverage": []
+      }
+    },
+    {
+      "name": "spring-petclinic-angular",
+      "sha": "1978a75eab0c803595d5cde75acc6a0a9bcff4de",
+      "seconds": 1.323,
+      "error": null,
+      "runId": 1,
+      "extractors": [
+        {
+          "language": "typescript",
+          "status": "ok",
+          "parsed": 59,
+          "found": 59
+        }
+      ],
+      "coverage": {
+        "architecture": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "code": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "cycles": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "matrix": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "api": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "data": {
+          "ratio": null,
+          "withheld": false
+        },
+        "hotspots": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "coupling": {
+          "ratio": 1,
+          "withheld": false
+        }
+      },
+      "counts": {
+        "sourceFiles": 108,
+        "packages": 10,
+        "endpoints": 0,
+        "tables": 0
+      },
+      "metrics": {
+        "nonSourceInHotspotTop20": {
+          "count": 0,
+          "paths": []
+        },
+        "hotspotOverlapTop10": {
+          "hit": 1,
+          "of": 4,
+          "missed": [
+            "src/app/specialties/specialty-list/specialty-list.component.ts",
+            "src/app/vets/vet-list/vet-list.component.ts",
+            "src/app/pettypes/pettype-list/pettype-list.component.ts"
+          ]
+        },
+        "entityRecall": null,
+        "tableRecall": null,
+        "endpointRecall": null,
+        "injectionRecall": {
+          "hit": 10,
+          "of": 10,
+          "missed": []
+        },
+        "containerRecall": {
+          "hit": 1,
+          "of": 1,
+          "missed": []
+        },
+        "containerPrecision": {
+          "hit": 1,
+          "of": 1,
+          "missed": []
+        },
+        "roleAccuracy": {
+          "hit": 21,
+          "of": 27,
+          "missed": [
+            "src/app/testing/dummy.component.ts: labelled test, got source",
+            "src/app/testing/router-stubs.ts: labelled test, got source",
+            "docs/index.html: labelled generated, got docs",
+            "docs/routes.html: labelled generated, got docs",
+            "docs/llms.txt: labelled generated, got docs",
+            "Dockerfile: labelled other, got config"
+          ]
+        },
+        "viewsWithoutCoverage": []
+      }
+    },
+    {
+      "name": "analog",
+      "sha": "40cc8b45586549ff95679eef245901122613acd3",
+      "seconds": 3.831,
+      "error": null,
+      "runId": 1,
+      "extractors": [
+        {
+          "language": "typescript",
+          "status": "ok",
+          "parsed": 585,
+          "found": 585
+        }
+      ],
+      "coverage": {
+        "architecture": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "code": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "cycles": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "matrix": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "api": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "data": {
+          "ratio": null,
+          "withheld": false
+        },
+        "hotspots": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "coupling": {
+          "ratio": 1,
+          "withheld": false
+        }
+      },
+      "counts": {
+        "sourceFiles": 702,
+        "packages": 43,
+        "endpoints": 0,
+        "tables": 0
+      },
+      "metrics": {
+        "nonSourceInHotspotTop20": {
+          "count": 0,
+          "paths": []
+        },
+        "hotspotOverlapTop10": {
+          "hit": 6,
+          "of": 10,
+          "missed": [
+            "packages/platform/src/lib/platform-plugin.ts",
+            "packages/vite-plugin-angular/src/lib/utils/virtual-resources.ts",
+            "packages/vite-plugin-angular/src/lib/angular-vitest-plugin.ts",
+            "packages/vite-plugin-angular/src/lib/angular-jit-plugin.ts"
+          ]
+        },
+        "entityRecall": null,
+        "tableRecall": null,
+        "endpointRecall": null,
+        "injectionRecall": {
+          "hit": 7,
+          "of": 9,
+          "missed": [
+            "apps/docs-analog/src/app/docs/components/locale-picker:LocalePicker -> packages/content/src/lib/content-locale:CONTENT_LOCALE",
+            "apps/docs-analog/src/app/docs/components/copy-page:CopyPage -> packages/content/src/lib/content-locale:CONTENT_LOCALE"
+          ]
+        },
+        "containerRecall": {
+          "hit": 7,
+          "of": 7,
+          "missed": []
+        },
+        "containerPrecision": {
+          "hit": 7,
+          "of": 7,
+          "missed": []
+        },
+        "roleAccuracy": {
+          "hit": 24,
+          "of": 27,
+          "missed": [
+            "packages/nx-plugin/src/generators/app/files/template-angular/src/main.server.ts__template__: labelled source, got other",
+            "libs/card/src/lib/autocomplete/__snapshots__/autocomplete.component.spec.ts.snap: labelled generated, got other",
+            "CHANGELOG.md: labelled generated, got docs"
+          ]
+        },
+        "viewsWithoutCoverage": []
+      }
+    },
+    {
+      "name": "spring-petclinic-rest",
+      "sha": "4cd8e1b0cd42578e882247d8801f6be5d402f118",
+      "seconds": 2.877,
+      "error": null,
+      "runId": 1,
+      "extractors": [
+        {
+          "language": "migrations",
+          "status": "ok",
+          "parsed": 4,
+          "found": 4
+        },
+        {
+          "language": "java",
+          "status": "ok",
+          "parsed": 87,
+          "found": 87
+        }
+      ],
+      "coverage": {
+        "architecture": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "code": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "cycles": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "matrix": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "api": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "data": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "hotspots": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "coupling": {
+          "ratio": 1,
+          "withheld": false
+        }
+      },
+      "counts": {
+        "sourceFiles": 92,
+        "packages": 20,
+        "endpoints": 37,
+        "tables": 9
+      },
+      "metrics": {
+        "nonSourceInHotspotTop20": {
+          "count": 0,
+          "paths": []
+        },
+        "hotspotOverlapTop10": {
+          "hit": 7,
+          "of": 10,
+          "missed": [
+            "src/main/java/org/springframework/samples/petclinic/service/ClinicService.java",
+            "src/main/java/org/springframework/samples/petclinic/rest/controller/v2/PetRestControllerV2.java",
+            "src/main/java/org/springframework/samples/petclinic/rest/controller/v2/OwnerRestControllerV2.java"
+          ]
+        },
+        "entityRecall": {
+          "hit": 8,
+          "of": 8,
+          "missed": []
+        },
+        "tableRecall": {
+          "hit": 9,
+          "of": 9,
+          "missed": []
+        },
+        "endpointRecall": {
+          "hit": 37,
+          "of": 38,
+          "missed": [
+            "GET /api/oops"
+          ]
+        },
+        "injectionRecall": {
+          "hit": 18,
+          "of": 19,
+          "missed": [
+            "org.springframework.samples.petclinic.repository.springdatajpa.SpringDataPetRepositoryImpl -> jakarta.persistence.EntityManager"
+          ]
+        },
+        "containerRecall": {
+          "hit": 1,
+          "of": 1,
+          "missed": []
+        },
+        "containerPrecision": {
+          "hit": 1,
+          "of": 1,
+          "missed": []
+        },
+        "roleAccuracy": {
+          "hit": 25,
+          "of": 25,
+          "missed": []
+        },
+        "viewsWithoutCoverage": []
+      }
+    },
+    {
+      "name": "nacos",
+      "sha": "1b6309f5086c163a1ff9c0469fabd4494ec09093",
+      "seconds": 83.43,
+      "error": null,
+      "runId": 1,
+      "extractors": [
+        {
+          "language": "migrations",
+          "status": "ok",
+          "parsed": 9,
+          "found": 9
+        },
+        {
+          "language": "java",
+          "status": "ok",
+          "parsed": 3024,
+          "found": 3024
+        },
+        {
+          "language": "typescript",
+          "status": "ok",
+          "parsed": 205,
+          "found": 205
+        }
+      ],
+      "coverage": {
+        "architecture": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "code": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "cycles": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "matrix": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "api": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "data": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "hotspots": {
+          "ratio": 0.9985,
+          "withheld": false
+        },
+        "coupling": {
+          "ratio": 0.99975,
+          "withheld": false
+        }
+      },
+      "counts": {
+        "sourceFiles": 4000,
+        "packages": 843,
+        "endpoints": 446,
+        "tables": 21
+      },
+      "metrics": {
+        "nonSourceInHotspotTop20": {
+          "count": 0,
+          "paths": []
+        },
+        "hotspotOverlapTop10": {
+          "hit": 5,
+          "of": 10,
+          "missed": [
+            "ai/src/main/java/com/alibaba/nacos/ai/controller/SkillAdminController.java",
+            "console/src/main/java/com/alibaba/nacos/console/controller/v3/ai/ConsoleSkillController.java",
+            "console/src/main/java/com/alibaba/nacos/console/handler/impl/remote/ai/SkillRemoteHandler.java",
+            "ai/src/main/java/com/alibaba/nacos/ai/constant/Constants.java",
+            "console/src/main/java/com/alibaba/nacos/console/handler/impl/inner/ai/SkillInnerHandler.java"
+          ]
+        },
+        "entityRecall": null,
+        "tableRecall": {
+          "hit": 16,
+          "of": 16,
+          "missed": []
+        },
+        "endpointRecall": {
+          "hit": 75,
+          "of": 75,
+          "missed": []
+        },
+        "injectionRecall": {
+          "hit": 6,
+          "of": 10,
+          "missed": [
+            "com.alibaba.nacos.bootstrap.NacosBootstrap -> com.alibaba.nacos.NacosServerBasicApplication",
+            "com.alibaba.nacos.bootstrap.NacosBootstrap -> com.alibaba.nacos.NacosServerWebApplication",
+            "com.alibaba.nacos.bootstrap.NacosBootstrap -> com.alibaba.nacos.console.NacosConsole",
+            "com.alibaba.nacos.bootstrap.NacosBootstrap -> com.alibaba.nacos.airegistry.NacosAiRegistry"
+          ]
+        },
+        "containerRecall": {
+          "hit": 10,
+          "of": 10,
+          "missed": []
+        },
+        "containerPrecision": {
+          "hit": 10,
+          "of": 10,
+          "missed": []
+        },
+        "roleAccuracy": {
+          "hit": 25,
+          "of": 26,
+          "missed": [
+            "plugin-default-impl/nacos-default-datasource-plugin/nacos-datasource-plugin-mysql/src/main/resources/META-INF/mysql-upgrade-visibility-permission-resource.sql: labelled migration, got source"
+          ]
+        },
+        "viewsWithoutCoverage": []
+      }
+    },
+    {
+      "name": "spring-cloud-gateway",
+      "sha": "88a92c065767a20a5d37753437d15975a8c06c28",
+      "seconds": 10.949,
+      "error": null,
+      "runId": 1,
+      "extractors": [
+        {
+          "language": "java",
+          "status": "ok",
+          "parsed": 392,
+          "found": 392
+        }
+      ],
+      "coverage": {
+        "architecture": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "code": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "cycles": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "matrix": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "api": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "data": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "hotspots": {
+          "ratio": 0.9974811083123426,
+          "withheld": false
+        },
+        "coupling": {
+          "ratio": 0.9974811083123426,
+          "withheld": false
+        }
+      },
+      "counts": {
+        "sourceFiles": 397,
+        "packages": 50,
+        "endpoints": 109,
+        "tables": 0
+      },
+      "metrics": {
+        "nonSourceInHotspotTop20": {
+          "count": 0,
+          "paths": []
+        },
+        "hotspotOverlapTop10": {
+          "hit": 8,
+          "of": 10,
+          "missed": [
+            "spring-cloud-gateway-server-webmvc/src/main/java/org/springframework/cloud/gateway/server/mvc/filter/Bucket4jFilterFunctions.java",
+            "spring-cloud-gateway-server-webflux/src/main/java/org/springframework/cloud/gateway/filter/FunctionRoutingFilter.java"
+          ]
+        },
+        "entityRecall": null,
+        "tableRecall": null,
+        "endpointRecall": {
+          "hit": 3,
+          "of": 3,
+          "missed": []
+        },
+        "injectionRecall": {
+          "hit": 12,
+          "of": 12,
+          "missed": []
+        },
+        "containerRecall": {
+          "hit": 4,
+          "of": 4,
+          "missed": []
+        },
+        "containerPrecision": {
+          "hit": 4,
+          "of": 4,
+          "missed": []
+        },
+        "roleAccuracy": {
+          "hit": 32,
+          "of": 32,
+          "missed": []
+        },
+        "viewsWithoutCoverage": []
+      }
+    },
+    {
+      "name": "openmrs-core",
+      "sha": "a521ee30a53909c48e4567ddab1ec758b9b59be0",
+      "seconds": 24.302,
+      "error": null,
+      "runId": 1,
+      "extractors": [
+        {
+          "language": "migrations",
+          "status": "ok",
+          "parsed": 41,
+          "found": 49
+        },
+        {
+          "language": "java",
+          "status": "ok",
+          "parsed": 877,
+          "found": 877
+        }
+      ],
+      "coverage": {
+        "architecture": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "code": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "cycles": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "matrix": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "api": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "data": {
+          "ratio": 0.9913606911447084,
+          "withheld": false
+        },
+        "hotspots": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "coupling": {
+          "ratio": 1,
+          "withheld": false
+        }
+      },
+      "counts": {
+        "sourceFiles": 942,
+        "packages": 101,
+        "endpoints": 1,
+        "tables": 131
+      },
+      "metrics": {
+        "nonSourceInHotspotTop20": {
+          "count": 0,
+          "paths": []
+        },
+        "hotspotOverlapTop10": {
+          "hit": 6,
+          "of": 10,
+          "missed": [
+            "api/src/main/java/org/openmrs/util/ConceptReferenceRangeUtility.java",
+            "api/src/main/java/org/openmrs/api/context/UserContext.java",
+            "api/src/main/java/org/openmrs/api/impl/UserServiceImpl.java",
+            "api/src/main/java/org/openmrs/api/context/Daemon.java"
+          ]
+        },
+        "entityRecall": {
+          "hit": 86,
+          "of": 86,
+          "missed": []
+        },
+        "tableRecall": {
+          "hit": 100,
+          "of": 100,
+          "missed": []
+        },
+        "endpointRecall": null,
+        "injectionRecall": {
+          "hit": 9,
+          "of": 10,
+          "missed": [
+            "org.openmrs.notification.impl.MessageServiceImpl -> org.openmrs.notification.db.TemplateDAO"
+          ]
+        },
+        "containerRecall": {
+          "hit": 1,
+          "of": 1,
+          "missed": []
+        },
+        "containerPrecision": {
+          "hit": 1,
+          "of": 1,
+          "missed": []
+        },
+        "roleAccuracy": {
+          "hit": 27,
+          "of": 27,
+          "missed": []
+        },
+        "viewsWithoutCoverage": []
+      }
+    },
+    {
+      "name": "spring-boot-admin",
+      "sha": "9d667167671483d93c1265545c68c0c6d6618405",
+      "seconds": 12.478,
+      "error": null,
+      "runId": 1,
+      "extractors": [
+        {
+          "language": "migrations",
+          "status": "ok",
+          "parsed": 0,
+          "found": 20
+        },
+        {
+          "language": "java",
+          "status": "ok",
+          "parsed": 242,
+          "found": 242
+        },
+        {
+          "language": "typescript",
+          "status": "ok",
+          "parsed": 140,
+          "found": 140
+        }
+      ],
+      "coverage": {
+        "architecture": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "code": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "cycles": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "matrix": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "api": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "data": {
+          "ratio": 0.9236641221374046,
+          "withheld": false
+        },
+        "hotspots": {
+          "ratio": 1,
+          "withheld": false
+        },
+        "coupling": {
+          "ratio": 1,
+          "withheld": false
+        }
+      },
+      "counts": {
+        "sourceFiles": 587,
+        "packages": 99,
+        "endpoints": 31,
+        "tables": 0
+      },
+      "metrics": {
+        "nonSourceInHotspotTop20": {
+          "count": 0,
+          "paths": []
+        },
+        "hotspotOverlapTop10": {
+          "hit": 5,
+          "of": 10,
+          "missed": [
+            "spring-boot-admin-server-ui/src/main/frontend/views/instances/details/health-details.vue",
+            "spring-boot-admin-server-ui/src/main/frontend/views/instances/details/details-info.vue",
+            "spring-boot-admin-server/src/main/java/de/codecentric/boot/admin/server/config/AdminServerAutoConfiguration.java",
+            "spring-boot-admin-server-ui/src/main/frontend/views/journal/JournalTable.vue",
+            "spring-boot-admin-server-ui/src/main/frontend/components/sba-button.vue"
+          ]
+        },
+        "entityRecall": null,
+        "tableRecall": null,
+        "endpointRecall": null,
+        "injectionRecall": {
+          "hit": 10,
+          "of": 10,
+          "missed": []
+        },
+        "containerRecall": {
+          "hit": 9,
+          "of": 9,
+          "missed": []
+        },
+        "containerPrecision": {
+          "hit": 9,
+          "of": 9,
+          "missed": []
+        },
+        "roleAccuracy": {
+          "hit": 25,
+          "of": 26,
+          "missed": [
+            ".gnupg.tar.enc: labelled other, got config"
+          ]
+        },
+        "viewsWithoutCoverage": []
+      }
+    }
+  ],
+  "targets": [
+    {
+      "metric": "Non-source files in the hotspot top 20",
+      "target": "0",
+      "value": "0",
+      "pass": true
+    },
+    {
+      "metric": "Hotspot top-10 overlap with the labelled list",
+      "target": "≥ 60%",
+      "value": "92/138 (66%)",
+      "pass": true
+    },
+    {
+      "metric": "Entity recall",
+      "target": "≥ 90%",
+      "value": "146/146 (100%)",
+      "pass": true
+    },
+    {
+      "metric": "Table recall",
+      "target": "≥ 90%",
+      "value": "274/274 (100%)",
+      "pass": true
+    },
+    {
+      "metric": "Endpoint recall",
+      "target": "≥ 95%",
+      "value": "519/520 (99%)",
+      "pass": true
+    },
+    {
+      "metric": "Injection edges resolved",
+      "target": "≥ 85%",
+      "value": "215/226 (95%)",
+      "pass": true
+    },
+    {
+      "metric": "Labelled deployables found as containers",
+      "target": "≥ 100%",
+      "value": "67/67 (100%)",
+      "pass": true
+    },
+    {
+      "metric": "Containers that are deployables",
+      "target": "≥ 100%",
+      "value": "67/67 (100%)",
+      "pass": true
+    },
+    {
+      "metric": "File roles matching the labels",
+      "target": "≥ 95%",
+      "value": "535/557 (96%)",
+      "pass": true
+    },
+    {
+      "metric": "Views rendered without a coverage statement",
+      "target": "0",
+      "value": "0",
+      "pass": true
+    },
+    {
+      "metric": "Repositories the pipeline completed on",
+      "target": "20/20",
+      "value": "20/20",
+      "pass": true
+    }
+  ]
+}
