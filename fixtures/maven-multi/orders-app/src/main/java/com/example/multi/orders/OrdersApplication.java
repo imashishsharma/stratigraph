@@ -9,4 +9,7 @@ public class OrdersApplication {
     public long total(Money money) {
         return money.cents();
     }
+
+    public static void main(String[] args) {
+    }
 }

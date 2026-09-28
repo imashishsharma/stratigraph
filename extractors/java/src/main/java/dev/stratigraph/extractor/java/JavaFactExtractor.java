@@ -392,6 +392,17 @@ final class JavaFactExtractor {
      * what {@link TypeResolver} needs, since the whole point is to tell
      * `Service` from `org.springframework.stereotype.Service`.
      */
+    /**
+     * Whether a method declaration is a constructor. OpenRewrite answers by
+     * the absence of a return-type expression, which is right for Java and
+     * wrong for a Kotlin expression-bodied function (`fun x() = 1`), so the
+     * attributed method type's name decides when there is one.
+     */
+    static boolean isConstructor(J.MethodDeclaration declaration) {
+        JavaType.Method type = declaration.getMethodType();
+        return type != null ? "<constructor>".equals(type.getName()) : declaration.isConstructor();
+    }
+
     static String writtenName(Object tree) {
         if (tree instanceof J.Identifier) {
             return ((J.Identifier) tree).getSimpleName();
@@ -669,7 +680,7 @@ final class JavaFactExtractor {
             List<J.MethodDeclaration> constructors = new ArrayList<>();
             for (Statement statement : declaration.getBody().getStatements()) {
                 if (statement instanceof J.MethodDeclaration
-                        && ((J.MethodDeclaration) statement).isConstructor()) {
+                        && isConstructor((J.MethodDeclaration) statement)) {
                     constructors.add((J.MethodDeclaration) statement);
                 }
             }
@@ -855,7 +866,7 @@ final class JavaFactExtractor {
                 return super.visitMethodDeclaration(declaration, unused);
             }
             Map<String, Object> attrs = new LinkedHashMap<>();
-            if (declaration.isConstructor()) {
+            if (isConstructor(declaration)) {
                 attrs.put("constructor", true);
             }
             List<String> modifiers = modifiers(declaration.getModifiers());
@@ -863,13 +874,13 @@ final class JavaFactExtractor {
                 attrs.put("modifiers", modifiers);
             }
             String returns = Fqn.erase(type.getReturnType());
-            if (!Fqn.UNKNOWN.equals(returns) && !declaration.isConstructor()) {
+            if (!Fqn.UNKNOWN.equals(returns) && !isConstructor(declaration)) {
                 attrs.put("returns", returns);
             }
 
             NodeRef self = new NodeRef("method", Fqn.method(type));
             emitter.node("method", Fqn.method(type),
-                    declaration.isConstructor() ? "<init>" : declaration.getSimpleName(),
+                    isConstructor(declaration) ? "<init>" : declaration.getSimpleName(),
                     new NodeRef(nodeKindOf(type.getDeclaringType()), Fqn.type(type.getDeclaringType())),
                     path, line(declaration), endLine(declaration), attrs);
 
@@ -1042,7 +1053,7 @@ final class JavaFactExtractor {
                 ClassContext owner,
                 List<ResolvedAnnotation> annotations,
                 J.MethodDeclaration declaration) {
-            if (owner == null || declaration.isConstructor()) {
+            if (owner == null || isConstructor(declaration)) {
                 return;
             }
             boolean marked = annotations.stream()

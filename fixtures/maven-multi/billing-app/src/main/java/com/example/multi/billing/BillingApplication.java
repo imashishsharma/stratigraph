@@ -9,4 +9,7 @@ public class BillingApplication {
     public Money invoice(long cents) {
         return new Money(cents);
     }
+
+    public static void main(String[] args) {
+    }
 }

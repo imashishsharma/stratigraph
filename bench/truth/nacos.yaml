@@ -1,57 +1,8 @@
 name: nacos
 sha: 1b6309f5086c163a1ff9c0469fabd4494ec09093
-labelledBy: >
-  Labelled by grep/git/reading files directly at the pinned commit (5291
-  Java files, 40+ Maven modules). No JPA anywhere (`grep -rl @Entity` is
-  empty) — nacos persists via hand-written JDBC/MyBatis-style DAOs over raw
-  SQL, so entities is omitted. containers: found every module with a real
-  @SpringBootApplication class + `public static void main` (11 classes
-  across 10 modules: address, ai-registry-adaptor, bootstrap, cmdb, config,
-  console, istio, naming, prometheus, server[x2]); one false-positive
-  (sys/.../NacosTypeExcludeFilter.java) only imports the annotation type and
-  isn't itself annotated, excluded. Per distribution/pom.xml (its
-  maven-assembly-plugin packages `nacos-bootstrap` as the shipped
-  distributable), `bootstrap`'s NacosBootstrap is the actual product
-  entrypoint — reading its main() shows it boots NacosServerBasicApplication
-  and NacosServerWebApplication (both in `server`) and, depending on
-  deployment type, NacosConsole (`console`) and NacosAiRegistry
-  (`ai-registry-adaptor`) as nested/child Spring contexts, not as separately
-  shipped artifacts. address, cmdb, istio, naming and prometheus have no
-  such caller relationship to bootstrap and no spring-boot-maven-plugin
-  repackage configured either — they read as legacy or standalone-testable
-  modules from nacos's pre-unification (<2.x) architecture. All 10 are
-  listed as containers since each genuinely has a committed, real
-  @SpringBootApplication + main() (the literal criterion), with this
-  caveat spelled out rather than silently picking one "true" deployable.
-  console-ui/console-ui-next are React (`"react"` in both package.json,
-  confirmed), not Angular, so per the `containers` vocabulary (no `kind` for
-  a plain React app) they are NOT listed as containers. tables: from
-  plugin-default-impl/.../nacos-datasource-plugin-mysql/.../mysql-schema.sql
-  (the reference/default datasource schema), cross-checked against
-  mysql-upgrade-visibility-permission-resource.sql (an ALTER, not a table
-  add/drop/rename, so it doesn't change the table set) — 16 tables total,
-  listed exhaustively (under the 100-item threshold). endpoints: extracted
-  with a script that resolves every @RequestMapping/@GetMapping/etc. path,
-  including the common nacos pattern of referencing a `public static final
-  String ..._PATH` constant (often composed via `+` across multiple
-  constants, e.g. `Constants.CONFIG_ADMIN_V3_PATH = BASE_ADMIN_V3_PATH +
-  "/config"`) rather than a string literal — resolved 1319 of 1371 such
-  constants project-wide via iterative substitution and used that map to
-  concatenate class-level + method-level paths for all 69 @RestController
-  files under non-test main source. 8 of 346 raw annotation matches could
-  not be resolved (array-valued @RequestMapping({...}) with multiple paths,
-  or a constant declared without the exact "public static final String"
-  shape my scan matched) and were dropped rather than guessed; two
-  `@DeleteMapping()` calls with no path argument were correctly resolved to
-  their class's base path. 242 valid unique METHOD+path pairs resulted —
-  over the 100-item cap, sampled deterministically (sorted, floor(i*n/100)
-  for i in 0..99, filling index collisions forward). Spot-checked ~5 sampled
-  entries by re-reading their source files directly; all matched. injections
-  and roles are direct reads, not samples. riskyFiles: git log --no-merges
-  -M over the 12 months before the pinned commit's 2026-09-24 date, dropping
-  >50-file commits, main/java non-test files only, no ties in the top 10 (a
-  heavy year of churn in the new AI "skills"/agent-specs feature area across
-  ai/, console/ and maintainer-client/ modules).
+labelledBy: >-
+  Labelled by grep/git/reading files directly at the pinned commit (5291 Java files, 40+ Maven modules). No JPA anywhere (`grep -rl @Entity` is empty) — nacos persists via hand-written JDBC/MyBatis-style DAOs over raw SQL, so entities is omitted. containers: found every module with a real @SpringBootApplication class + `public static void main` (11 classes across 10 modules: address, ai-registry-adaptor, bootstrap, cmdb, config, console, istio, naming, prometheus, server[x2]); one false-positive (sys/.../NacosTypeExcludeFilter.java) only imports the annotation type and isn't itself annotated, excluded. Per distribution/pom.xml (its maven-assembly-plugin packages `nacos-bootstrap` as the shipped distributable), `bootstrap`'s NacosBootstrap is the actual product entrypoint — reading its main() shows it boots NacosServerBasicApplication and NacosServerWebApplication (both in `server`) and, depending on deployment type, NacosConsole (`console`) and NacosAiRegistry (`ai-registry-adaptor`) as nested/child Spring contexts, not as separately shipped artifacts. address, cmdb, istio, naming and prometheus have no such caller relationship to bootstrap and no spring-boot-maven-plugin repackage configured either — they read as legacy or standalone-testable modules from nacos's pre-unification (<2.x) architecture. All 10 are listed as containers since each genuinely has a committed, real @SpringBootApplication + main() (the literal criterion), with this caveat spelled out rather than silently picking one "true" deployable. console-ui/console-ui-next are React (`"react"` in both package.json, confirmed), not Angular, so per the `containers` vocabulary (no `kind` for a plain React app) they are NOT listed as containers. tables: from plugin-default-impl/.../nacos-datasource-plugin-mysql/.../mysql-schema.sql (the reference/default datasource schema), cross-checked against mysql-upgrade-visibility-permission-resource.sql (an ALTER, not a table add/drop/rename, so it doesn't change the table set) — 16 tables total, listed exhaustively (under the 100-item threshold). endpoints: extracted with a script that resolves every @RequestMapping/@GetMapping/etc. path, including the common nacos pattern of referencing a `public static final String ..._PATH` constant (often composed via `+` across multiple constants, e.g. `Constants.CONFIG_ADMIN_V3_PATH = BASE_ADMIN_V3_PATH + "/config"`) rather than a string literal — resolved 1319 of 1371 such constants project-wide via iterative substitution and used that map to concatenate class-level + method-level paths for all 69 @RestController files under non-test main source. 8 of 346 raw annotation matches could not be resolved (array-valued @RequestMapping({...}) with multiple paths, or a constant declared without the exact "public static final String" shape my scan matched) and were dropped rather than guessed; two `@DeleteMapping()` calls with no path argument were correctly resolved to their class's base path. 242 valid unique METHOD+path pairs resulted — over the 100-item cap, sampled deterministically (sorted, floor(i*n/100) for i in 0..99, filling index collisions forward). Spot-checked ~5 sampled entries by re-reading their source files directly; all matched. injections and roles are direct reads, not samples. riskyFiles: git log --no-merges -M over the 12 months before the pinned commit's 2026-09-24 date, dropping >50-file commits, main/java non-test files only, no ties in the top 10 (a heavy year of churn in the new AI "skills"/agent-specs feature area across ai/, console/ and maintainer-client/ modules).
+   Corrected on review: removed 25 endpoint labels that no controller declares at the pinned commit — 20 placed agent and agent-spec routes under /v3/{admin,console}/ai/a2a, which only A2aAdminController and ConsoleA2aController map (neither declares /draft, /detail, /metadata, /version, /publish, /submit, /biz-tags, /labels, /online or upload); ArdSearchController maps ArdProtocolConstants.CLIENT_PATH = /v3/ai/ard, not /v3/client/ai/agents; SkillsRegistryController uses its own BASE_PATH = /registry, not /v1/cs; /v3/console/health declares only /liveness and /readiness.
 roles:
   - { path: config/src/main/java/com/alibaba/nacos/config/server/controller/v3/ConfigControllerV3.java, role: source }
   - { path: naming/src/main/java/com/alibaba/nacos/naming/controllers/v3/ServiceControllerV3.java, role: source }
@@ -108,7 +59,6 @@ tables:
   - ai_resource_search_chunk
   - ai_resource_task
 endpoints:
-  - DELETE /v3/admin/ai/a2a/draft
   - DELETE /v3/admin/ai/mcp/draft
   - DELETE /v3/admin/cs/config/beta
   - DELETE /v3/admin/ns/service
@@ -121,11 +71,6 @@ endpoints:
   - GET /v0/servers/{name}/versions
   - GET /v1/auth/oidc/callback
   - GET /v1/auth/oidc/logout
-  - GET /v1/cs/{namespaceId}/api/search
-  - GET /v3/admin/ai/a2a/detail
-  - GET /v3/admin/ai/a2a/metadata
-  - GET /v3/admin/ai/a2a/version
-  - GET /v3/admin/ai/a2a/version/meta
   - GET /v3/admin/ai/import/sources
   - GET /v3/admin/ai/mcp/version
   - GET /v3/admin/core/cluster/node/self
@@ -146,12 +91,8 @@ endpoints:
   - GET /v3/admin/ns/service/subscribers
   - GET /v3/auth/role/search
   - GET /v3/auth/user/search
-  - GET /v3/client/ai/agents/ai-catalog.json
   - GET /v3/client/ai/mcp/search
-  - GET /v3/console/ai/a2a/{pipelineId}
   - GET /v3/console/ai/a2a/list
-  - GET /v3/console/ai/a2a/version
-  - GET /v3/console/ai/a2a/versions
   - GET /v3/console/ai/mcp/importToolsFromMcp
   - GET /v3/console/ai/mcp/version
   - GET /v3/console/core/namespace
@@ -159,16 +100,11 @@ endpoints:
   - GET /v3/console/cs/config/list
   - GET /v3/console/cs/config/listener/ip
   - GET /v3/console/cs/history/list
-  - GET /v3/console/health
   - GET /v3/console/ns/service
   - GET /v3/console/ns/service/subscribers
   - GET /v3/console/plugin/list
   - GET /v3/console/server/state
   - POST /v1/auth/oidc/logout
-  - POST /v3/admin/ai/a2a/force-publish
-  - POST /v3/admin/ai/a2a/publish
-  - POST /v3/admin/ai/a2a/submit
-  - POST /v3/admin/ai/a2a/upload/precheck
   - POST /v3/admin/ai/import/search
   - POST /v3/admin/ai/mcp/force-publish
   - POST /v3/admin/ai/mcp/online
@@ -178,12 +114,7 @@ endpoints:
   - POST /v3/admin/cs/config/import
   - POST /v3/admin/cs/ops/localCache
   - POST /v3/auth/user/admin
-  - POST /v3/client/ai/agents/explore
   - POST /v3/client/ai/agents/watch
-  - POST /v3/console/ai/a2a/force-publish
-  - POST /v3/console/ai/a2a/online
-  - POST /v3/console/ai/a2a/submit
-  - POST /v3/console/ai/a2a/upload/batch
   - POST /v3/console/ai/import/execute
   - POST /v3/console/ai/mcp/draft
   - POST /v3/console/ai/mcp/import/execute
@@ -192,9 +123,6 @@ endpoints:
   - POST /v3/console/copilot/prompt/optimize
   - POST /v3/console/copilot/skill/optimize
   - POST /v3/console/cs/config/clone
-  - PUT /v3/admin/ai/a2a/biz-tags
-  - PUT /v3/admin/ai/a2a/draft
-  - PUT /v3/admin/ai/a2a/metadata
   - PUT /v3/admin/ai/mcp/draft
   - PUT /v3/admin/ai/mcp/scope
   - PUT /v3/admin/core/cluster/node/list
@@ -203,8 +131,6 @@ endpoints:
   - PUT /v3/admin/ns/instance/metadata/batch
   - PUT /v3/admin/ns/ops/switches
   - PUT /v3/client/ai/agents/endpoints/heartbeat
-  - PUT /v3/console/ai/a2a/biz-tags
-  - PUT /v3/console/ai/a2a/labels
   - PUT /v3/console/ai/mcp/draft
   - PUT /v3/console/ai/mcp/status
   - PUT /v3/console/ns/service/cluster

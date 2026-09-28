@@ -67,8 +67,7 @@ export function loadModuleInfo(db: Db, runId: number): ModuleInfo[] {
     // The Boot plugin repackages a module into an executable jar only when
     // there is a main class to launch; a library that applies it (to share a
     // build configuration) ships nothing runnable (ADR-0040, benchmark M11).
-    const pluginOnly =
-      attrs.deployable === 'spring-boot' && !withMain.has(row.id) && !mainClasses.has(row.id);
+    const pluginOnly = attrs.deployable === 'spring-boot' && !withMain.has(row.id);
     if (attrs.deployable !== undefined && !pluginOnly) {
       proofs.push({
         kind: attrs.deployable,
@@ -79,7 +78,9 @@ export function loadModuleInfo(db: Db, runId: number): ModuleInfo[] {
         subject: null,
       });
     }
-    proofs.push(...(mainClasses.get(row.id) ?? []));
+    // A Boot application class is launched by a `main`; one with no `main` in
+    // its module is a configuration a test boots, not something that ships.
+    if (withMain.has(row.id)) proofs.push(...(mainClasses.get(row.id) ?? []));
 
     // A pom-packaged module produces nothing that runs, whatever it declares.
     const role: ModuleRole =

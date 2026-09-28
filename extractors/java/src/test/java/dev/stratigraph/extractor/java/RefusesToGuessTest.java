@@ -529,6 +529,30 @@ class RefusesToGuessTest {
     }
 
     @Test
+    void injectsThroughAKotlinPrimaryConstructorBesideExpressionBodiedFunctions(@TempDir Path repo) throws Exception {
+        write(repo, "src/main/kotlin/app/Two.kt", """
+                package app
+                import org.springframework.stereotype.Controller
+                class RepoA
+                class RepoB
+                @Controller
+                class Two(val a: RepoA, val b: RepoB) {
+                    fun x() = 1
+                }
+                """);
+        List<JsonNode> facts = extract(repo);
+        List<String> injections = facts.stream()
+                .filter(node -> "edge".equals(node.path("type").asText())
+                        && "injects".equals(node.path("kind").asText()))
+                .map(node -> node.path("dst").path("fqn").asText())
+                .sorted()
+                .toList();
+        assertEquals(List.of("app.RepoA", "app.RepoB"), injections);
+        assertTrue(has(facts, "node", node -> "app.Two#x()".equals(node.path("fqn").asText())
+                && "x".equals(node.path("name").asText())));
+    }
+
+    @Test
     void willNotNameATableUnderANamingStrategyItDoesNotKnow(@TempDir Path repo) throws Exception {
         // ADR-0036: a default-named entity's table is its name put through the
         // module's physical naming strategy. A custom strategy class could do
