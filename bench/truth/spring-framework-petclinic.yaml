@@ -1,32 +1,8 @@
 name: spring-framework-petclinic
 sha: cd43fc08e272b778e1196d0754ab86d1d42f1d5a
-labelledBy: >
-  Read every tracked file at the pinned commit (git ls-files), all main Java
-  classes, all Spring XML context files, all four db/<vendor>/schema.sql
-  files, and PetclinicInitializer.java (which replaces web.xml with a
-  WebApplicationInitializer). Entities all carry explicit @Table(name=...)
-  so no naming-strategy inference was needed; the hsqldb schema.sql table
-  set matches the entity @Table names exactly. All DI in this repo is
-  implicit constructor injection picked up by <context:component-scan> over
-  @Controller/@Service/@Repository classes (Spring auto-wires a class's sole
-  public constructor without needing @Autowired) — no XML <bean
-  property>/<constructor-arg> wiring of application classes was found; the
-  XML only wires infrastructure beans (dataSource, entityManagerFactory,
-  view resolvers) that application code doesn't inject. Repository classes
-  are jakarta.persistence, not javax.persistence, contradicting the
-  corpus.yaml note but confirmed directly from imports. No lockfile and no
-  generated code exist in this repo (no package-lock/yarn.lock, no
-  @Generated files, target/ is gitignored) — both omitted from roles. Roles
-  were re-checked against ADR-0030's vocabulary table in bench/README.md:
-  petclinic.css is `source` (styles), db/mysql/data.sql is `source` (SQL
-  outside a migration directory, unlike the migration-classified
-  db/hsqldb/schema.sql), .gitignore and the GitHub Actions workflow YAML are
-  `config`, and the Maven wrapper jar is `manifest` (build wrapper).
-  riskyFiles has low signal: only 55 non-merge, <=50-file commits touched
-  src/main in the 12 months before the pin (2025-09-01 to 2026-09-01), the
-  top file has 2 commits and everything else ties at 1, so ties beyond the
-  top file are broken purely by file size (no fix-like commit messages found
-  in this window at all).
+labelledBy: >-
+  Read every tracked file at the pinned commit (git ls-files), all main Java classes, all Spring XML context files, all four db/<vendor>/schema.sql files, and PetclinicInitializer.java (which replaces web.xml with a WebApplicationInitializer). Entities all carry explicit @Table(name=...) so no naming-strategy inference was needed; the hsqldb schema.sql table set matches the entity @Table names exactly. All DI in this repo is implicit constructor injection picked up by <context:component-scan> over @Controller/@Service/@Repository classes (Spring auto-wires a class's sole public constructor without needing @Autowired) — no XML <bean property>/<constructor-arg> wiring of application classes was found; the XML only wires infrastructure beans (dataSource, entityManagerFactory, view resolvers) that application code doesn't inject. Repository classes are jakarta.persistence, not javax.persistence, contradicting the corpus.yaml note but confirmed directly from imports. No lockfile and no generated code exist in this repo (no package-lock/yarn.lock, no @Generated files, target/ is gitignored) — both omitted from roles. Roles were re-checked against ADR-0030's vocabulary table in bench/README.md: petclinic.css is `source` (styles), db/mysql/data.sql is `source` (SQL outside a migration directory, unlike the migration-classified db/hsqldb/schema.sql), .gitignore and the GitHub Actions workflow YAML are `config`, and the Maven wrapper jar is `manifest` (build wrapper). riskyFiles has low signal: only 55 non-merge, <=50-file commits touched src/main in the 12 months before the pin (2025-09-01 to 2026-09-01), the top file has 2 commits and everything else ties at 1, so ties beyond the top file are broken purely by file size (no fix-like commit messages found in this window at all).
+   Corrected on review: petclinic.css is generated — the repository marks *.css linguist-generated=true in .gitattributes (ADR-0030 rule 1).
 roles:
   - { path: src/main/java/org/springframework/samples/petclinic/web/OwnerController.java, role: source }
   - { path: src/main/java/org/springframework/samples/petclinic/model/Owner.java, role: source }
@@ -54,7 +30,7 @@ roles:
   - { path: src/main/resources/db/mysql/data.sql, role: source }
   - { path: readme.md, role: docs }
   - { path: src/main/resources/db/mysql/petclinic_db_setup_mysql.txt, role: docs }
-  - { path: src/main/webapp/resources/css/petclinic.css, role: source }
+  - { path: src/main/webapp/resources/css/petclinic.css, role: generated }
   - { path: src/main/webapp/resources/images/favicon.png, role: asset }
   - { path: src/main/webapp/resources/fonts/montserrat-webfont.woff, role: asset }
   - { path: .github/workflows/maven-build-main.yml, role: config }

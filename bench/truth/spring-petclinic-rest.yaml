@@ -1,36 +1,8 @@
 name: spring-petclinic-rest
 sha: 4cd8e1b0cd42578e882247d8801f6be5d402f118
-labelledBy: >
-  Labelled by reading source, pom.xml, application*.properties, db/*/schema.sql and
-  git log directly at the pinned sha (no stratigraph run, no .stratigraph/ or
-  src/extractors read). roles, entities, tables and injections are exhaustive for
-  this 109-file repo, not sampled. endpoints are exhaustive from src/main/resources/openapi.yml
-  cross-checked against controller @RequestMapping prefixes ("/api"), since the
-  openapi-generator-maven-plugin (confirmed in pom.xml: generatorName=spring,
-  interfaceOnly=true, apiPackage=...rest.api) generates the actual @RequestMapping-bearing
-  API interfaces (e.g. OwnersApi) into target/generated-sources/ at build time; that
-  code is gitignored (target/*) and not committed, so committed .java controllers only
-  show `implements OwnersApi` + `@Override`, no path annotations. openapi.yml is
-  committed and is the actual contract the generator and controllers agree on, so it
-  was used as the source of truth for endpoint paths (methods verified against operationId
-  count: 37 operationIds == 37 method+path pairs extracted). RootRestControllerV1's
-  "GET /" is hand-written (not in openapi.yml) and included separately. tables/entities
-  used src/main/resources/db/h2/schema.sql because application.properties sets
-  spring.profiles.active=h2,spring-data-jpa (h2 is the actual default DB profile, not
-  hsqldb); hsqldb/mysql/postgres schema.sql variants exist and declare the same 9
-  tables (verified by diffing CREATE TABLE statements across all four). riskyFiles
-  counts use `git log --follow` to merge pre-rename history (OwnerRestController.java
-  was renamed to rest/controller/v1/OwnerRestControllerV1.java in commit 28a1c2c,
-  "refactor(rest): organize controllers by version and split v2 APIs", within the
-  window) onto the current path; no >50-file sweep commits existed in the window (max
-  27 files) so none were excluded. Known gaps: no generated code and no lockfile exist
-  in this repo (target/ is gitignored, Maven has no lockfile mechanism used here), so
-  the roles vocabulary's "generated" and "lockfile" values have no real example here
-  and are omitted from the roles sample rather than invented. Role labels follow
-  bench/README.md's ADR-0030 vocabulary table exactly: mvnw and the .mvn/wrapper/*
-  files (including the wrapper jar) are `manifest`, and data.sql (a seed-data script,
-  not DDL) sits outside any recognized migration directory/filename pattern so it is
-  `source`, while schema.sql (standalone DDL) stays `migration`.
+labelledBy: >-
+  Labelled by reading source, pom.xml, application*.properties, db/*/schema.sql and git log directly at the pinned sha (no stratigraph run, no .stratigraph/ or src/extractors read). roles, entities, tables and injections are exhaustive for this 109-file repo, not sampled. endpoints are exhaustive from src/main/resources/openapi.yml cross-checked against controller @RequestMapping prefixes ("/api"), since the openapi-generator-maven-plugin (confirmed in pom.xml: generatorName=spring, interfaceOnly=true, apiPackage=...rest.api) generates the actual @RequestMapping-bearing API interfaces (e.g. OwnersApi) into target/generated-sources/ at build time; that code is gitignored (target/*) and not committed, so committed .java controllers only show `implements OwnersApi` + `@Override`, no path annotations. openapi.yml is committed and is the actual contract the generator and controllers agree on, so it was used as the source of truth for endpoint paths (methods verified against operationId count: 37 operationIds == 37 method+path pairs extracted). RootRestControllerV1's "GET /" is hand-written (not in openapi.yml) and included separately. tables/entities used src/main/resources/db/h2/schema.sql because application.properties sets spring.profiles.active=h2,spring-data-jpa (h2 is the actual default DB profile, not hsqldb); hsqldb/mysql/postgres schema.sql variants exist and declare the same 9 tables (verified by diffing CREATE TABLE statements across all four). riskyFiles counts use `git log --follow` to merge pre-rename history (OwnerRestController.java was renamed to rest/controller/v1/OwnerRestControllerV1.java in commit 28a1c2c, "refactor(rest): organize controllers by version and split v2 APIs", within the window) onto the current path; no >50-file sweep commits existed in the window (max 27 files) so none were excluded. Known gaps: no generated code and no lockfile exist in this repo (target/ is gitignored, Maven has no lockfile mechanism used here), so the roles vocabulary's "generated" and "lockfile" values have no real example here and are omitted from the roles sample rather than invented. Role labels follow bench/README.md's ADR-0030 vocabulary table exactly: mvnw and the .mvn/wrapper/* files (including the wrapper jar) are `manifest`, and data.sql (a seed-data script, not DDL) sits outside any recognized migration directory/filename pattern so it is `source`, while schema.sql (standalone DDL) stays `migration`.
+   Corrected on review: postman-tests.sh is a shell script, source by ADR-0030.
 roles:
   - { path: pom.xml, role: manifest }
   - { path: mvnw, role: manifest }
@@ -56,7 +28,7 @@ roles:
   - { path: petclinic-ermodel.png, role: asset }
   - { path: docker-compose.yml, role: config }
   - { path: .github/workflows/maven-build-master.yml, role: config }
-  - { path: postman-tests.sh, role: other }
+  - { path: postman-tests.sh, role: source }
 containers:
   - { name: spring-petclinic-rest, kind: spring-boot, path: . }
 entities:

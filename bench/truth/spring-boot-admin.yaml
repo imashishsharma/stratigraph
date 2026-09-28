@@ -1,48 +1,8 @@
 name: spring-boot-admin
 sha: 9d667167671483d93c1265545c68c0c6d6618405
-labelledBy: >
-  Labelled by reading the checkout directly at the pinned sha: git ls-files, pom.xml
-  <modules>/<packaging> for every module and profile, targeted grep for annotations,
-  and reading individual files to confirm class bodies. containers: checked every
-  module (core: server, server-mcp, server-ui, client, starters -- none have a
-  main class, all are libraries; server-cloud, profile-gated, also has no main
-  class) plus every module under spring-boot-admin-samples/ including two
-  profile-gated ones (eureka, consul, zookeeper -- "discovery" profile) and
-  sample-custom-ui (a Vue-only frontend module, no Java, no fit in the kind
-  vocabulary -- excluded). 8 sample apps qualify as deployables: 7 use
-  @SpringBootApplication directly, sample-war (<packaging>war</packaging>) also
-  carries @SpringBootApplication -- labelled kind war on the packaging, not
-  spring-boot, since that's how it's actually deployed. No JPA @Entity classes
-  and no SQL/schema files exist anywhere in the repo (`git grep -l @Entity`
-  empty, no *.sql files) -- entities/tables omitted, this is a stateless
-  monitoring tool with in-memory/pluggable-store instance registries, not a
-  database-backed app. endpoints: a genuinely surprising finding -- `git grep`
-  for @RestController/@Controller/@RequestMapping at class level across every
-  module's non-test main source returns zero matches repo-wide. SBA's real REST
-  surface (ApplicationsController, InstancesController, two
-  InstancesProxyController variants, NotificationFilterController, UiController,
-  all under spring-boot-admin-server(-ui)/.../web) is stamped with a
-  project-private marker annotation, @AdminController
-  (spring-boot-admin-server/src/main/java/de/codecentric/boot/admin/server/web/AdminController.java),
-  read in full and confirmed to carry no @Controller/@RestController
-  meta-annotation of its own -- just @Target/@Retention/@Documented. Individual
-  methods on those classes do carry real @GetMapping/@PostMapping/@DeleteMapping/
-  @RequestMapping. Per this task's own instruction ("Spring Boot Admin: only
-  @RestController/@Controller/@RequestMapping-declared routes"), @AdminController
-  does not qualify, so `endpoints` is omitted rather than reverse-engineering SBA's
-  custom handler-mapping wiring to reconstruct routes the annotations don't
-  literally declare -- flagging this as the single biggest source of possible
-  disagreement with a differently-reasoned tool or reviewer. injections samples
-  constructor injection across server/server-ui controllers and services, plus
-  the repo's only main-source Lombok @RequiredArgsConstructor site (of the 44
-  Lombok-using files corpus.yaml counted, only 1 in main source uses constructor-
-  generation; the rest are @Data/@Getter/@Builder elsewhere or in test source).
-  riskyFiles from git log --no-merges over the 12 months before the pinned
-  commit's 2026-09-25 date, dropping >50-file commits, weighted by fix-like
-  messages then file size. Role labels follow bench/README.md's ADR-0030
-  vocabulary table exactly: mvnw and .mvn/wrapper/* are `manifest`, dotfiles
-  (.editorconfig) are `config`, and theme.css (a stylesheet) is `source`, not
-  `asset` -- images stay `asset`.
+labelledBy: >-
+  Labelled by reading the checkout directly at the pinned sha: git ls-files, pom.xml <modules>/<packaging> for every module and profile, targeted grep for annotations, and reading individual files to confirm class bodies. containers: checked every module (core: server, server-mcp, server-ui, client, starters -- none have a main class, all are libraries; server-cloud, profile-gated, also has no main class) plus every module under spring-boot-admin-samples/ including two profile-gated ones (eureka, consul, zookeeper -- "discovery" profile) and sample-custom-ui (a Vue-only frontend module, no Java, no fit in the kind vocabulary -- excluded). 8 sample apps qualify as deployables: 7 use @SpringBootApplication directly, sample-war (<packaging>war</packaging>) also carries @SpringBootApplication -- labelled kind war on the packaging, not spring-boot, since that's how it's actually deployed. No JPA @Entity classes and no SQL/schema files exist anywhere in the repo (`git grep -l @Entity` empty, no *.sql files) -- entities/tables omitted, this is a stateless monitoring tool with in-memory/pluggable-store instance registries, not a database-backed app. endpoints: a genuinely surprising finding -- `git grep` for @RestController/@Controller/@RequestMapping at class level across every module's non-test main source returns zero matches repo-wide. SBA's real REST surface (ApplicationsController, InstancesController, two InstancesProxyController variants, NotificationFilterController, UiController, all under spring-boot-admin-server(-ui)/.../web) is stamped with a project-private marker annotation, @AdminController (spring-boot-admin-server/src/main/java/de/codecentric/boot/admin/server/web/AdminController.java), read in full and confirmed to carry no @Controller/@RestController meta-annotation of its own -- just @Target/@Retention/@Documented. Individual methods on those classes do carry real @GetMapping/@PostMapping/@DeleteMapping/ @RequestMapping. Per this task's own instruction ("Spring Boot Admin: only @RestController/@Controller/@RequestMapping-declared routes"), @AdminController does not qualify, so `endpoints` is omitted rather than reverse-engineering SBA's custom handler-mapping wiring to reconstruct routes the annotations don't literally declare -- flagging this as the single biggest source of possible disagreement with a differently-reasoned tool or reviewer. injections samples constructor injection across server/server-ui controllers and services, plus the repo's only main-source Lombok @RequiredArgsConstructor site (of the 44 Lombok-using files corpus.yaml counted, only 1 in main source uses constructor- generation; the rest are @Data/@Getter/@Builder elsewhere or in test source). riskyFiles from git log --no-merges over the 12 months before the pinned commit's 2026-09-25 date, dropping >50-file commits, weighted by fix-like messages then file size. Role labels follow bench/README.md's ADR-0030 vocabulary table exactly: mvnw and .mvn/wrapper/* are `manifest`, dotfiles (.editorconfig) are `config`, and theme.css (a stylesheet) is `source`, not `asset` -- images stay `asset`.
+   Corrected on review: added the servlet-graalvm sample, a @SpringBootApplication (SpringBootAdminServletApplication.java:24); removed a role entry for ApplicationsControllerTest.java, which is not in the repository at the pinned commit.
 roles:
   - { path: pom.xml, role: manifest }
   - { path: mvnw, role: manifest }
@@ -56,7 +16,6 @@ roles:
   - { path: spring-boot-admin-server/src/main/java/de/codecentric/boot/admin/server/services/StatusUpdater.java, role: source }
   - { path: spring-boot-admin-server-ui/src/main/frontend/notifications.ts, role: source }
   - { path: spring-boot-admin-samples/spring-boot-admin-sample-servlet/src/main/java/de/codecentric/boot/admin/sample/SpringBootAdminServletApplication.java, role: source }
-  - { path: spring-boot-admin-server/src/test/java/de/codecentric/boot/admin/server/web/ApplicationsControllerTest.java, role: test }
   - { path: spring-boot-admin-server-ui/src/main/frontend/notifications.spec.ts, role: test }
   - { path: spring-boot-admin-server-ui/src/test/resources/mockito-extensions/org.mockito.plugins.MockMaker, role: test }
   - { path: spring-boot-admin-samples/spring-boot-admin-sample-eureka/src/main/resources/application.yml, role: config }
@@ -80,6 +39,9 @@ containers:
   - { name: spring-boot-admin-sample-eureka, kind: spring-boot, path: spring-boot-admin-samples/spring-boot-admin-sample-eureka }
   - { name: spring-boot-admin-sample-consul, kind: spring-boot, path: spring-boot-admin-samples/spring-boot-admin-sample-consul }
   - { name: spring-boot-admin-sample-zookeeper, kind: spring-boot, path: spring-boot-admin-samples/spring-boot-admin-sample-zookeeper }
+  - name: spring-boot-admin-sample-servlet-graalvm
+    kind: spring-boot
+    path: spring-boot-admin-samples/spring-boot-admin-sample-servlet-graalvm
 injections:
   - { from: de.codecentric.boot.admin.server.web.ApplicationsController, to: de.codecentric.boot.admin.server.services.ApplicationRegistry, via: constructor }
   - { from: de.codecentric.boot.admin.server.web.ApplicationsController, to: org.springframework.context.ApplicationEventPublisher, via: constructor }
