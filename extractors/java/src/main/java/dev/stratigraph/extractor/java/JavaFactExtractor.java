@@ -629,6 +629,47 @@ final class JavaFactExtractor {
             }
         }
 
+        /**
+         * A launchable class, stated per declaring file (ADR-0040): the same
+         * fqn declared in two modules is one class node, and the second copy
+         * may not even be type-attributed, but each module that contains a
+         * {@code static void main(String[])} is a candidate deployable. Read
+         * from syntax, which is all it takes.
+         */
+        private void emitMainClass(J.MethodDeclaration declaration) {
+            if (!"main".equals(declaration.getSimpleName())
+                    || !declaration.hasModifier(J.Modifier.Type.Static)
+                    || currentModuleFqn == null
+                    || declaration.getParameters().size() != 1
+                    || !(declaration.getParameters().get(0) instanceof J.VariableDeclarations)) {
+                return;
+            }
+            J.VariableDeclarations parameter = (J.VariableDeclarations) declaration.getParameters().get(0);
+            TypeTree declared = parameter.getTypeExpression();
+            boolean array = declared instanceof J.ArrayType || parameter.getVarargs() != null;
+            TypeTree element = declared instanceof J.ArrayType ? ((J.ArrayType) declared).getElementType() : declared;
+            String written = element == null ? "" : element.printTrimmed().replace(" ", "");
+            boolean stringArray = array && written.matches("(java\\.lang\\.)?String");
+            J.ClassDeclaration owner = getCursor().firstEnclosing(J.ClassDeclaration.class);
+            if (!stringArray || owner == null) {
+                return;
+            }
+            String attributed = owner.getType() == null ? null : Fqn.type(owner.getType());
+            String ownerFqn = attributed != null && !attributed.contains(Fqn.UNKNOWN)
+                    ? attributed
+                    : qualified(getCursor().firstEnclosing(JavaSourceFile.class), owner.getSimpleName());
+            Map<String, Object> attrs = new LinkedHashMap<>();
+            attrs.put("main", true);
+            emitter.edge("contains", new NodeRef("module", currentModuleFqn), new NodeRef("class", ownerFqn),
+                    path, line(declaration), attrs);
+        }
+
+        /** A top-level type's fqn from the file's own package declaration. */
+        private String qualified(JavaSourceFile cu, String simpleName) {
+            String pkg = cu == null ? Fqn.DEFAULT_PACKAGE : Fqn.pkg(declaredPackage(cu));
+            return Fqn.DEFAULT_PACKAGE.equals(pkg) ? simpleName : pkg + "." + simpleName;
+        }
+
         /** A Spring Data {@code @Query}: the string, and whether it is native SQL or JPQL. */
         private void recordQuery(List<ResolvedAnnotation> annotations, JavaType.Method type) {
             for (ResolvedAnnotation annotation : annotations) {
@@ -865,6 +906,7 @@ final class JavaFactExtractor {
 
         @Override
         public J.MethodDeclaration visitMethodDeclaration(J.MethodDeclaration declaration, Void unused) {
+            emitMainClass(declaration);
             JavaType.Method type = declaration.getMethodType();
             if (type == null) {
                 return super.visitMethodDeclaration(declaration, unused);
@@ -884,19 +926,6 @@ final class JavaFactExtractor {
 
             NodeRef self = new NodeRef("method", Fqn.method(type));
 
-            // A launchable class, stated per declaring file (ADR-0040): the
-            // same fqn declared in two modules is one class node, but each
-            // module that contains a main class is a candidate deployable.
-            if ("main".equals(declaration.getSimpleName())
-                    && declaration.hasModifier(J.Modifier.Type.Static)
-                    && Fqn.method(type).endsWith("#main(java.lang.String[])")
-                    && currentModuleFqn != null) {
-                Map<String, Object> mainAttrs = new LinkedHashMap<>();
-                mainAttrs.put("main", true);
-                emitter.edge("contains", new NodeRef("module", currentModuleFqn),
-                        new NodeRef(nodeKindOf(type.getDeclaringType()), Fqn.type(type.getDeclaringType())),
-                        path, line(declaration), mainAttrs);
-            }
             emitter.node("method", Fqn.method(type),
                     isConstructor(declaration) ? "<init>" : declaration.getSimpleName(),
                     new NodeRef(nodeKindOf(type.getDeclaringType()), Fqn.type(type.getDeclaringType())),

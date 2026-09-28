@@ -553,6 +553,28 @@ class RefusesToGuessTest {
     }
 
     @Test
+    void eachModuleDeclaringAMainClassSaysSoEvenForADuplicatedClass(@TempDir Path repo) throws Exception {
+        for (String module : List.of("a", "b")) {
+            write(repo, module + "/pom.xml",
+                    "<project><groupId>x</groupId><artifactId>" + module + "</artifactId></project>");
+            write(repo, module + "/src/main/java/app/App.java", """
+                    package app;
+                    public class App {
+                        public static void main(String[] args) {}
+                    }
+                    """);
+        }
+        List<String> mains = extract(repo).stream()
+                .filter(node -> "edge".equals(node.path("type").asText())
+                        && "contains".equals(node.path("kind").asText())
+                        && node.path("attrs").path("main").asBoolean())
+                .map(node -> node.path("src").path("fqn").asText() + " -> " + node.path("dst").path("fqn").asText())
+                .sorted()
+                .toList();
+        assertEquals(List.of("x:a -> app.App", "x:b -> app.App"), mains);
+    }
+
+    @Test
     void willNotNameATableUnderANamingStrategyItDoesNotKnow(@TempDir Path repo) throws Exception {
         // ADR-0036: a default-named entity's table is its name put through the
         // module's physical naming strategy. A custom strategy class could do
