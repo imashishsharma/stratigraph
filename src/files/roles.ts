@@ -57,6 +57,7 @@ const LOCKFILES = new Set([
 ]);
 
 const MANIFESTS = new Set([
+  'pnpm-workspace.yaml',
   'package.json',
   'pom.xml',
   'build.gradle',
@@ -113,14 +114,25 @@ const SOURCE_EXTENSIONS = new Set([
   '.css', '.scss', '.sass', '.less',
   '.sql', '.py', '.go', '.rb', '.cs', '.php', '.rs', '.c', '.cc', '.cpp', '.h', '.hpp',
   '.swift', '.m', '.dart', '.sh', '.bash', '.ps1',
+  // Interface definitions and JSP tag files are hand-written program text.
+  '.proto', '.graphql', '.graphqls', '.gql', '.tag', '.tagx',
 ]);
 
 const DOC_EXTENSIONS = new Set(['.md', '.markdown', '.adoc', '.asciidoc', '.rst', '.txt']);
-const DOC_NAMES = new Set(['LICENSE', 'LICENCE', 'NOTICE', 'CHANGELOG', 'AUTHORS', 'CONTRIBUTORS', 'COPYING']);
+const DOC_NAMES = new Set([
+  'LICENSE', 'LICENCE', 'NOTICE', 'CHANGELOG', 'AUTHORS', 'CONTRIBUTORS', 'COPYING',
+  'COPYRIGHT', 'NEWS', 'CHANGES', 'HISTORY',
+]);
+
+/** A SQL file whose first kilobyte creates or alters a table is DDL. */
+const DDL_HEAD = /\b(?:CREATE|ALTER)\s+(?:(?:GLOBAL|LOCAL)\s+)?(?:(?:TEMPORARY|TEMP|CACHED|MEMORY)\s+)?TABLE\b/i;
+
+/** Formats a Liquibase changelog can be written in. */
+const CHANGELOG_EXTENSIONS = new Set(['.xml', '.yaml', '.yml', '.json']);
 
 const CONFIG_EXTENSIONS = new Set([
   '.json', '.json5', '.yml', '.yaml', '.xml', '.properties', '.toml', '.ini', '.conf',
-  '.cfg', '.env', '.xsd', '.wsdl', '.graphql', '.proto',
+  '.cfg', '.env', '.xsd', '.wsdl', '.config',
 ]);
 const CONFIG_NAMES = new Set([
   '.gitignore', '.gitattributes', '.editorconfig', '.npmrc', '.nvmrc', '.browserslistrc',
@@ -160,6 +172,9 @@ export function classifyPath(
   readHead: () => string | null,
 ): RoleAssignment {
   const role = (r: FileRole, rule: string): RoleAssignment => ({ role: r, rule, line: null });
+  // Read at most once, however many rules ask.
+  let head: string | null | undefined;
+  const readOnce = () => (head === undefined ? (head = readHead()) : head);
 
   if (attrs.generated) return role('generated', 'gitattributes:linguist-generated');
   if (attrs.vendored) return role('vendored', 'gitattributes:linguist-vendored');
@@ -188,22 +203,39 @@ export function classifyPath(
     return role('migration', 'name:schema*.sql');
   }
 
-  const testDir = underDir(dir, TEST_DIRS);
+  // Under a main source root, a directory named `test` or `tests` is a
+  // package, not a test root: `src/main/java/…/gateway/tests/grpc/` is main code.
+  const mainRoot = dir.indexOf('/src/main/');
+  const testDir = underDir(mainRoot < 0 ? dir : dir.slice(0, mainRoot + 1), TEST_DIRS);
   if (testDir !== null) return role('test', `path:${testDir}`);
   for (const [pattern, rule] of TEST_NAMES) {
     if (pattern.test(name)) return role('test', rule);
   }
 
+  // Migrations recognised by what they are, wherever they sit: a Flyway
+  // versioned script by its name, DDL and Liquibase changelogs by their first
+  // kilobyte (ADR-0037).
+  if (/^V\d+(?:[._]\d+)*__.+\.sql$/.test(name)) return role('migration', 'name:V*__*.sql');
+  if (ext === '.sql' && DDL_HEAD.test(readOnce() ?? '')) return role('migration', 'header:DDL');
+  if (CHANGELOG_EXTENSIONS.has(ext) && (readOnce() ?? '').includes('databaseChangeLog')) {
+    return role('migration', 'header:databaseChangeLog');
+  }
+
   if (SOURCE_EXTENSIONS.has(ext)) {
-    const marker = findMarker(readHead());
+    const marker = findMarker(readOnce());
     if (marker !== null) return { role: 'generated', rule: `header:${marker.label}`, line: marker.line };
     return role('source', `ext:${ext}`);
   }
 
-  if (DOC_NAMES.has(name.replace(/\.[^.]*$/, ''))) return role('docs', `name:${name.replace(/\.[^.]*$/, '')}`);
+  const stem = name.replace(/\.[^.]*$/, '');
+  if (DOC_NAMES.has(stem.toUpperCase())) return role('docs', `name:${stem}`);
   if (DOC_EXTENSIONS.has(ext)) return role('docs', `ext:${ext}`);
   if (CONFIG_NAMES.has(name)) return role('config', `name:${name}`);
   if (CONFIG_EXTENSIONS.has(ext)) return role('config', `ext:${ext}`);
+  // ADR-0030: dotfiles are configuration, and so is what a jar reads from
+  // META-INF (service registrations, spring.factories, AutoConfiguration.imports).
+  if (name.startsWith('.')) return role('config', 'name:.*');
+  if (dir.includes('/META-INF/')) return role('config', 'path:META-INF/');
   if (ASSET_EXTENSIONS.has(ext)) return role('asset', `ext:${ext}`);
   return role('other', 'none');
 }

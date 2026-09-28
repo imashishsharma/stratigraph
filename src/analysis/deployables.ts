@@ -11,7 +11,7 @@
 
 import type { Db } from '../db/database.js';
 import type { DeployableKind, ModuleAttrs } from '../facts/types.js';
-import { moduleAncestry } from './package-graph.js';
+import { declaredInTest, moduleAncestry } from './package-graph.js';
 
 const SPRING_BOOT_APPLICATION = 'org.springframework.boot.autoconfigure.SpringBootApplication';
 
@@ -48,11 +48,17 @@ export function loadModuleInfo(db: Db, runId: number): ModuleInfo[] {
     .all(runId) as Array<{ id: number; fqn: string; name: string; attrs: string | null }>;
 
   const mainClasses = springBootApplications(db, runId);
+  const withMain = modulesWithMainMethod(db, runId);
 
   return rows.map((row) => {
     const attrs = parseAttrs(row.attrs);
     const proofs: DeployableProof[] = [];
-    if (attrs.deployable !== undefined) {
+    // The Boot plugin repackages a module into an executable jar only when
+    // there is a main class to launch; a library that applies it (to share a
+    // build configuration) ships nothing runnable (ADR-0040, benchmark M11).
+    const pluginOnly =
+      attrs.deployable === 'spring-boot' && !withMain.has(row.id) && !mainClasses.has(row.id);
+    if (attrs.deployable !== undefined && !pluginOnly) {
       proofs.push({
         kind: attrs.deployable,
         rule: attrs.deployableRule ?? attrs.deployable,
@@ -69,6 +75,25 @@ export function loadModuleInfo(db: Db, runId: number): ModuleInfo[] {
       attrs.packaging === 'pom' ? 'aggregator' : proofs.length > 0 ? 'deployable' : 'library';
     return { id: row.id, fqn: row.fqn, name: row.name, attrs, role, proofs: role === 'aggregator' ? [] : proofs };
   });
+}
+
+/** Modules declaring a `static void main(String[])` outside test code. */
+function modulesWithMainMethod(db: Db, runId: number): Set<number> {
+  const rows = db
+    .prepare(
+      /* sql */ `
+      WITH RECURSIVE
+        main_method(id) AS (
+          SELECT n.id FROM node n
+           WHERE n.run_id = @runId AND n.kind = 'method' AND n.is_stub = 0
+             AND n.fqn LIKE '%#main(java.lang.String[])'
+             AND NOT ${declaredInTest('n')}
+        ),
+        ${moduleAncestry('main_method')}
+      SELECT DISTINCT ao.ancestor_id AS moduleId FROM ancestor_of ao`,
+    )
+    .all({ runId }) as Array<{ moduleId: number }>;
+  return new Set(rows.map((row) => row.moduleId));
 }
 
 /** `@SpringBootApplication` classes outside test code, by the module holding them. */

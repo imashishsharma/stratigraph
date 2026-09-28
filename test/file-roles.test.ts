@@ -206,3 +206,33 @@ describe('listRepoFiles', () => {
     expect(listRepoFiles(root, pathScope([], ['web/'])).files).toEqual(['web/app.ts']);
   });
 });
+
+describe('classifyPath, by content and convention (ADR-0037, ADR-0030)', () => {
+  const head = (text: string) => () => text;
+  it.each([
+    ['sql/eladmin.sql', 'CREATE TABLE `sys_user` (', 'migration', 'header:DDL'],
+    ['conf/upgrade.sql', 'ALTER TABLE config_info ADD COLUMN x int;', 'migration', 'header:DDL'],
+    ['src/main/resources/data.sql', "INSERT INTO owners VALUES (1, 'x');", 'source', 'ext:.sql'],
+    ['invoice/src/main/resources/migration/V20190924__add.sql', 'select 1', 'migration', 'name:V*__*.sql'],
+    ['api/src/main/resources/liquibase-schema-only.xml', '<databaseChangeLog xmlns="x">', 'migration', 'header:databaseChangeLog'],
+    ['api/src/main/proto/service.proto', 'syntax = "proto3";', 'source', 'ext:.proto'],
+    ['src/main/resources/schema/schema.graphqls', 'type Query {}', 'source', 'ext:.graphqls'],
+    ['.env', '', 'config', 'name:.*'],
+    ['lombok.config', '', 'config', 'ext:.config'],
+    ['core/src/main/resources/META-INF/spring.factories', '', 'config', 'path:META-INF/'],
+    ['NEWS', '', 'docs', 'name:NEWS'],
+    ['resources/copyright', '', 'docs', 'name:copyright'],
+    ['pnpm-workspace.yaml', '', 'manifest', 'name:pnpm-workspace.yaml'],
+  ])('%s → %s', (path, text, expectedRole, expectedRule) => {
+    expect(classifyPath(path, NONE, head(text))).toMatchObject({ role: expectedRole, rule: expectedRule });
+  });
+});
+
+describe('classifyPath under a main source root', () => {
+  it('reads a package named tests as main code', () => {
+    expect(
+      classifyPath('gateway-integration-tests/grpc/src/main/java/org/x/tests/grpc/GrpcApp.java', NONE, () => ''),
+    ).toMatchObject({ role: 'source' });
+    expect(classifyPath('module/src/test/java/org/x/AppTest.java', NONE, () => '')).toMatchObject({ role: 'test' });
+  });
+});

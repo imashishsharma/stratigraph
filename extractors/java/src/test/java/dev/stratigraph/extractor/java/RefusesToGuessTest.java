@@ -394,6 +394,72 @@ class RefusesToGuessTest {
     }
 
     @Test
+    void readsMappingsThroughAFirstPartyMetaAnnotationAndConstantPaths(@TempDir Path repo) throws Exception {
+        // ADR-0043: a first-party annotation declared with a Spring mapping is
+        // that mapping; a path built from source-set constants is a path.
+        write(repo, "src/main/java/app/AnonymousGetMapping.java", """
+                package app;
+                import org.springframework.web.bind.annotation.RequestMapping;
+                import org.springframework.web.bind.annotation.RequestMethod;
+                @RequestMapping(method = RequestMethod.GET)
+                public @interface AnonymousGetMapping { String[] value() default {}; }
+                """);
+        write(repo, "src/main/java/app/Paths.java", """
+                package app;
+                public interface Paths { String PREFIX = "/api"; String USERS = PREFIX + "/users"; }
+                """);
+        write(repo, "src/main/java/app/UserController.java", """
+                package app;
+                import org.springframework.web.bind.annotation.RestController;
+                import org.springframework.web.bind.annotation.RequestMapping;
+                import org.springframework.web.bind.annotation.PostMapping;
+                @RestController
+                @RequestMapping(Paths.USERS)
+                public class UserController {
+                    @AnonymousGetMapping("/{id:[0-9]+}") public String get() { return ""; }
+                    @PostMapping(path = "/reset") public void reset() {}
+                }
+                """);
+        List<String> endpoints = extract(repo).stream()
+                .filter(node -> "node".equals(node.path("type").asText())
+                        && "endpoint".equals(node.path("kind").asText()))
+                .map(node -> node.path("fqn").asText())
+                .sorted()
+                .toList();
+        assertEquals(List.of("GET /api/users/{id}", "POST /api/users/reset"), endpoints);
+    }
+
+    @Test
+    void aClassConstructedInABeanMethodIsInjectedThroughItsConstructor(@TempDir Path repo) throws Exception {
+        write(repo, "src/main/java/app/Registry.java", "package app; public class Registry {}");
+        write(repo, "src/main/java/app/Locator.java", """
+                package app;
+                public class Locator { public Locator(Registry registry) {} }
+                """);
+        write(repo, "src/main/java/app/Unused.java", """
+                package app;
+                public class Unused { public Unused(Registry registry) {} }
+                """);
+        write(repo, "src/main/java/app/Config.java", """
+                package app;
+                import org.springframework.context.annotation.Bean;
+                import org.springframework.context.annotation.Configuration;
+                @Configuration
+                public class Config {
+                    @Bean Object locator() { return new Locator(new Registry()); }
+                }
+                """);
+        List<String> injections = extract(repo).stream()
+                .filter(node -> "edge".equals(node.path("type").asText())
+                        && "injects".equals(node.path("kind").asText()))
+                .map(node -> node.path("src").path("fqn").asText() + " -> "
+                        + node.path("dst").path("fqn").asText())
+                .sorted()
+                .toList();
+        assertEquals(List.of("app.Locator -> app.Registry"), injections);
+    }
+
+    @Test
     void willNotNameATableUnderANamingStrategyItDoesNotKnow(@TempDir Path repo) throws Exception {
         // ADR-0036: a default-named entity's table is its name put through the
         // module's physical naming strategy. A custom strategy class could do

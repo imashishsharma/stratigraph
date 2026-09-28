@@ -50,6 +50,7 @@ the code when it is incidental. Either way, before the commit.
 | [0040](0040-containers-are-deployables.md) | A C4 container is a deployable, proved by a build file or a main class | accepted |
 | [0041](0041-split-packages.md) | A split package is one node with a `contains` edge from each module | accepted |
 | [0042](0042-angular-structure.md) | An Angular package is a structural boundary, not a directory; service calls are edges | accepted |
+| [0043](0043-what-the-compiler-would-fold.md) | Source-set constants, first-party meta-annotations and @Bean-built classes are read | accepted |
 
 Format: context, decision, alternatives considered (with why each was rejected),
 consequences — including the costs, not only the benefits.

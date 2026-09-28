@@ -1,6 +1,7 @@
 {"v":1,"type":"meta","extractor":"java","extractorVersion":"1.1.0","repoPath":"<repo>"}
 {"v":1,"type":"file","path":"core/src/main/java/com/example/split/util/Strings.java","language":"java","loc":10}
 {"v":1,"type":"file","path":"extra/src/main/java/com/example/split/report/Report.java","language":"java","loc":9}
+{"v":1,"type":"file","path":"extra/src/main/java/com/example/split/report/ReportApplication.java","language":"java","loc":8}
 {"v":1,"type":"file","path":"extra/src/main/java/com/example/split/util/Numbers.java","language":"java","loc":10}
 {"v":1,"type":"node","kind":"module","fqn":"com.example.split:core","name":"core","attrs":{"root":"core","buildFile":"core/pom.xml"}}
 {"v":1,"type":"node","kind":"module","fqn":"com.example.split:extra","name":"extra","attrs":{"root":"extra","buildFile":"extra/pom.xml","deployable":"spring-boot","deployableFile":"extra/pom.xml","deployableLine":16,"deployableRule":"maven:build/plugins/spring-boot-maven-plugin"}}
@@ -15,6 +16,8 @@
 {"v":1,"type":"node","kind":"method","fqn":"com.example.split.report.Report#total(java.lang.String)","name":"total","parent":{"kind":"class","fqn":"com.example.split.report.Report"},"file":"extra/src/main/java/com/example/split/report/Report.java","startLine":6,"endLine":8,"attrs":{"modifiers":["public"],"returns":"int"}}
 {"v":1,"type":"edge","kind":"calls","src":{"kind":"method","fqn":"com.example.split.report.Report#total(java.lang.String)"},"dst":{"kind":"method","fqn":"com.example.split.util.Numbers#parse(java.lang.String)"},"file":"extra/src/main/java/com/example/split/report/Report.java","line":7}
 {"v":1,"type":"edge","kind":"imports","src":{"kind":"class","fqn":"com.example.split.report.Report"},"dst":{"kind":"class","fqn":"com.example.split.util.Numbers"},"file":"extra/src/main/java/com/example/split/report/Report.java","line":3}
+{"v":1,"type":"node","kind":"class","fqn":"com.example.split.report.ReportApplication","name":"ReportApplication","parent":{"kind":"package","fqn":"com.example.split.report"},"file":"extra/src/main/java/com/example/split/report/ReportApplication.java","startLine":4,"endLine":8,"attrs":{"modifiers":["public"]}}
+{"v":1,"type":"node","kind":"method","fqn":"com.example.split.report.ReportApplication#main(java.lang.String[])","name":"main","parent":{"kind":"class","fqn":"com.example.split.report.ReportApplication"},"file":"extra/src/main/java/com/example/split/report/ReportApplication.java","startLine":6,"endLine":7,"attrs":{"modifiers":["public","static"],"returns":"void"}}
 {"v":1,"type":"edge","kind":"contains","src":{"kind":"module","fqn":"com.example.split:core"},"dst":{"kind":"package","fqn":"com.example.split.util"},"file":"core/src/main/java/com/example/split/util/Strings.java","line":1}
 {"v":1,"type":"edge","kind":"contains","src":{"kind":"module","fqn":"com.example.split:extra"},"dst":{"kind":"package","fqn":"com.example.split.util"},"file":"extra/src/main/java/com/example/split/util/Numbers.java","line":1}
 {"v":1,"type":"diagnostic","level":"info","message":"package com.example.split.util is split across modules com.example.split:core, com.example.split:extra; each module's half is recorded with a contains edge","file":"extra/src/main/java/com/example/split/util/Numbers.java","line":1}

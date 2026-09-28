@@ -116,3 +116,11 @@ in the notes as having no proof.
 - A library that no deployable depends on appears in no diagram; the notes list
   it.
 - Every existing module fact gains attributes; goldens change on that line only.
+
+## Amendment (M11 scorecard)
+
+- The Boot plugin alone is not proof: a module needs a `main` method or a
+  `@SpringBootApplication` class too, because a library applying the plugin to
+  share build configuration ships nothing runnable (nacos maintainer-client).
+- An Nx project rooted in an `e2e` directory or named `*-e2e*` is a test
+  harness, not a deployable, whatever its `projectType` says.

@@ -1,5 +1,6 @@
 {"v":1,"type":"meta","extractor":"java","extractorVersion":"1.1.0","repoPath":"<repo>"}
 {"v":1,"type":"file","path":"app/src/main/java/com/example/gradle/app/GreetingApi.java","language":"java","loc":9}
+{"v":1,"type":"file","path":"app/src/main/java/com/example/gradle/app/GreetingApplication.java","language":"java","loc":8}
 {"v":1,"type":"file","path":"lib/src/main/java/com/example/gradle/lib/Text.java","language":"java","loc":10}
 {"v":1,"type":"node","kind":"module","fqn":"app","name":"app","attrs":{"root":"app","buildFile":"app/build.gradle.kts","deployable":"spring-boot","deployableFile":"app/build.gradle.kts","deployableLine":4,"deployableRule":"gradle:plugins org.springframework.boot"}}
 {"v":1,"type":"node","kind":"module","fqn":"lib","name":"lib","attrs":{"root":"lib","buildFile":"lib/build.gradle"}}
@@ -9,6 +10,8 @@
 {"v":1,"type":"node","kind":"method","fqn":"com.example.gradle.app.GreetingApi#greet(java.lang.String)","name":"greet","parent":{"kind":"class","fqn":"com.example.gradle.app.GreetingApi"},"file":"app/src/main/java/com/example/gradle/app/GreetingApi.java","startLine":6,"endLine":8,"attrs":{"modifiers":["public"],"returns":"java.lang.String"}}
 {"v":1,"type":"edge","kind":"calls","src":{"kind":"method","fqn":"com.example.gradle.app.GreetingApi#greet(java.lang.String)"},"dst":{"kind":"method","fqn":"com.example.gradle.lib.Text#shout(java.lang.String)"},"file":"app/src/main/java/com/example/gradle/app/GreetingApi.java","line":7}
 {"v":1,"type":"edge","kind":"imports","src":{"kind":"class","fqn":"com.example.gradle.app.GreetingApi"},"dst":{"kind":"class","fqn":"com.example.gradle.lib.Text"},"file":"app/src/main/java/com/example/gradle/app/GreetingApi.java","line":3}
+{"v":1,"type":"node","kind":"class","fqn":"com.example.gradle.app.GreetingApplication","name":"GreetingApplication","parent":{"kind":"package","fqn":"com.example.gradle.app"},"file":"app/src/main/java/com/example/gradle/app/GreetingApplication.java","startLine":4,"endLine":8,"attrs":{"modifiers":["public"]}}
+{"v":1,"type":"node","kind":"method","fqn":"com.example.gradle.app.GreetingApplication#main(java.lang.String[])","name":"main","parent":{"kind":"class","fqn":"com.example.gradle.app.GreetingApplication"},"file":"app/src/main/java/com/example/gradle/app/GreetingApplication.java","startLine":6,"endLine":7,"attrs":{"modifiers":["public","static"],"returns":"void"}}
 {"v":1,"type":"node","kind":"package","fqn":"com.example.gradle.lib","name":"lib","parent":{"kind":"module","fqn":"lib"}}
 {"v":1,"type":"node","kind":"class","fqn":"com.example.gradle.lib.Text","name":"Text","parent":{"kind":"package","fqn":"com.example.gradle.lib"},"file":"lib/src/main/java/com/example/gradle/lib/Text.java","startLine":3,"endLine":10,"attrs":{"modifiers":["public","final"]}}
 {"v":1,"type":"node","kind":"method","fqn":"com.example.gradle.lib.Text#<init>()","name":"<init>","parent":{"kind":"class","fqn":"com.example.gradle.lib.Text"},"file":"lib/src/main/java/com/example/gradle/lib/Text.java","startLine":4,"endLine":5,"attrs":{"constructor":true,"modifiers":["private"]}}

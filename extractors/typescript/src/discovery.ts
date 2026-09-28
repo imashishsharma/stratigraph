@@ -253,7 +253,11 @@ function identifyModules(
       const decided = fromNx ?? fromNg;
       if (decided !== undefined) {
         attrs['projectType'] = decided.projectType;
-        if (decided.projectType === 'application') {
+        // An Nx `*-e2e` project is an application only in Nx's vocabulary: it
+        // runs tests against another app and ships nothing (ADR-0040).
+        const harness = /(^|[-_/])e2e($|[-_/])/i.test(root);
+        if (harness) attrs['testHarness'] = true;
+        if (decided.projectType === 'application' && !harness) {
           // `angular-app` when angular.json agrees it is an application:
           // that is the file that says the project is built by Angular.
           const proof = fromNg?.projectType === 'application' ? fromNg : decided;

@@ -189,8 +189,8 @@ describe('split packages (ADR-0041)', () => {
     ingestGolden('split-package');
     expect(containers()).toEqual(['extra']);
     const extra = model().container.elements.find((element) => element.name === 'extra');
-    // report + util; Report and Numbers. Strings is core's half of util.
-    expect(extra?.description).toBe('2 package(s), 2 type(s)');
+    // report + util; Report, ReportApplication and Numbers. Strings is core's half of util.
+    expect(extra?.description).toBe('2 package(s), 3 type(s)');
     expect(componentsOf('com.example.split:extra')?.elements.map((e) => e.name)).toEqual([
       'com.example.split.report',
       'com.example.split.util',

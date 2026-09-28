@@ -9,7 +9,7 @@
  * extractors (ADR-0001, ADR-0003).
  */
 
-import { readdirSync, readFileSync, realpathSync } from 'node:fs';
+import { closeSync, openSync, readdirSync, readFileSync, readSync, realpathSync } from 'node:fs';
 import { join, posix, relative, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
@@ -31,12 +31,41 @@ export const DDL_NAME = /^(?:[\w.-]*schema[\w.-]*\.sql|ddl(?:[-_.][\w.-]*)?\.sql
 
 const TEST_SEGMENT = /(^|\/)(src\/test|src\/it|src\/integrationTest|test|tests|__tests__)\//;
 
+/** Flyway's versioned-script name, wherever the script sits. */
+export const FLYWAY_NAME = /^V\d+(?:[._]\d+)*__.+\.sql$/;
+
 export function isMigrationPath(path: string): boolean {
   if (TEST_SEGMENT.test(path)) return false;
   const name = posix.basename(path);
-  if (DDL_NAME.test(name)) return true;
+  if (DDL_NAME.test(name) || FLYWAY_NAME.test(name)) return true;
   if (!/\.(sql|xml|ya?ml|json)$/i.test(name)) return false;
   return MIGRATION_DIRS.some((dir) => `/${path}`.includes(`/${dir}`));
+}
+
+const DDL_HEAD = /\b(?:CREATE|ALTER)\s+(?:(?:GLOBAL|LOCAL)\s+)?(?:(?:TEMPORARY|TEMP|CACHED|MEMORY)\s+)?TABLE\b/i;
+
+/**
+ * A migration by content, as the role classifier decides it (ADR-0037): a
+ * `.sql` whose first kilobyte creates or alters a table, or a changelog whose
+ * first kilobyte is a `databaseChangeLog`, outside test roots. Changelogs are
+ * looked for only under a `resources/` directory, to keep the sniff cheap.
+ */
+function looksLikeMigration(repoRoot: string, path: string): boolean {
+  if (TEST_SEGMENT.test(path)) return false;
+  const sql = /\.sql$/i.test(path);
+  const changelog = /\.(xml|ya?ml|json)$/i.test(path) && path.includes('resources/');
+  if (!sql && !changelog) return false;
+  let head: string;
+  try {
+    const fd = openSync(join(repoRoot, path), 'r');
+    const buffer = Buffer.alloc(1024);
+    const read = readSync(fd, buffer, 0, 1024, 0);
+    closeSync(fd);
+    head = buffer.subarray(0, read).toString('utf8');
+  } catch {
+    return false;
+  }
+  return sql ? DDL_HEAD.test(head) : head.includes('databaseChangeLog');
 }
 
 export interface Streams {
@@ -69,7 +98,9 @@ export async function run(argv: string[], streams: Streams): Promise<number> {
   const emitter = new FactEmitter(streams.stdout);
   emitter.meta(EXTRACTOR, VERSION, repoRoot);
 
-  const files = walk(repoRoot, excludes, includes).filter(isMigrationPath);
+  const files = walk(repoRoot, excludes, includes).filter(
+    (path) => isMigrationPath(path) || looksLikeMigration(repoRoot, path),
+  );
   streams.stderr.write(`discovered ${files.length} migration file(s)`);
   extract(repoRoot, files, emitter);
   streams.stderr.write(emitter.summary());

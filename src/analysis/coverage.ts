@@ -125,7 +125,13 @@ export function runCoverage(
     // The migrations extractor reads migration-role files; the others, source.
     const counted = language === 'migrations' ? 'migration' : 'source';
     for (const { path, role } of roles) {
-      if (extractorFor(path) !== language) continue;
+      // Migrations are also recognised by content (ADR-0037), which a path
+      // test cannot see: every migration-role file counts for that extractor.
+      const reads =
+        language === 'migrations'
+          ? role === 'migration' && /\.(sql|ddl|xml|ya?ml|json)$/i.test(path)
+          : extractorFor(path) === language;
+      if (!reads) continue;
       if (role === counted) {
         found += 1;
         if (parsed.has(path)) read += 1;

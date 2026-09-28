@@ -50,6 +50,16 @@ final class JavaFactExtractor {
     /** The build module directory of the file being visited. */
     private Path currentModuleDir;
 
+    /**
+     * Constructor injections of classes with no stereotype, held until the end
+     * of the run: they are injections only if some {@code @Bean} method
+     * constructs the class, which may be in any file (ADR-0043).
+     */
+    private final Map<String, List<Runnable>> pendingBeanInjections = new LinkedHashMap<>();
+
+    /** Classes a {@code @Bean} method returns or constructs. */
+    private final Set<String> beanClasses = new LinkedHashSet<>();
+
     /** Dependency jars for type attribution; empty is source-only (ADR-0006, ADR-0039). */
     private List<Path> classpath = List.of();
 
@@ -137,6 +147,8 @@ final class JavaFactExtractor {
         Map<String, String> declaredTypeNames = declaredTypeNames(parsed);
         Set<String> declaredPackages = declaredPackages(parsed);
         Constants.collect(parsed);
+        META.clear();
+        META.putAll(metaAnnotations(parsed, declaredTypeNames, declaredPackages));
 
         for (SourceFile sourceFile : parsed) {
             String path = sourceFile.getSourcePath().toString().replace('\\', '/');
@@ -176,6 +188,11 @@ final class JavaFactExtractor {
         }
 
         persistence.finish(emitter, repoRoot);
+        for (String bean : beanClasses) {
+            for (Runnable injection : pendingBeanInjections.getOrDefault(bean, List.of())) {
+                injection.run();
+            }
+        }
     }
 
     /** Same walk as {@link SourceDiscovery#moduleOf}, answering with the directory. */
@@ -186,6 +203,70 @@ final class JavaFactExtractor {
             }
         }
         return found.modules.isEmpty() ? repoRoot : found.modules.keySet().iterator().next();
+    }
+
+    /**
+     * First-party annotation type → the annotations on its declaration
+     * (ADR-0043). {@code @AnonymousGetMapping} declared with
+     * {@code @RequestMapping(method = GET)} is a GET mapping wherever it is
+     * used; an annotation declared with {@code @Component} is a stereotype.
+     */
+    private static final Map<String, List<ResolvedAnnotation>> META = new java.util.HashMap<>();
+
+    private static Map<String, List<ResolvedAnnotation>> metaAnnotations(
+            List<SourceFile> parsed, Map<String, String> declaredTypeNames, Set<String> declaredPackages) {
+        Map<String, List<ResolvedAnnotation>> meta = new java.util.HashMap<>();
+        for (SourceFile sourceFile : parsed) {
+            if (!(sourceFile instanceof JavaSourceFile)) {
+                continue;
+            }
+            JavaSourceFile cu = (JavaSourceFile) sourceFile;
+            String packageName = Fqn.pkg(cu.getClasses().isEmpty() || cu.getClasses().get(0).getType() == null
+                    ? declaredPackage(cu)
+                    : cu.getClasses().get(0).getType().getPackageName());
+            String path = sourceFile.getSourcePath().toString().replace('\\', '/');
+            TypeResolver resolver = new TypeResolver(cu, packageName, declaredTypeNames, declaredPackages,
+                    path.endsWith(".kt"));
+            new JavaIsoVisitor<Void>() {
+                @Override
+                public J.ClassDeclaration visitClassDeclaration(J.ClassDeclaration declaration, Void unused) {
+                    if (declaration.getKind() == J.ClassDeclaration.Kind.Type.Annotation
+                            && declaration.getType() != null) {
+                        List<ResolvedAnnotation> on = new ArrayList<>();
+                        for (J.Annotation annotation : declaration.getLeadingAnnotations()) {
+                            TypeResolver.Resolved answer = resolver.resolve(
+                                    annotation.getType(), writtenName(annotation.getAnnotationType()));
+                            if (answer.isResolved()) {
+                                on.add(new ResolvedAnnotation(answer.fqn, annotation));
+                            }
+                        }
+                        meta.put(Fqn.type(declaration.getType()), on);
+                    }
+                    return super.visitClassDeclaration(declaration, unused);
+                }
+            }.visit(cu, null);
+        }
+        return meta;
+    }
+
+    /** The annotations an annotation carries, transitively, a few levels deep. */
+    private static List<ResolvedAnnotation> metaOf(String fqn) {
+        List<ResolvedAnnotation> out = new ArrayList<>();
+        Set<String> seen = new LinkedHashSet<>();
+        List<String> frontier = List.of(fqn);
+        for (int depth = 0; depth < 3 && !frontier.isEmpty(); depth++) {
+            List<String> next = new ArrayList<>();
+            for (String current : frontier) {
+                for (ResolvedAnnotation annotation : META.getOrDefault(current, List.of())) {
+                    if (seen.add(annotation.fqn)) {
+                        out.add(annotation);
+                        next.add(annotation.fqn);
+                    }
+                }
+            }
+            frontier = next;
+        }
+        return out;
     }
 
     /** Every package the parsed source set declares a type in (ADR-0038). */
@@ -593,6 +674,26 @@ final class JavaFactExtractor {
                 boolean soleConstructorOfABean =
                         context.stereotype() != null && constructors.size() == 1;
                 if (!marked && !soleConstructorOfABean) {
+                    // Perhaps a bean all the same, if a @Bean method constructs
+                    // it: resolve now, emit at the end only if one does.
+                    if (constructors.size() == 1) {
+                        List<Runnable> pending = pendingBeanInjections.computeIfAbsent(context.fqn, k -> new ArrayList<>());
+                        deferred = pending;
+                        try {
+                            for (Statement parameter : constructor.getParameters()) {
+                                if (parameter instanceof J.VariableDeclarations) {
+                                    J.VariableDeclarations declared = (J.VariableDeclarations) parameter;
+                                    emitInjection(self, declared.getTypeExpression(), "bean-constructor",
+                                            declared.getVariables().isEmpty()
+                                                    ? null
+                                                    : declared.getVariables().get(0).getSimpleName(),
+                                            line(constructor));
+                                }
+                            }
+                        } finally {
+                            deferred = null;
+                        }
+                    }
                     continue;
                 }
                 for (Statement parameter : constructor.getParameters()) {
@@ -659,6 +760,30 @@ final class JavaFactExtractor {
                     .noneMatch(a -> FrameworkAnnotations.SPRING_BEAN.equals(a.fqn))) {
                 return;
             }
+            // What the method builds is a bean: its declared return type, and
+            // every class it constructs (ADR-0043).
+            if (declaration.getReturnTypeExpression() != null) {
+                TypeResolver.Resolved returned = resolver.resolve(
+                        declaration.getReturnTypeExpression().getType(), writtenName(declaration.getReturnTypeExpression()));
+                if (returned.isResolved()) {
+                    beanClasses.add(returned.fqn);
+                }
+            }
+            if (declaration.getBody() != null) {
+                new JavaIsoVisitor<Void>() {
+                    @Override
+                    public J.NewClass visitNewClass(J.NewClass created, Void unused) {
+                        if (created.getClazz() instanceof TypeTree) {
+                            TypeTree clazz = (TypeTree) created.getClazz();
+                            TypeResolver.Resolved built = resolver.resolve(clazz.getType(), writtenName(clazz));
+                            if (built.isResolved()) {
+                                beanClasses.add(built.fqn);
+                            }
+                        }
+                        return super.visitNewClass(created, unused);
+                    }
+                }.visit(declaration.getBody(), null);
+            }
             for (Statement parameter : declaration.getParameters()) {
                 if (parameter instanceof J.VariableDeclarations) {
                     J.VariableDeclarations declared = (J.VariableDeclarations) parameter;
@@ -668,31 +793,39 @@ final class JavaFactExtractor {
             }
         }
 
+        /** When set, injections are collected here instead of emitted. */
+        private List<Runnable> deferred;
+
         private void emitInjection(NodeRef target, TypeTree declaredType, String via, String member, Integer line) {
             if (declaredType == null) {
                 return;
             }
             String asWritten = writtenName(declaredType);
             TypeResolver.Resolved answer = resolver.resolve(declaredType.getType(), asWritten);
+            String file = path;
+            Runnable emit;
             if (!answer.isResolved()) {
                 // Counted, so coverage can say how many injection points were
                 // resolved out of how many were seen (ADR-0039).
-                emitter.diagnostic("info",
-                        "injection point " + target.fqn() + (member == null ? "" : "." + member)
-                                + " (" + via + "): its type " + asWritten + " cannot be resolved: "
-                                + answer.whyAmbiguous() + "; no injects edge recorded",
-                        path, line);
-                return;
+                String message = "injection point " + target.fqn() + (member == null ? "" : "." + member)
+                        + " (" + via + "): its type " + asWritten + " cannot be resolved: "
+                        + answer.whyAmbiguous() + "; no injects edge recorded";
+                emit = () -> emitter.diagnostic("info", message, file, line);
+            } else {
+                Map<String, Object> attrs = new LinkedHashMap<>();
+                attrs.put("via", via);
+                if (member != null) {
+                    attrs.put("member", member);
+                }
+                attrs.put("resolution", answer.resolution.wireName);
+                NodeRef dst = new NodeRef(nodeKindFor(declaredType.getType()), answer.fqn);
+                emit = () -> emitter.edge("injects", target, dst, file, line, attrs);
             }
-            Map<String, Object> attrs = new LinkedHashMap<>();
-            attrs.put("via", via);
-            if (member != null) {
-                attrs.put("member", member);
+            if (deferred != null) {
+                deferred.add(emit);
+            } else {
+                emit.run();
             }
-            attrs.put("resolution", answer.resolution.wireName);
-            emitter.edge("injects", target,
-                    new NodeRef(nodeKindFor(declaredType.getType()), answer.fqn),
-                    path, line, attrs);
         }
 
         private List<ResolvedAnnotation> resolveAll(List<J.Annotation> annotations) {
@@ -784,6 +917,32 @@ final class JavaFactExtractor {
                     emitEndpoint(method, basePaths, paths,
                             verbs.isEmpty() ? List.of("ANY") : verbs, "spring-mvc",
                             line(annotation.node));
+                    continue;
+                }
+
+                // A first-party annotation declared with a mapping (ADR-0043):
+                // the verb comes from the declaration, the path from the use.
+                List<String> metaVerbs = new ArrayList<>();
+                List<String> metaPaths = new ArrayList<>();
+                for (ResolvedAnnotation meta : metaOf(annotation.fqn)) {
+                    AnnotationArgs metaArgs = new AnnotationArgs(meta.node);
+                    String verb = FrameworkAnnotations.SPRING_METHOD_MAPPINGS.get(meta.fqn);
+                    if (verb != null) {
+                        metaVerbs.add(verb);
+                    } else if (FrameworkAnnotations.SPRING_REQUEST_MAPPING.equals(meta.fqn)) {
+                        List<String> named = metaArgs.enumNames("method");
+                        metaVerbs.addAll(named.isEmpty() ? List.of("ANY") : named);
+                    } else {
+                        continue;
+                    }
+                    metaPaths.addAll(metaArgs.strings("value"));
+                    metaPaths.addAll(metaArgs.strings("path"));
+                }
+                if (!metaVerbs.isEmpty()) {
+                    List<String> paths = new ArrayList<>(args.strings("value"));
+                    paths.addAll(args.strings("path"));
+                    emitEndpoint(method, basePaths, paths.isEmpty() ? metaPaths : paths, metaVerbs,
+                            "spring-mvc", line(annotation.node));
                     continue;
                 }
 
@@ -1091,6 +1250,15 @@ final class JavaFactExtractor {
                 String stereotype = FrameworkAnnotations.STEREOTYPES.get(annotation.fqn);
                 if (stereotype != null) {
                     return stereotype;
+                }
+            }
+            // A first-party annotation declared with a stereotype (ADR-0043).
+            for (ResolvedAnnotation annotation : annotations) {
+                for (ResolvedAnnotation meta : metaOf(annotation.fqn)) {
+                    String stereotype = FrameworkAnnotations.STEREOTYPES.get(meta.fqn);
+                    if (stereotype != null) {
+                        return stereotype;
+                    }
                 }
             }
             return null;

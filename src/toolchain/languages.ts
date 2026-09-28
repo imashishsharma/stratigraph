@@ -48,7 +48,10 @@ const TEST_SEGMENT = /(^|\/)(src\/test|src\/it|src\/integrationTest|test|tests|_
 function isMigration(path: string): boolean {
   if (TEST_SEGMENT.test(path)) return false;
   const name = path.slice(path.lastIndexOf('/') + 1);
-  if (DDL_NAME.test(name)) return true;
+  if (DDL_NAME.test(name) || /^V\d+(?:[._]\d+)*__.+\.sql$/.test(name)) return true;
+  // Any other SQL may be DDL, which only its content says; selecting the
+  // extractor for it costs one read of a few files (ADR-0037).
+  if (/\.sql$/i.test(name)) return true;
   if (!/\.(sql|xml|ya?ml|json)$/i.test(name)) return false;
   return MIGRATION_DIRS.some((dir) => `/${path}`.includes(`/${dir}`));
 }
