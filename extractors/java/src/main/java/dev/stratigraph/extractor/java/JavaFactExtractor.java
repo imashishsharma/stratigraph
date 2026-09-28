@@ -50,6 +50,9 @@ final class JavaFactExtractor {
     /** The build module directory of the file being visited. */
     private Path currentModuleDir;
 
+    /** The build module of the file being visited. */
+    private String currentModuleFqn;
+
     /**
      * Constructor injections of classes with no stereotype, held until the end
      * of the run: they are injections only if some {@code @Bean} method
@@ -192,6 +195,7 @@ final class JavaFactExtractor {
             Path absolute = repoRoot.resolve(sourceFile.getSourcePath());
             SourceDiscovery.ModuleId module = discovery.moduleOf(found, absolute);
             currentModuleDir = moduleDirOf(found, absolute);
+            currentModuleFqn = module.fqn;
             visit(cu, path, module, declaredTypeNames, declaredPackages);
         }
 
@@ -879,6 +883,20 @@ final class JavaFactExtractor {
             }
 
             NodeRef self = new NodeRef("method", Fqn.method(type));
+
+            // A launchable class, stated per declaring file (ADR-0040): the
+            // same fqn declared in two modules is one class node, but each
+            // module that contains a main class is a candidate deployable.
+            if ("main".equals(declaration.getSimpleName())
+                    && declaration.hasModifier(J.Modifier.Type.Static)
+                    && Fqn.method(type).endsWith("#main(java.lang.String[])")
+                    && currentModuleFqn != null) {
+                Map<String, Object> mainAttrs = new LinkedHashMap<>();
+                mainAttrs.put("main", true);
+                emitter.edge("contains", new NodeRef("module", currentModuleFqn),
+                        new NodeRef(nodeKindOf(type.getDeclaringType()), Fqn.type(type.getDeclaringType())),
+                        path, line(declaration), mainAttrs);
+            }
             emitter.node("method", Fqn.method(type),
                     isConstructor(declaration) ? "<init>" : declaration.getSimpleName(),
                     new NodeRef(nodeKindOf(type.getDeclaringType()), Fqn.type(type.getDeclaringType())),

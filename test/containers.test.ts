@@ -240,3 +240,28 @@ describe('split packages (ADR-0041)', () => {
     ]);
   });
 });
+
+describe('a main class declared in two modules (ADR-0040)', () => {
+  it('makes both modules deployable, since each states it contains one', () => {
+    const plugin = (root: string) => ({
+      root,
+      buildFile: `${root}/pom.xml`,
+      deployable: 'spring-boot',
+      deployableFile: `${root}/pom.xml`,
+      deployableLine: 10,
+      deployableRule: 'maven:build/plugins/spring-boot-maven-plugin',
+    });
+    seed([
+      { v: 1, type: 'meta', extractor: 'java', extractorVersion: '0' },
+      { v: 1, type: 'file', path: 'a/src/main/java/app/App.java', language: 'java' },
+      { v: 1, type: 'file', path: 'b/src/main/java/app/App.java', language: 'java' },
+      { v: 1, type: 'node', kind: 'module', fqn: 'x:a', name: 'a', attrs: plugin('a') },
+      { v: 1, type: 'node', kind: 'module', fqn: 'x:b', name: 'b', attrs: plugin('b') },
+      { v: 1, type: 'node', kind: 'package', fqn: 'app', name: 'app', parent: { kind: 'module', fqn: 'x:a' } },
+      { v: 1, type: 'node', kind: 'class', fqn: 'app.App', name: 'App', parent: { kind: 'package', fqn: 'app' }, file: 'a/src/main/java/app/App.java' },
+      { v: 1, type: 'edge', kind: 'contains', src: { kind: 'module', fqn: 'x:a' }, dst: { kind: 'class', fqn: 'app.App' }, file: 'a/src/main/java/app/App.java', line: 5, attrs: { main: true } },
+      { v: 1, type: 'edge', kind: 'contains', src: { kind: 'module', fqn: 'x:b' }, dst: { kind: 'class', fqn: 'app.App' }, file: 'b/src/main/java/app/App.java', line: 5, attrs: { main: true } },
+    ]);
+    expect(loadModuleInfo(db, runId).map((m) => `${m.fqn} ${m.role}`)).toEqual(['x:a deployable', 'x:b deployable']);
+  });
+});

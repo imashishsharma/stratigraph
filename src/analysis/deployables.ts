@@ -102,7 +102,14 @@ function modulesWithMainMethod(db: Db, runId: number): Set<number> {
              AND NOT ${declaredInTest('n')}
         ),
         ${moduleAncestry('main_method')}
-      SELECT DISTINCT ao.ancestor_id AS moduleId FROM ancestor_of ao`,
+      SELECT DISTINCT ao.ancestor_id AS moduleId FROM ancestor_of ao
+      UNION
+      -- Stated per declaring file by the extractor, so a class declared in two
+      -- modules counts for both (ADR-0040).
+      SELECT e.src_id FROM edge e JOIN node m ON m.id = e.src_id AND m.kind = 'module'
+        LEFT JOIN source_file f ON f.id = e.file_id
+       WHERE e.run_id = @runId AND e.kind = 'contains' AND e.attrs LIKE '%"main":true%'
+         AND NOT EXISTS (SELECT 1 FROM file_role r WHERE r.run_id = e.run_id AND r.path = f.path AND r.role = 'test')`,
     )
     .all({ runId }) as Array<{ moduleId: number }>;
   return new Set(rows.map((row) => row.moduleId));
