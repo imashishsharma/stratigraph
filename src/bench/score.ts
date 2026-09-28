@@ -74,8 +74,11 @@ export function scoreRun(
         : overlap(
             truth.endpoints.map(normaliseEndpoint),
             new Set(
-              buildHttpSurface(db, runId).endpoints.map((row) =>
-                normaliseEndpoint(`${row.method} ${row.path}`),
+              buildHttpSurface(db, runId).endpoints.flatMap((row) =>
+                // A mapping with no method serves every verb (ADR-0005's ANY).
+                (row.method === 'ANY' ? HTTP_VERBS : [row.method]).map((verb) =>
+                  normaliseEndpoint(`${verb} ${row.path}`),
+                ),
               ),
             ),
           ),
@@ -100,7 +103,8 @@ export function looksNonSource(path: string): boolean {
   }
   if (/(^|\/)(src\/test|test|tests|__tests__|e2e|spec)\//.test(path)) return true;
   if (/\.(spec|test)\.[jt]sx?$|Tests?\.(java|kt)$|IT\.(java|kt)$/.test(name)) return true;
-  if (/\.(json|ya?ml|xml|properties|md|txt|csv|sql|html|css|scss|svg|png|lock)$/.test(name)) return true;
+  // Templates and styles are source (ADR-0030); data and prose are not.
+  if (/\.(json|ya?ml|xml|properties|md|txt|csv|sql|svg|png|lock)$/.test(name)) return true;
   if (/\.min\.(js|css)$/.test(name)) return true;
   return false;
 }
@@ -173,9 +177,20 @@ function injectionRecall(db: Db, runId: number, expected: Truth['injections'] & 
     ).map((row) => `${ownerType(row.src)} -> ${row.dst}`),
   );
   return overlap(
-    expected.map((row) => `${row.from} -> ${row.to}`),
+    expected.map((row) => `${normaliseTypeId(row.from)} -> ${normaliseTypeId(row.to)}`),
     edges,
   );
+}
+
+const HTTP_VERBS = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS'];
+
+/**
+ * TypeScript classes are labelled `src/app/x.service.ts#XService`; the
+ * extractor's identity (ADR-0017) is `src/app/x.service:XService`. Same class.
+ */
+export function normaliseTypeId(id: string): string {
+  const ts = /^(.+)\.(?:ts|tsx|mts|cts)#([A-Za-z_$][\w$]*)$/.exec(id.trim());
+  return ts ? `${ts[1]}:${ts[2]}` : id.trim();
 }
 
 /** `a.B#field` or `a.B#m(x)` → `a.B`. An injection is scored by the receiving type. */
@@ -192,15 +207,28 @@ function containerScores(
   const output = buildC4Model(db, runId, { top: 20 }).container.elements.filter(
     (element) => element.kind === 'container',
   );
+  // A module's root directory is its most reliable key: a Boot app and the
+  // Angular app built into it can share a name, and package names differ from
+  // directory names (`@bitwarden/web-vault` lives in `apps/web`).
+  const rootOf = new Map(
+    (
+      db.prepare(`SELECT fqn, attrs FROM node WHERE run_id = ? AND kind = 'module'`).all(runId) as Array<{
+        fqn: string;
+        attrs: string | null;
+      }>
+    ).map((row) => [row.fqn, (JSON.parse(row.attrs ?? '{}') as { root?: string }).root ?? null]),
+  );
   const keysOf = (element: (typeof output)[number]) =>
     new Set(
       [element.name, ...element.evidence.map((evidence) => evidence.label)].flatMap((label) => [
         norm(label),
         norm(label.split(/[/:]/).filter(Boolean).pop() ?? label),
+        ...(rootOf.get(label) ? [`root:${normRoot(rootOf.get(label) as string)}`] : []),
       ]),
     );
   const outputKeys = output.map(keysOf);
   const truthKeys = truth.containers.map((container) => [
+    `root:${normRoot(container.path)}`,
     norm(container.name),
     norm(container.path.split('/').filter((part) => part !== '.' && part !== '').pop() ?? container.name),
   ]);
@@ -223,6 +251,11 @@ function containerScores(
       missed: precisionMissed,
     },
   };
+}
+
+function normRoot(path: string): string {
+  const trimmed = path.replace(/^\.\/?/, '').replace(/\/+$/, '');
+  return trimmed === '' ? '.' : trimmed;
 }
 
 function norm(text: string): string {

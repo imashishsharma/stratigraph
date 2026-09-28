@@ -51,7 +51,8 @@ injections:         # a sample (≥5 where the repo has them) of dependency-inje
                     # from the class that receives the dependency to the declared
                     # type of what it receives; include Lombok constructor injection.
                     # Java/Kotlin types by fqn; TypeScript classes as
-                    # `<repo-relative path>#<ClassName>`
+                    # `<repo-relative path>#<ClassName>` (the scorer reads it as the
+                    # extractor's `path-without-extension:ClassName`, ADR-0017)
   - { from: org.x.OwnerController, to: org.x.OwnerRepository, via: constructor }
 riskyFiles:         # up to 10 source files a senior engineer would call riskiest:
                     # most commits in the 12 months before the pinned commit

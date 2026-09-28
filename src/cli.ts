@@ -177,6 +177,7 @@ export function buildProgram(): Command {
     .option('--fetch', 'clone repositories that are missing (the only network step)')
     .option('--private <repo>', 'score a local repository; print aggregates only, never a name')
     .option('--verbose', "keep the pipeline's own progress output")
+    .option('--rescore', 'score the stores a previous run left in --out, without re-running the pipeline')
     .action(
       async (options: {
         corpus?: string;
@@ -187,6 +188,7 @@ export function buildProgram(): Command {
         fetch?: boolean;
         private?: string;
         verbose?: boolean;
+        rescore?: boolean;
       }) => {
         const global = overrides(program);
         const card = await runBench({
@@ -198,6 +200,7 @@ export function buildProgram(): Command {
           fetch: options.fetch,
           privateRepo: options.private,
           verbose: options.verbose,
+          rescore: options.rescore,
           javaHome: global.javaHome,
           extractorJar: global.extractorJar,
         });

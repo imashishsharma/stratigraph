@@ -5,7 +5,7 @@ import { dirname, join } from 'node:path';
 
 import { describe, expect, it, vi } from 'vitest';
 
-import { looksNonSource, normaliseEndpoint } from '../src/bench/score.js';
+import { looksNonSource, normaliseEndpoint, normaliseTypeId } from '../src/bench/score.js';
 import { BenchInputError, loadCorpus, loadTruth } from '../src/bench/truth.js';
 import { runBench } from '../src/commands/bench.js';
 import { setQuiet } from '../src/log.js';
@@ -42,6 +42,7 @@ describe('looksNonSource', () => {
     ['src/main/resources/i18n/en.json', true],
     ['src/main/java/a/Foo.java', false],
     ['src/app/foo.component.ts', false],
+    ['src/app/foo.component.html', false],
   ])('%s → %s', (path, expected) => {
     expect(looksNonSource(path)).toBe(expected);
   });
@@ -158,5 +159,12 @@ describe('runBench', () => {
     write(home, 'bench/corpus.yaml', `repos:\n  - { name: x, url: /nowhere, sha: ${pinned} }\n`);
     write(home, 'bench/truth/x.yaml', `name: x\nsha: ${'b'.repeat(40)}\n`);
     await expect(runBench({ cwd: home })).rejects.toThrow(/relabel it or move the pin back/);
+  });
+});
+
+describe('normaliseTypeId', () => {
+  it('reads a labelled TypeScript class the way the extractor names it', () => {
+    expect(normaliseTypeId('src/app/x.service.ts#XService')).toBe('src/app/x.service:XService');
+    expect(normaliseTypeId('com.acme.OrderService')).toBe('com.acme.OrderService');
   });
 });

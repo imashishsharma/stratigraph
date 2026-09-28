@@ -58,6 +58,8 @@ export interface BenchOptions {
   extractorJar?: string | undefined;
   /** Keep the pipeline's own progress output. */
   verbose?: boolean | undefined;
+  /** Score the stores a previous run left in `out`, without running the pipeline. */
+  rescore?: boolean | undefined;
 }
 
 export interface RepoResult {
@@ -127,8 +129,12 @@ export async function runBench(options: BenchOptions): Promise<Scorecard> {
     process.stderr.write(`bench: ${entry.name} … `);
     let result: RepoResult;
     try {
-      const repo = checkout(entry, cache, options.fetch === true);
-      result = await runOne(entry, repo, truth, join(out, entry.name), options);
+      if (options.rescore === true) {
+        result = score(entry, truth, join(out, entry.name), Date.now(), process.env);
+      } else {
+        const repo = checkout(entry, cache, options.fetch === true);
+        result = await runOne(entry, repo, truth, join(out, entry.name), options);
+      }
     } catch (err) {
       result = failed(entry, (err as Error).message, 0);
     }
@@ -205,6 +211,18 @@ async function runOne(
     setQuiet(false);
   }
 
+  return score(entry, truth, work, started, env);
+}
+
+/** Score the store a pipeline run left in `work`. */
+function score(
+  entry: CorpusEntry,
+  truth: Truth | null,
+  work: string,
+  started: number,
+  processEnv: NodeJS.ProcessEnv,
+): RepoResult {
+  const env = { ...processEnv, STRATIGRAPH_CONFIG_HOME: join(work, 'no-user-config') };
   const config = loadConfig({ cwd: work, env });
   const db = openDatabase(config.dbPath, { mustExist: true, readonly: true });
   try {
