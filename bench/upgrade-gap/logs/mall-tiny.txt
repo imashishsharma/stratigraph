@@ -1,0 +1,54 @@
+# mall-tiny  sha=a81ec4740a0c7c99a06ebffb43a14168beadffc3
+## baseline exit=0
+  tests=0 passed=0 failures=0 errors=0 skipped=0
+## recipe exit=0  32 files changed, 307 insertions(+), 285 deletions(-)
+  Dockerfile                                                                                  |  2 +-
+   pom.xml                                                                                     | 65 +++++++++++++++++++++++++++++++++++++++--------------------------
+   src/main/java/com/macro/mall/tiny/common/config/BaseRedisConfig.java                        |  2 ++
+   src/main/java/com/macro/mall/tiny/common/config/BaseSwaggerConfig.java                      | 51 ++++++++++++++++++++++++---------------------------
+   src/main/java/com/macro/mall/tiny/config/SwaggerConfig.java                                 |  2 --
+   src/main/java/com/macro/mall/tiny/modules/ums/controller/UmsAdminController.java            | 61 ++++++++++++++++++++++++++++++-------------------------------
+   src/main/java/com/macro/mall/tiny/modules/ums/controller/UmsMenuController.java             | 35 +++++++++++++++++------------------
+   src/main/java/com/macro/mall/tiny/modules/ums/controller/UmsResourceCategoryController.java | 23 +++++++++++------------
+   src/main/java/com/macro/mall/tiny/modules/ums/controller/UmsResourceController.java         | 31 +++++++++++++++----------------
+   src/main/java/com/macro/mall/tiny/modules/ums/controller/UmsRoleController.java             | 47 +++++++++++++++++++++++------------------------
+   src/main/java/com/macro/mall/tiny/modules/ums/dto/UmsAdminLoginParam.java                   |  8 ++++----
+   src/main/java/com/macro/mall/tiny/modules/ums/dto/UmsAdminParam.java                        | 18 +++++++++---------
+   src/main/java/com/macro/mall/tiny/modules/ums/dto/UmsMenuNode.java                          |  4 ++--
+   src/main/java/com/macro/mall/tiny/modules/ums/dto/UpdateAdminPasswordParam.java             | 10 +++++-----
+   src/main/java/com/macro/mall/tiny/modules/ums/model/UmsAdmin.java                           | 22 ++++++++++++----------
+   src/main/java/com/macro/mall/tiny/modules/ums/model/UmsAdminLoginLog.java                   | 10 ++++++----
+   src/main/java/com/macro/mall/tiny/modules/ums/model/UmsAdminRoleRelation.java               |  8 +++++---
+   src/main/java/com/macro/mall/tiny/modules/ums/model/UmsMenu.java                            | 24 +++++++++++++-----------
+   src/main/java/com/macro/mall/tiny/modules/ums/model/UmsResource.java                        | 18 ++++++++++--------
+   src/main/java/com/macro/mall/tiny/modules/ums/model/UmsResourceCategory.java                | 14 ++++++++------
+   src/main/java/com/macro/mall/tiny/modules/ums/model/UmsRole.java                            | 18 ++++++++++--------
+   src/main/java/com/macro/mall/tiny/modules/ums/model/UmsRoleMenuRelation.java                | 12 +++++++-----
+   src/main/java/com/macro/mall/tiny/modules/ums/model/UmsRoleResourceRelation.java            | 12 +++++++-----
+   src/main/java/com/macro/mall/tiny/modules/ums/service/impl/UmsAdminServiceImpl.java         |  2 +-
+   src/main/java/com/macro/mall/tiny/security/component/DynamicSecurityFilter.java             |  4 ++--
+  ...
+## post-recipe build exit=1
+  src/main/java/com/macro/mall/tiny/common/config/BaseSwaggerConfig.java:11 package springfox.documentation.builders does not exist
+  src/main/java/com/macro/mall/tiny/common/config/BaseSwaggerConfig.java:12 package springfox.documentation.spi.service.contexts does not exist
+  src/main/java/com/macro/mall/tiny/common/config/BaseSwaggerConfig.java:51 cannot find symbol
+  src/main/java/com/macro/mall/tiny/common/config/BaseSwaggerConfig.java:58 cannot find symbol
+  src/main/java/com/macro/mall/tiny/config/SwaggerConfig.java:11 package springfox.documentation.spring.web.plugins does not exist
+  src/main/java/com/macro/mall/tiny/config/SwaggerConfig.java:12 package springfox.documentation.spring.web.plugins does not exist
+  src/main/java/com/macro/mall/tiny/security/config/SecurityConfig.java:13 cannot find symbol
+  [ERROR] Failed to execute goal org.apache.maven.plugins:maven-compiler-plugin:3.14.1:compile (default-compile) on project mall-tiny: Compilation failure: Compilation failure: 
+  Caused by: org.apache.maven.plugin.compiler.CompilationFailureException: Compilation failure
+  [INFO] BUILD FAILURE
+  tests=0 passed=0 failures=0 errors=0 skipped=0
+## fix1: removed dangling WebSecurityConfigurerAdapter import; BaseSwaggerConfig (recipe left half-migrated, invalid Java) + SwaggerConfig springfox BPP rewritten to springdoc OpenAPI/GroupedOpenApi
+  src/main/java/com/macro/mall/tiny/security/config/SecurityConfig.java:48 incompatible types: org.springframework.security.config.annotation.web.builders.HttpSecurity cannot be converted to org.springframework.security.config.annotation.web.configurers.AuthorizeHttpRequests
+  src/main/java/com/macro/mall/tiny/security/config/SecurityConfig.java:51 cannot find symbol
+  src/main/java/com/macro/mall/tiny/security/config/SecurityConfig.java:55 cannot find symbol
+  src/main/java/com/macro/mall/tiny/security/config/SecurityConfig.java:58 cannot find symbol
+  [ERROR] Failed to execute goal org.apache.maven.plugins:maven-compiler-plugin:3.14.1:compile (default-compile) on project mall-tiny: Compilation failure: Compilation failure: 
+  Caused by: org.apache.maven.plugin.compiler.CompilationFailureException: Compilation failure
+  [INFO] BUILD FAILURE
+  tests=0 passed=0 failures=0 errors=0 skipped=0
+## fix2: + SecurityConfig: recipe produced ill-typed 'AuthorizationManagerRequestMatcherRegistry registry = http.authorizeHttpRequests(withDefaults())' -> single lambda DSL chain
+  [INFO] BUILD SUCCESS
+  tests=0 passed=0 failures=0 errors=0 skipped=0

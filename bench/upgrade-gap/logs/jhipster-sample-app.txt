@@ -1,0 +1,102 @@
+# jhipster-sample-app  sha=87cea5d16486d219a97c8d5bec09559390ee2e67
+## baseline exit=0
+  tests=211 passed=211 failures=0 errors=0 skipped=0
+## recipe exit=0  31 files changed, 121 insertions(+), 98 deletions(-)
+  pom.xml                                                                                       | 93 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++------------------------------------
+   src/main/java/io/github/jhipster/sample/JhipsterSampleApplicationApp.java                     |  2 +-
+   src/main/java/io/github/jhipster/sample/config/CacheConfiguration.java                        |  4 ++--
+   src/main/java/io/github/jhipster/sample/config/JacksonConfiguration.java                      |  8 ++++----
+   src/main/java/io/github/jhipster/sample/config/LiquibaseConfiguration.java                    |  6 +++---
+   src/main/java/io/github/jhipster/sample/config/LoggingConfiguration.java                      |  5 ++---
+   src/main/java/io/github/jhipster/sample/service/UserService.java                              |  6 ++----
+   src/main/java/io/github/jhipster/sample/web/rest/AccountResource.java                         |  6 +++---
+   src/main/java/io/github/jhipster/sample/web/rest/AuthenticateController.java                  |  2 ++
+   src/main/java/io/github/jhipster/sample/web/rest/errors/ExceptionTranslator.java              |  2 +-
+   src/main/resources/config/application.yml                                                     |  2 +-
+   src/main/webapp/WEB-INF/web.xml                                                               |  6 +++---
+   src/test/java/io/github/jhipster/sample/config/PostgreSqlTestContainer.java                   |  6 +++---
+   src/test/java/io/github/jhipster/sample/config/WebConfigurerTest.java                         |  2 +-
+   src/test/java/io/github/jhipster/sample/security/jwt/JwtAuthenticationTestUtils.java          |  2 ++
+   src/test/java/io/github/jhipster/sample/security/jwt/TokenAuthenticationIT.java               |  2 +-
+   src/test/java/io/github/jhipster/sample/security/jwt/TokenAuthenticationSecurityMetersIT.java |  2 +-
+   src/test/java/io/github/jhipster/sample/web/filter/SpaWebFilterIT.java                        |  2 +-
+   src/test/java/io/github/jhipster/sample/web/rest/AccountResourceIT.java                       |  4 ++--
+   src/test/java/io/github/jhipster/sample/web/rest/AuthenticateControllerIT.java                |  4 ++--
+   src/test/java/io/github/jhipster/sample/web/rest/AuthorityResourceIT.java                     |  4 ++--
+   src/test/java/io/github/jhipster/sample/web/rest/BankAccountResourceIT.java                   |  4 ++--
+   src/test/java/io/github/jhipster/sample/web/rest/LabelResourceIT.java                         |  4 ++--
+   src/test/java/io/github/jhipster/sample/web/rest/OperationResourceIT.java                     |  4 ++--
+   src/test/java/io/github/jhipster/sample/web/rest/PublicUserResourceIT.java                    |  2 +-
+  ...
+## post-recipe build exit=1
+  tests=0 passed=0 failures=0 errors=0 skipped=0
+## fix1: spring-boot-loader-tools: Boot 4 BOM no longer manages it -> explicit ${spring-boot.version}
+  src/main/java/io/github/jhipster/sample/JhipsterSampleApplicationApp.java:16 package org.springframework.boot.autoconfigure.h2 does not exist
+  src/main/java/io/github/jhipster/sample/config/DatabaseConfiguration.java:7 package org.springframework.boot.autoconfigure.h2 does not exist
+  src/main/java/io/github/jhipster/sample/config/JacksonConfiguration.java:5 cannot find symbol
+  src/main/java/io/github/jhipster/sample/config/JacksonConfiguration.java:6 cannot find symbol
+  src/main/java/io/github/jhipster/sample/config/JacksonConfiguration.java:18 cannot find symbol
+  src/main/java/io/github/jhipster/sample/config/JacksonConfiguration.java:23 cannot find symbol
+  src/main/java/io/github/jhipster/sample/config/WebConfigurer.java:13 package org.springframework.boot.web.servlet.server does not exist
+  src/main/java/io/github/jhipster/sample/security/DomainUserDetailsService.java:7 cannot find symbol
+  src/main/java/io/github/jhipster/sample/JhipsterSampleApplicationApp.java:23 cannot find symbol
+  src/main/java/io/github/jhipster/sample/config/DatabaseConfiguration.java:23 cannot find symbol
+  [ERROR] Failed to execute goal org.apache.maven.plugins:maven-compiler-plugin:3.16.0:compile (default-compile) on project jhipster-sample-application: Compilation failure: Compilation failure: 
+  Caused by: org.apache.maven.plugin.compiler.CompilationFailureException: Compilation failure
+  [INFO] BUILD FAILURE
+  tests=0 passed=0 failures=0 errors=0 skipped=0
+## fix2: + Boot 4 relocations: H2Console* -> boot.h2console.autoconfigure (+spring-boot-h2console dep); ConfigurableServletWebServerFactory -> web.server.servlet; Jackson 3: drop JavaTimeModule/Jdk8Module beans (built in); HV internal EmailValidator hv->bv
+  src/main/java/io/github/jhipster/sample/config/LiquibaseConfiguration.java:43 cannot access org.springframework.boot.autoconfigure.liquibase.LiquibaseProperties
+  src/main/java/io/github/jhipster/sample/config/LiquibaseConfiguration.java:54 incompatible types: org.springframework.boot.liquibase.autoconfigure.LiquibaseProperties cannot be converted to org.springframework.boot.autoconfigure.liquibase.LiquibaseProperties
+  [ERROR] Failed to execute goal org.apache.maven.plugins:maven-compiler-plugin:3.16.0:compile (default-compile) on project jhipster-sample-application: Compilation failure: Compilation failure: 
+  Caused by: org.apache.maven.plugin.compiler.CompilationFailureException: Compilation failure
+  [INFO] BUILD FAILURE
+  tests=0 passed=0 failures=0 errors=0 skipped=0
+## fix3: + third-party: tech.jhipster jhipster-framework 9.0.0-beta.0 (compiled vs Boot 3 packages) -> 9.0.0
+  src/test/java/io/github/jhipster/sample/config/WebConfigurerTest.java:54 cannot find symbol
+  src/test/java/io/github/jhipster/sample/config/WebConfigurerTest.java:55 cannot find symbol
+  src/test/java/io/github/jhipster/sample/config/WebConfigurerTest.java:56 cannot find symbol
+  src/test/java/io/github/jhipster/sample/config/WebConfigurerTest.java:57 cannot find symbol
+  src/test/java/io/github/jhipster/sample/config/WebConfigurerTest.java:58 cannot find symbol
+  [ERROR] Failed to execute goal org.apache.maven.plugins:maven-compiler-plugin:3.16.0:testCompile (default-testCompile) on project jhipster-sample-application: Compilation failure: Compilation failure: 
+  Caused by: org.apache.maven.plugin.compiler.CompilationFailureException: Compilation failure
+  [INFO] BUILD FAILURE
+  tests=0 passed=0 failures=0 errors=0 skipped=0
+## fix4: + test: TomcatServletWebServerFactory getMimeMappings/getDocumentRoot -> getSettings().* (Boot 4 API)
+  Caused by: java.lang.NoClassDefFoundError: org/hibernate/engine/spi/Mapping
+  Caused by: java.lang.ClassNotFoundException: org.hibernate.engine.spi.Mapping
+  Caused by: org.springframework.beans.factory.parsing.BeanDefinitionParsingException: Configuration problem: @Bean method 'mvcHandlerMappingIntrospector' must not be private or final; change the method's modifiers to continue.
+  [ERROR] Tests run: 48, Failures: 0, Errors: 4, Skipped: 0
+  [ERROR] Tests run: 163, Failures: 0, Errors: 163, Skipped: 0
+  [INFO] BUILD SUCCESS
+  tests=211 passed=44 failures=0 errors=167 skipped=0
+   - io.github.jhipster.sample.config.WebConfigurerTest#shouldCorsFilterOnOtherPath: java.util.ServiceConfigurationError: tools.jackson.databind.JacksonModule: tools.jackson.datatype.hibernate6.Hibernate6Module Unable to get public no-arg constructor
+   - io.github.jhipster.sample.config.timezone.HibernateTimeZoneIT#storeOffsetTimeWithZoneIdConfigShouldBeStoredOnConfiguredTimeZoneAccordingToHis1stJan1970Value: java.lang.IllegalStateException: Failed to load ApplicationContext for [WebMergedContextConfiguration@48b53f3d testClass = io.github.jhipster.sample.config.timezone.HibernateTimeZoneIT, locations = [], classes = [
+   - io.github.jhipster.sample.config.timezone.HibernateTimeZoneIT#storeLocalDateWithZoneIdConfigShouldBeStoredWithoutTransformation: java.lang.IllegalStateException: ApplicationContext failure threshold (1) exceeded: skipping repeated attempt to load context for [WebMergedContextConfiguration@48b53f3d testClass = io.github.jhipster.sample.confi
+   - io.github.jhipster.sample.security.DomainUserDetailsServiceIT#assertThatEmailIsPrioritizedOverLogin: java.lang.IllegalStateException: ApplicationContext failure threshold (1) exceeded: skipping repeated attempt to load context for [WebMergedContextConfiguration@127c5f20 testClass = io.github.jhipster.sample.secur
+   - io.github.jhipster.sample.security.jwt.TokenAuthenticationIT#testReturnFalseWhenJWTisExpired: java.lang.IllegalStateException: Failed to load ApplicationContext for [WebMergedContextConfiguration@d082916 testClass = io.github.jhipster.sample.security.jwt.TokenAuthenticationIT, locations = [], classes = [te
+   - io.github.jhipster.sample.security.jwt.TokenAuthenticationIT#testReturnFalseWhenJWThasInvalidSignature: java.lang.IllegalStateException: ApplicationContext failure threshold (1) exceeded: skipping repeated attempt to load context for [WebMergedContextConfiguration@d082916 testClass = io.github.jhipster.sample.securi
+   - io.github.jhipster.sample.security.jwt.TokenAuthenticationSecurityMetersIT#testTokenMalformedCount: java.lang.IllegalStateException: ApplicationContext failure threshold (1) exceeded: skipping repeated attempt to load context for [WebMergedContextConfiguration@3c3a767 testClass = io.github.jhipster.sample.securi
+   - io.github.jhipster.sample.service.MailServiceIT#testSendPasswordResetMail: java.lang.IllegalStateException: Failed to load ApplicationContext for [WebMergedContextConfiguration@6fd6d887 testClass = io.github.jhipster.sample.service.MailServiceIT, locations = [], classes = [io.github.jhip
+   - io.github.jhipster.sample.service.MailServiceIT#testCreationEmail: java.lang.IllegalStateException: ApplicationContext failure threshold (1) exceeded: skipping repeated attempt to load context for [WebMergedContextConfiguration@6fd6d887 testClass = io.github.jhipster.sample.servi
+   - io.github.jhipster.sample.service.UserServiceIT#assertThatOnlyActivatedUserCanRequestPasswordReset: java.lang.IllegalStateException: Failed to load ApplicationContext for [WebMergedContextConfiguration@74ed1b3d testClass = io.github.jhipster.sample.service.UserServiceIT, locations = [], classes = [io.github.jhip
+   - io.github.jhipster.sample.service.UserServiceIT#assertThatUserMustExistToResetPassword: java.lang.IllegalStateException: ApplicationContext failure threshold (1) exceeded: skipping repeated attempt to load context for [WebMergedContextConfiguration@74ed1b3d testClass = io.github.jhipster.sample.servi
+   - io.github.jhipster.sample.web.filter.SpaWebFilterIT#forwardUnmappedSecondLevelMapping: java.lang.IllegalStateException: Failed to load ApplicationContext for [WebMergedContextConfiguration@7560ca1d testClass = io.github.jhipster.sample.web.filter.SpaWebFilterIT, locations = [], classes = [io.github.
+   - io.github.jhipster.sample.web.filter.SpaWebFilterIT#getUnmappedSecondLevelFile: java.lang.IllegalStateException: ApplicationContext failure threshold (1) exceeded: skipping repeated attempt to load context for [WebMergedContextConfiguration@7560ca1d testClass = io.github.jhipster.sample.web.f
+   - io.github.jhipster.sample.web.rest.AccountResourceIT#testSaveInvalidEmail: java.lang.IllegalStateException: ApplicationContext failure threshold (1) exceeded: skipping repeated attempt to load context for [WebMergedContextConfiguration@44e4fa97 testClass = io.github.jhipster.sample.web.r
+   ...
+## fix5: + Spring 7 rejects private @Bean methods (test JwtAuthenticationTestUtils); jackson-datatype-hibernate6 -> hibernate7 3.2.3 (Hibernate 7 removed org.hibernate.engine.spi.Mapping)
+  Caused by: org.eclipse.angus.mail.util.MailConnectException: Couldn't connect to host, port: localhost, 25; timeout -1;
+  Caused by: java.net.ConnectException: Connection refused
+  [INFO] Tests run: 48, Failures: 0, Errors: 0, Skipped: 0
+  [ERROR] Tests run: 163, Failures: 0, Errors: 9, Skipped: 0
+  [INFO] BUILD SUCCESS
+  tests=211 passed=202 failures=0 errors=9 skipped=0
+   - io.github.jhipster.sample.service.MailServiceIT#testSendPasswordResetMail: java.lang.NullPointerException: Cannot invoke "org.mockito.ArgumentCaptor.capture()" because "this.messageCaptor" is null
+## fix6: + @Captor no longer initialised (Boot 4 dropped MockitoTestExecutionListener) -> ArgumentCaptor.forClass
+  Caused by: org.eclipse.angus.mail.util.MailConnectException: Couldn't connect to host, port: localhost, 25; timeout -1;
+  Caused by: java.net.ConnectException: Connection refused
+  [INFO] Tests run: 48, Failures: 0, Errors: 0, Skipped: 0
+  [INFO] Tests run: 163, Failures: 0, Errors: 0, Skipped: 0
+  [INFO] BUILD SUCCESS
+  tests=211 passed=211 failures=0 errors=0 skipped=0

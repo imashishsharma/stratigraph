@@ -1,0 +1,151 @@
+# WebGoat  sha=ff3a2983e244d17bb774e9933fa923f284909c4b
+## baseline exit=0
+  tests=274 passed=272 failures=0 errors=0 skipped=2
+## recipe exit=0  78 files changed, 267 insertions(+), 248 deletions(-)
+  pom.xml                                                                                          | 36 +++++++++++++++++++++---------------
+   src/it/java/org/owasp/webgoat/AccessControlIntegrationTest.java                                  |  2 +-
+   src/it/java/org/owasp/webgoat/CSRFIntegrationTest.java                                           | 63 +++++++++++++++++++++++++++++++++------------------------------
+   src/it/java/org/owasp/webgoat/CryptoIntegrationTest.java                                         |  2 +-
+   src/it/java/org/owasp/webgoat/GeneralLessonIntegrationTest.java                                  | 30 ++++++++++++++++--------------
+   src/it/java/org/owasp/webgoat/IDORIntegrationTest.java                                           |  8 ++++----
+   src/it/java/org/owasp/webgoat/IntegrationTest.java                                               | 14 +++++++-------
+   src/it/java/org/owasp/webgoat/JWTLessonIntegrationTest.java                                      | 13 +++++++------
+   src/it/java/org/owasp/webgoat/PathTraversalIntegrationTest.java                                  | 10 +++++-----
+   src/it/java/org/owasp/webgoat/XXEIntegrationTest.java                                            |  7 +++----
+   src/main/java/org/dummy/insecure/framework/VulnerableTaskHolder.java                             |  3 ++-
+   src/main/java/org/owasp/webgoat/container/AjaxAuthenticationEntryPoint.java                      |  6 +++---
+   src/main/java/org/owasp/webgoat/container/AsciiDoctorTemplateResolver.java                       |  2 +-
+   src/main/java/org/owasp/webgoat/container/DatabaseConfiguration.java                             |  2 ++
+   src/main/java/org/owasp/webgoat/container/MvcConfiguration.java                                  |  6 +++---
+   src/main/java/org/owasp/webgoat/container/WebSecurityConfig.java                                 | 40 ++++++++++++++++------------------------
+   src/main/java/org/owasp/webgoat/container/asciidoc/WebWolfMacro.java                             |  2 +-
+   src/main/java/org/owasp/webgoat/container/controller/StartLesson.java                            |  2 +-
+   src/main/java/org/owasp/webgoat/container/controller/Welcome.java                                |  6 +++---
+   src/main/java/org/owasp/webgoat/container/lessons/Assignment.java                                |  6 +++++-
+   src/main/java/org/owasp/webgoat/container/session/WebSession.java                                |  3 ++-
+   src/main/java/org/owasp/webgoat/container/users/LessonTracker.java                               |  9 ++++++++-
+   src/main/java/org/owasp/webgoat/container/users/RegistrationController.java                      |  6 +++---
+   src/main/java/org/owasp/webgoat/container/users/UserForm.java                                    |  6 +++---
+   src/main/java/org/owasp/webgoat/container/users/UserTracker.java                                 |  4 ++--
+  ...
+## post-recipe build exit=1
+  src/main/java/org/owasp/webgoat/webwolf/WebWolf.java:26 package org.springframework.boot.actuate.trace.http does not exist
+  src/main/java/org/owasp/webgoat/webwolf/WebWolf.java:40 cannot find symbol
+  src/main/java/org/owasp/webgoat/webwolf/requests/Requests.java:35 package org.springframework.boot.actuate.trace.http does not exist
+  src/main/java/org/owasp/webgoat/webwolf/requests/Requests.java:36 package org.springframework.boot.actuate.trace.http.HttpTrace does not exist
+  src/main/java/org/owasp/webgoat/webwolf/requests/WebWolfTraceRepository.java:29 package org.springframework.boot.actuate.trace.http does not exist
+  src/main/java/org/owasp/webgoat/webwolf/requests/WebWolfTraceRepository.java:30 package org.springframework.boot.actuate.trace.http does not exist
+  src/main/java/org/owasp/webgoat/webwolf/requests/WebWolfTraceRepository.java:40 cannot find symbol
+  src/main/java/org/owasp/webgoat/webwolf/requests/Requests.java:81 cannot find symbol
+  src/main/java/org/owasp/webgoat/webwolf/requests/Requests.java:98 cannot find symbol
+  src/main/java/org/owasp/webgoat/webwolf/requests/Requests.java:102 cannot find symbol
+  src/main/java/org/owasp/webgoat/webwolf/requests/WebWolfTraceRepository.java:42 cannot find symbol
+  src/main/java/org/owasp/webgoat/webwolf/requests/WebWolfTraceRepository.java:57 cannot find symbol
+  src/main/java/org/owasp/webgoat/webwolf/requests/WebWolfTraceRepository.java:61 cannot find symbol
+  src/main/java/org/owasp/webgoat/webwolf/requests/WebWolfTraceRepository.java:70 cannot find symbol
+  src/main/java/org/owasp/webgoat/container/MvcConfiguration.java:59 package org.thymeleaf.extras.springsecurity5.dialect does not exist
+  src/main/java/org/owasp/webgoat/webwolf/WebSecurityConfig.java:34 cannot find symbol
+  src/main/java/org/owasp/webgoat/webwolf/WebSecurityConfig.java:43 cannot find symbol
+  src/main/java/org/owasp/webgoat/container/WebSecurityConfig.java:42 cannot find symbol
+  src/main/java/org/owasp/webgoat/container/WebSecurityConfig.java:51 cannot find symbol
+  [ERROR] Failed to execute goal org.apache.maven.plugins:maven-compiler-plugin:3.8.0:compile (default-compile) on project webgoat: Compilation failure: Compilation failure: 
+  Caused by: org.apache.maven.plugin.compiler.CompilationFailureException: Compilation failure
+  [INFO] BUILD FAILURE
+  tests=0 passed=0 failures=0 errors=0 skipped=0
+## fix1: HttpTrace->HttpExchange (actuator rename, 3 files); thymeleaf springsecurity5->6 import; both WebSecurityConfigurerAdapter classes -> SecurityFilterChain (recipe left 'Migrate manually' marker + ill-typed registry var)
+  [ERROR] Failed to execute goal com.diffplug.spotless:spotless-maven-plugin:2.33.0:check (default) on project webgoat: The following files had format violations:
+  Caused by: org.springframework.beans.factory.BeanCreationException: Error creating bean with name 'entityManagerFactory' defined in class path resource [org/springframework/boot/autoconfigure/orm/jpa/HibernateJpaConfiguration.class]: Failed to initialize depen
+  Caused by: org.springframework.beans.factory.BeanCreationException: Error creating bean with name 'flyWayContainer' defined in class path resource [org/owasp/webgoat/container/DatabaseConfiguration.class]: Unsupported Database: HSQL Database Engine 2.7
+  Caused by: java.lang.ClassNotFoundException: javax.xml.bind.DatatypeConverter
+  Caused by: java.lang.IllegalArgumentException: Name for argument of type [java.lang.String] not specified, and parameter name information not available via reflection. Ensure that the compiler uses the '-parameters' flag.
+  Caused by: java.lang.IllegalArgumentException: Name for argument of type [java.lang.Integer] not specified, and parameter name information not available via reflection. Ensure that the compiler uses the '-parameters' flag.
+  Caused by: org.apache.maven.plugin.MojoExecutionException: The following files had format violations:
+  [ERROR] Tests run: 235, Failures: 1, Errors: 173, Skipped: 1
+  [INFO] Tests run: 0, Failures: 0, Errors: 0, Skipped: 0
+  [INFO] BUILD FAILURE
+  tests=235 passed=60 failures=1 errors=173 skipped=1
+   - org.owasp.webgoat.container.users.UserRepositoryTest#userShouldBeSaved: java.lang.IllegalStateException: ApplicationContext failure threshold (1) exceeded: skipping repeated attempt to load context for [MergedContextConfiguration@70290678 testClass = org.owasp.webgoat.container.users.
+   - org.owasp.webgoat.container.users.UserTrackerRepositoryTest#saveAndLoadShouldHaveCorrectNumberOfAttempts: java.lang.IllegalStateException: Failed to load ApplicationContext for [MergedContextConfiguration@68c9cf93 testClass = org.owasp.webgoat.container.users.UserTrackerRepositoryTest, locations = [], classes = [org.o
+   - org.owasp.webgoat.container.users.UserTrackerRepositoryTest#solvedAssignmentsShouldBeSaved: java.lang.IllegalStateException: ApplicationContext failure threshold (1) exceeded: skipping repeated attempt to load context for [MergedContextConfiguration@68c9cf93 testClass = org.owasp.webgoat.container.users.
+   - org.owasp.webgoat.lessons.bypassrestrictions.BypassRestrictionsFrontendValidationTest#bypassAllFieldShouldPass: java.lang.IllegalStateException: ApplicationContext failure threshold (1) exceeded: skipping repeated attempt to load context for [WebMergedContextConfiguration@26664caa testClass = org.owasp.webgoat.lessons.bypas
+   - org.owasp.webgoat.lessons.challenges.Assignment1Test#success: jakarta.servlet.ServletException: Request processing failed: java.lang.IllegalArgumentException: Name for argument of type [java.lang.String] not specified, and parameter name information not available via reflecti
+   - org.owasp.webgoat.lessons.chromedevtools.ChromeDevToolsTest#NetworkAssignmentTest_Fail: java.lang.IllegalStateException: ApplicationContext failure threshold (1) exceeded: skipping repeated attempt to load context for [WebMergedContextConfiguration@172b39c3 testClass = org.owasp.webgoat.lessons.chrom
+   - org.owasp.webgoat.lessons.cia.CIAQuizTest#firstAnswerFalseGetResultsReturnsFalseTrueTrueTrue: java.lang.IllegalStateException: ApplicationContext failure threshold (1) exceeded: skipping repeated attempt to load context for [WebMergedContextConfiguration@264129aa testClass = org.owasp.webgoat.lessons.cia.C
+   - org.owasp.webgoat.lessons.clientsidefiltering.ClientSideFilteringAssignmentTest#success: java.lang.IllegalStateException: ApplicationContext failure threshold (1) exceeded: skipping repeated attempt to load context for [WebMergedContextConfiguration@7da837af testClass = org.owasp.webgoat.lessons.clien
+   - org.owasp.webgoat.lessons.clientsidefiltering.ClientSideFilteringFreeAssignmentTest#success: java.lang.IllegalStateException: ApplicationContext failure threshold (1) exceeded: skipping repeated attempt to load context for [WebMergedContextConfiguration@28220b56 testClass = org.owasp.webgoat.lessons.clien
+   - org.owasp.webgoat.lessons.clientsidefiltering.ShopEndpointTest#fetchAllTheCouponsShouldContainGetItForFree: java.lang.IllegalStateException: ApplicationContext failure threshold (1) exceeded: skipping repeated attempt to load context for [WebMergedContextConfiguration@76aef382 testClass = org.owasp.webgoat.lessons.clien
+   - org.owasp.webgoat.lessons.csrf.CSRFFeedbackTest#csrfAttack: java.lang.IllegalStateException: ApplicationContext failure threshold (1) exceeded: skipping repeated attempt to load context for [WebMergedContextConfiguration@1a100769 testClass = org.owasp.webgoat.lessons.csrf.
+   - org.owasp.webgoat.lessons.deserialization.DeserializeTest#success: jakarta.servlet.ServletException: Request processing failed: java.lang.IllegalArgumentException: Name for argument of type [java.lang.String] not specified, and parameter name information not available via reflecti
+   - org.owasp.webgoat.lessons.hijacksession.HijackSessionAssignmentTest#testBlankCookie: jakarta.servlet.ServletException: Request processing failed: java.lang.IllegalArgumentException: Name for argument of type [java.lang.String] not specified, and parameter name information not available via reflecti
+   - org.owasp.webgoat.lessons.jwt.JWTDecodeEndpointTest#solveAssignment: java.lang.IllegalStateException: ApplicationContext failure threshold (1) exceeded: skipping repeated attempt to load context for [WebMergedContextConfiguration@64aa7a33 testClass = org.owasp.webgoat.lessons.jwt.J
+   ...
+## fix2: + flyway-database-hsqldb (Flyway 10+ split DB modules); javax jaxb-api 2.3.1 back for jjwt 0.9.1; compiler <parameters>true (Spring 6.1 dropped LocalVariableTable name discovery)
+  [ERROR] Failed to execute goal com.diffplug.spotless:spotless-maven-plugin:2.33.0:check (default) on project webgoat: The following files had format violations:
+  Caused by: org.springframework.beans.factory.UnsatisfiedDependencyException: Error creating bean with name 'viewResolver' defined in class path resource [org/owasp/webgoat/container/MvcConfiguration.class]: Unsatisfied dependency expressed through method 'view
+  Caused by: org.springframework.beans.factory.UnsatisfiedDependencyException: Error creating bean with name 'thymeleafTemplateEngine' defined in class path resource [org/owasp/webgoat/container/MvcConfiguration.class]: Unsatisfied dependency expressed through m
+  Caused by: org.springframework.beans.factory.NoUniqueBeanDefinitionException: No qualifying bean of type 'org.thymeleaf.templateresolver.ITemplateResolver' available: expected single matching bean but found 5: lessonThymeleafTemplateResolver,springThymeleafTem
+  Caused by: java.lang.IllegalArgumentException: Name for argument of type [java.lang.String] not specified, and parameter name information not available via reflection. Ensure that the compiler uses the '-parameters' flag.
+  Caused by: java.lang.IllegalArgumentException: Name for argument of type [java.lang.Integer] not specified, and parameter name information not available via reflection. Ensure that the compiler uses the '-parameters' flag.
+  Caused by: org.apache.maven.plugin.MojoExecutionException: The following files had format violations:
+  [ERROR] Tests run: 235, Failures: 1, Errors: 168, Skipped: 1
+  [INFO] Tests run: 0, Failures: 0, Errors: 0, Skipped: 0
+  [INFO] BUILD FAILURE
+  tests=235 passed=65 failures=1 errors=168 skipped=1
+   - org.owasp.webgoat.container.users.UserTrackerRepositoryTest#saveAndLoadShouldHaveCorrectNumberOfAttempts: org.springframework.dao.InvalidDataAccessResourceUsageException: could not prepare statement [user lacks privilege or object not found: USER_TRACKER_SEQ in statement [call next value for CONTAINER.user_tracker_seq]] [call next value for CONTAINE
+   - org.owasp.webgoat.lessons.bypassrestrictions.BypassRestrictionsFrontendValidationTest#bypassAllFieldShouldPass: java.lang.IllegalStateException: ApplicationContext failure threshold (1) exceeded: skipping repeated attempt to load context for [WebMergedContextConfiguration@204e7223 testClass = org.owasp.webgoat.lessons.bypas
+   - org.owasp.webgoat.lessons.challenges.Assignment1Test#success: jakarta.servlet.ServletException: Request processing failed: java.lang.IllegalArgumentException: Name for argument of type [java.lang.String] not specified, and parameter name information not available via reflecti
+   - org.owasp.webgoat.lessons.chromedevtools.ChromeDevToolsTest#NetworkAssignmentTest_Fail: java.lang.IllegalStateException: ApplicationContext failure threshold (1) exceeded: skipping repeated attempt to load context for [WebMergedContextConfiguration@47209d16 testClass = org.owasp.webgoat.lessons.chrom
+   - org.owasp.webgoat.lessons.cia.CIAQuizTest#firstAnswerFalseGetResultsReturnsFalseTrueTrueTrue: java.lang.IllegalStateException: ApplicationContext failure threshold (1) exceeded: skipping repeated attempt to load context for [WebMergedContextConfiguration@2702326d testClass = org.owasp.webgoat.lessons.cia.C
+   - org.owasp.webgoat.lessons.clientsidefiltering.ClientSideFilteringAssignmentTest#success: java.lang.IllegalStateException: ApplicationContext failure threshold (1) exceeded: skipping repeated attempt to load context for [WebMergedContextConfiguration@532f5c5d testClass = org.owasp.webgoat.lessons.clien
+   - org.owasp.webgoat.lessons.clientsidefiltering.ClientSideFilteringFreeAssignmentTest#success: java.lang.IllegalStateException: ApplicationContext failure threshold (1) exceeded: skipping repeated attempt to load context for [WebMergedContextConfiguration@574dcc6a testClass = org.owasp.webgoat.lessons.clien
+   - org.owasp.webgoat.lessons.clientsidefiltering.ShopEndpointTest#fetchAllTheCouponsShouldContainGetItForFree: java.lang.IllegalStateException: ApplicationContext failure threshold (1) exceeded: skipping repeated attempt to load context for [WebMergedContextConfiguration@1ac864d7 testClass = org.owasp.webgoat.lessons.clien
+   - org.owasp.webgoat.lessons.csrf.CSRFFeedbackTest#csrfAttack: java.lang.IllegalStateException: ApplicationContext failure threshold (1) exceeded: skipping repeated attempt to load context for [WebMergedContextConfiguration@5613e43a testClass = org.owasp.webgoat.lessons.csrf.
+   - org.owasp.webgoat.lessons.deserialization.DeserializeTest#success: jakarta.servlet.ServletException: Request processing failed: java.lang.IllegalArgumentException: Name for argument of type [java.lang.String] not specified, and parameter name information not available via reflecti
+   - org.owasp.webgoat.lessons.hijacksession.HijackSessionAssignmentTest#testBlankCookie: jakarta.servlet.ServletException: Request processing failed: java.lang.IllegalArgumentException: Name for argument of type [java.lang.String] not specified, and parameter name information not available via reflecti
+   - org.owasp.webgoat.lessons.jwt.JWTDecodeEndpointTest#solveAssignment: java.lang.IllegalStateException: ApplicationContext failure threshold (1) exceeded: skipping repeated attempt to load context for [WebMergedContextConfiguration@5379bea3 testClass = org.owasp.webgoat.lessons.jwt.J
+   - org.owasp.webgoat.lessons.jwt.JWTFinalEndpointTest#shouldNotBeAbleToBypassWithSimpleToken: java.lang.IllegalStateException: ApplicationContext failure threshold (1) exceeded: skipping repeated attempt to load context for [WebMergedContextConfiguration@3709ef16 testClass = org.owasp.webgoat.lessons.jwt.J
+   - org.owasp.webgoat.lessons.jwt.JWTRefreshEndpointTest#noTokenWhileLoginShouldReturn401: java.lang.IllegalStateException: ApplicationContext failure threshold (1) exceeded: skipping repeated attempt to load context for [WebMergedContextConfiguration@3dade0d4 testClass = org.owasp.webgoat.lessons.jwt.J
+   ...
+## fix3: + maven-compiler-plugin.version property 3.8.0 -> 3.14.1: with recipe's <release> and no <source>, 3.8.0 silently drops -parameters
+  [ERROR] Failed to execute goal com.diffplug.spotless:spotless-maven-plugin:2.33.0:check (default) on project webgoat: The following files had format violations:
+  Caused by: org.hsqldb.HsqlException: user lacks privilege or object not found: USER_TRACKER_SEQ
+  Caused by: org.springframework.dao.InvalidDataAccessResourceUsageException: could not prepare statement [user lacks privilege or object not found: USER_TRACKER_SEQ in statement [call next value for CONTAINER.user_tracker_seq]] [call next value for CONTAINER.us
+  Caused by: java.lang.ClassNotFoundException: javax.servlet.DispatcherType
+  Caused by: java.lang.ExceptionInInitializerError: Exception java.lang.NoClassDefFoundError: javax/servlet/DispatcherType [in thread "main"]
+  Caused by: java.lang.IllegalArgumentException: json can not be null or empty
+  Caused by: org.apache.maven.plugin.MojoExecutionException: The following files had format violations:
+  [ERROR] Tests run: 235, Failures: 3, Errors: 107, Skipped: 2
+  [INFO] Tests run: 0, Failures: 0, Errors: 0, Skipped: 0
+  [INFO] BUILD FAILURE
+  tests=235 passed=123 failures=3 errors=107 skipped=2
+   - org.owasp.webgoat.container.users.UserTrackerRepositoryTest#saveAndLoadShouldHaveCorrectNumberOfAttempts: org.springframework.dao.InvalidDataAccessResourceUsageException: could not prepare statement [user lacks privilege or object not found: USER_TRACKER_SEQ in statement [call next value for CONTAINER.user_tracker_seq]] [call next value for CONTAINE
+   - org.owasp.webgoat.lessons.bypassrestrictions.BypassRestrictionsFrontendValidationTest#bypassAllFieldShouldPass: jakarta.servlet.ServletException: Request processing failed: org.springframework.dao.InvalidDataAccessResourceUsageException: could not prepare statement [user lacks privilege or object not found: USER_TRACKER_SEQ 
+   - org.owasp.webgoat.lessons.chromedevtools.ChromeDevToolsTest#NetworkAssignmentTest_Fail: jakarta.servlet.ServletException: Request processing failed: org.springframework.dao.InvalidDataAccessResourceUsageException: could not prepare statement [user lacks privilege or object not found: USER_TRACKER_SEQ 
+   - org.owasp.webgoat.lessons.cia.CIAQuizTest#firstAnswerFalseGetResultsReturnsFalseTrueTrueTrue: jakarta.servlet.ServletException: Request processing failed: org.springframework.dao.InvalidDataAccessResourceUsageException: could not prepare statement [user lacks privilege or object not found: USER_TRACKER_SEQ 
+   - org.owasp.webgoat.lessons.clientsidefiltering.ClientSideFilteringAssignmentTest#success: jakarta.servlet.ServletException: Request processing failed: org.springframework.dao.InvalidDataAccessResourceUsageException: could not prepare statement [user lacks privilege or object not found: USER_TRACKER_SEQ 
+   - org.owasp.webgoat.lessons.clientsidefiltering.ClientSideFilteringFreeAssignmentTest#success: jakarta.servlet.ServletException: Request processing failed: org.springframework.dao.InvalidDataAccessResourceUsageException: could not prepare statement [user lacks privilege or object not found: USER_TRACKER_SEQ 
+   - org.owasp.webgoat.lessons.clientsidefiltering.ShopEndpointTest#fetchAllTheCouponsShouldContainGetItForFree: java.lang.AssertionError: No value at JSON path "$.codes[3].code"
+   - org.owasp.webgoat.lessons.csrf.CSRFFeedbackTest#csrfAttack: jakarta.servlet.ServletException: Request processing failed: org.springframework.dao.InvalidDataAccessResourceUsageException: could not prepare statement [user lacks privilege or object not found: USER_TRACKER_SEQ 
+   - org.owasp.webgoat.lessons.jwt.JWTDecodeEndpointTest#solveAssignment: jakarta.servlet.ServletException: Request processing failed: org.springframework.dao.InvalidDataAccessResourceUsageException: could not prepare statement [user lacks privilege or object not found: USER_TRACKER_SEQ 
+   - org.owasp.webgoat.lessons.jwt.JWTFinalEndpointTest#shouldNotBeAbleToBypassWithSimpleToken: jakarta.servlet.ServletException: Request processing failed: org.springframework.dao.InvalidDataAccessResourceUsageException: could not prepare statement [user lacks privilege or object not found: USER_TRACKER_SEQ 
+   - org.owasp.webgoat.lessons.jwt.JWTRefreshEndpointTest#flowForJerryAlwaysWorks: jakarta.servlet.ServletException: Request processing failed: org.springframework.dao.InvalidDataAccessResourceUsageException: could not prepare statement [user lacks privilege or object not found: USER_TRACKER_SEQ 
+   - org.owasp.webgoat.lessons.jwt.JWTSecretKeyEndpointTest#oneOfClaimIsMissingShouldNotSolveAssignment: jakarta.servlet.ServletException: Request processing failed: org.springframework.dao.InvalidDataAccessResourceUsageException: could not prepare statement [user lacks privilege or object not found: USER_TRACKER_SEQ 
+   - org.owasp.webgoat.lessons.jwt.JWTVotesEndpointTest#solveAssignment: jakarta.servlet.ServletException: Request processing failed: org.springframework.dao.InvalidDataAccessResourceUsageException: could not prepare statement [user lacks privilege or object not found: USER_TRACKER_SEQ 
+   - org.owasp.webgoat.lessons.jwt.JWTVotesEndpointTest#unknownUserShouldSeeGuestView: java.lang.AssertionError: Status expected:<200> but was:<404>
+   ...
+## fix4: + hibernate.id.db_structure_naming_strategy=legacy (Hibernate 6 per-entity *_seq vs Flyway schema's HIBERNATE_SEQUENCE)
+  [ERROR] Failed to execute goal com.diffplug.spotless:spotless-maven-plugin:2.33.0:check (default) on project webgoat: The following files had format violations:
+  Caused by: java.lang.ClassNotFoundException: javax.servlet.DispatcherType
+  Caused by: java.lang.ExceptionInInitializerError: Exception java.lang.NoClassDefFoundError: javax/servlet/DispatcherType [in thread "main"]
+  Caused by: java.lang.IllegalArgumentException: json can not be null or empty
+  Caused by: org.apache.maven.plugin.MojoExecutionException: The following files had format violations:
+  [ERROR] Tests run: 235, Failures: 4, Errors: 5, Skipped: 2
+  [INFO] Tests run: 0, Failures: 0, Errors: 0, Skipped: 0
+  [INFO] BUILD FAILURE
+  tests=235 passed=224 failures=4 errors=5 skipped=2
+   - org.owasp.webgoat.lessons.clientsidefiltering.ShopEndpointTest#fetchAllTheCouponsShouldContainGetItForFree: java.lang.AssertionError: No value at JSON path "$.codes[3].code"
+   - org.owasp.webgoat.lessons.jwt.JWTVotesEndpointTest#unknownUserShouldSeeGuestView: java.lang.AssertionError: Status expected:<200> but was:<404>
+   - org.owasp.webgoat.lessons.xxe.BlindSendFileAssignmentTest#solveOnlyParamReferenceEntityInExternalDTD: java.lang.NoClassDefFoundError: javax/servlet/DispatcherType
+   - org.owasp.webgoat.lessons.xxe.BlindSendFileAssignmentTest#wrongXmlShouldGiveErrorBack: java.lang.NoClassDefFoundError: Could not initialize class com.github.tomakehurst.wiremock.jetty9.JettyHttpServerFactory
+   - org.owasp.webgoat.lessons.xxe.SimpleXXETest#postingPlainTextShouldShwoException: java.lang.AssertionError: JSON path "$.output"
+   - org.owasp.webgoat.webwolf.mailbox.MailboxControllerTest#sendingMailShouldStoreIt: java.lang.AssertionError: Status expected:<201> but was:<403>

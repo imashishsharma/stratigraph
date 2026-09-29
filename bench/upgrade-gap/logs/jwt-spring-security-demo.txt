@@ -1,0 +1,55 @@
+# jwt-spring-security-demo  sha=dcf718c67c0d403f78ee390c23715c3f5e6f5f4c
+## baseline exit=0
+  tests=16 passed=16 failures=0 errors=0 skipped=0
+## recipe exit=0  17 files changed, 91 insertions(+), 93 deletions(-)
+  pom.xml                                                                        | 12 ++++++++++--
+   src/main/java/org/zerhusen/config/WebSecurityConfig.java                       | 71 +++++++++++++++++++++++++++++------------------------------------------
+   src/main/java/org/zerhusen/security/JwtAccessDeniedHandler.java                |  4 ++--
+   src/main/java/org/zerhusen/security/JwtAuthenticationEntryPoint.java           |  4 ++--
+   src/main/java/org/zerhusen/security/UserNotActivatedException.java             |  3 +++
+   src/main/java/org/zerhusen/security/jwt/JWTFilter.java                         | 10 +++++-----
+   src/main/java/org/zerhusen/security/model/Authority.java                       |  4 ++--
+   src/main/java/org/zerhusen/security/model/User.java                            |  6 +++---
+   src/main/java/org/zerhusen/security/rest/AuthenticationRestController.java     |  2 +-
+   src/main/java/org/zerhusen/security/rest/dto/LoginDto.java                     |  4 ++--
+   src/test/java/org/zerhusen/JwtDemoApplicationTest.java                         |  5 +----
+   src/test/java/org/zerhusen/rest/AdminProtectedRestControllerTest.java          | 10 ++++++----
+   src/test/java/org/zerhusen/rest/PersonRestControllerTest.java                  | 12 +++++++-----
+   src/test/java/org/zerhusen/security/SecurityUtilsTest.java                     |  2 +-
+   src/test/java/org/zerhusen/security/rest/AuthenticationRestControllerTest.java |  2 +-
+   src/test/java/org/zerhusen/security/rest/UserRestControllerTest.java           | 26 ++++++++++++++------------
+   src/test/java/org/zerhusen/util/AbstractRestControllerTest.java                |  7 ++-----
+   17 files changed, 91 insertions(+), 93 deletions(-)
+## post-recipe build exit=1
+  src/main/java/org/zerhusen/config/WebSecurityConfig.java:10 cannot find symbol
+  src/main/java/org/zerhusen/config/WebSecurityConfig.java:26 cannot find symbol
+  src/main/java/org/zerhusen/config/WebSecurityConfig.java:54 method does not override or implement a method from a supertype
+  src/main/java/org/zerhusen/config/WebSecurityConfig.java:66 method does not override or implement a method from a supertype
+  [ERROR] Failed to execute goal org.apache.maven.plugins:maven-compiler-plugin:3.14.1:compile (default-compile) on project jwtdemo: Compilation failure: Compilation failure: 
+  Caused by: org.apache.maven.plugin.compiler.CompilationFailureException: Compilation failure
+  [INFO] BUILD FAILURE
+  tests=0 passed=0 failures=0 errors=0 skipped=0
+## fix1: WebSecurityConfigurerAdapter -> SecurityFilterChain + WebSecurityCustomizer beans; '/**/*.html' patterns rewritten
+  Caused by: org.h2.jdbc.JdbcSQLSyntaxErrorException: Syntax error in SQL statement "create table [*]user (activated boolean not null, id bigint not null, email varchar(50) not null, firstname varchar(50) not null, lastname varchar(50) not null, username varchar
+  Caused by: org.h2.jdbc.JdbcSQLSyntaxErrorException: Syntax error in SQL statement "alter table if exists user_authority add constraint FKpqlsjpkybgos9w2svcri7j8xy foreign key (user_id) references [*]user"; expected "identifier"; SQL statement:
+  Caused by: org.h2.jdbc.JdbcSQLSyntaxErrorException: Syntax error in SQL statement "[*]# noinspection SqlNoDataSourceInspectionForFile"; SQL statement:
+  Caused by: org.h2.jdbc.JdbcSQLSyntaxErrorException: Syntax error in SQL statement "INSERT INTO [*]USER (ID, USERNAME, PASSWORD, FIRSTNAME, LASTNAME, EMAIL, ACTIVATED) VALUES (1, 'admin', '$2a$08$lDnHPz7eUkSi6ao14Twuau08mzhWrL4kyZGGU5xfiGALO/Vxd5DOi', 'admin', 
+  Caused by: org.h2.jdbc.JdbcSQLSyntaxErrorException: Syntax error in SQL statement "INSERT INTO [*]USER (ID, USERNAME, PASSWORD, FIRSTNAME, LASTNAME, EMAIL, ACTIVATED) VALUES (2, 'user', '$2a$08$UkVvwpULis18S19S5pZFn.YHPZt3oaqHZnDwqbCW9pft6uFtkXKDC', 'user', 'u
+  Caused by: org.h2.jdbc.JdbcSQLSyntaxErrorException: Syntax error in SQL statement "INSERT INTO [*]USER (ID, USERNAME, PASSWORD, FIRSTNAME, LASTNAME, EMAIL, ACTIVATED) VALUES (3, 'disabled', '$2a$08$UkVvwpULis18S19S5pZFn.YHPZt3oaqHZnDwqbCW9pft6uFtkXKDC', 'user'
+  [ERROR] Tests run: 16, Failures: 2, Errors: 5, Skipped: 0
+  [INFO] BUILD SUCCESS
+  tests=16 passed=9 failures=2 errors=5 skipped=0
+   - org.zerhusen.rest.AdminProtectedRestControllerTest#getAdminProtectedGreetingForAdmin: com.fasterxml.jackson.databind.exc.MismatchedInputException: No content to map due to end-of-input
+   - org.zerhusen.rest.PersonRestControllerTest#getPersonForAdmin: com.fasterxml.jackson.databind.exc.MismatchedInputException: No content to map due to end-of-input
+   - org.zerhusen.security.rest.AuthenticationRestControllerTest#successfulAuthenticationWithUser: java.lang.AssertionError: Status expected:<200> but was:<401>
+   - org.zerhusen.security.rest.UserRestControllerTest#getActualUserForUserWithToken: com.fasterxml.jackson.databind.exc.MismatchedInputException: No content to map due to end-of-input
+## fix2: + H2 2.x reserved word: NON_KEYWORDS=USER added to datasource URL
+  Caused by: org.h2.jdbc.JdbcSQLSyntaxErrorException: Syntax error in SQL statement "[*]# noinspection SqlNoDataSourceInspectionForFile"; SQL statement:
+  [INFO] Tests run: 16, Failures: 0, Errors: 0, Skipped: 0
+  [INFO] BUILD SUCCESS
+  tests=16 passed=16 failures=0 errors=0 skipped=0
+## fix3: control: revert '/**/*.html' pattern change to check whether it was needed
+  Caused by: org.h2.jdbc.JdbcSQLSyntaxErrorException: Syntax error in SQL statement "[*]# noinspection SqlNoDataSourceInspectionForFile"; SQL statement:
+  [INFO] Tests run: 16, Failures: 0, Errors: 0, Skipped: 0
+  [INFO] BUILD SUCCESS
+  tests=16 passed=16 failures=0 errors=0 skipped=0

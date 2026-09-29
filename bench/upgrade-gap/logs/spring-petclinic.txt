@@ -1,0 +1,27 @@
+# spring-petclinic  sha=66747e344ec6d4ec5fce2c603c1b61eeeadda8ff
+## baseline exit=0
+  tests=42 passed=40 failures=0 errors=0 skipped=2
+## recipe exit=0  13 files changed, 47 insertions(+), 33 deletions(-)
+  pom.xml                                                                                         | 29 ++++++++++++++++++++---------
+   src/main/java/org/springframework/samples/petclinic/system/CacheConfiguration.java              |  2 +-
+   src/test/java/org/springframework/samples/petclinic/MySqlIntegrationTests.java                  |  6 +++---
+   src/test/java/org/springframework/samples/petclinic/MysqlTestApplication.java                   |  6 +++---
+   src/test/java/org/springframework/samples/petclinic/PetClinicIntegrationTests.java              |  2 +-
+   src/test/java/org/springframework/samples/petclinic/PostgresIntegrationTests.java               |  2 +-
+   src/test/java/org/springframework/samples/petclinic/owner/OwnerControllerTests.java             |  2 +-
+   src/test/java/org/springframework/samples/petclinic/owner/PetControllerTests.java               |  2 +-
+   src/test/java/org/springframework/samples/petclinic/owner/VisitControllerTests.java             |  2 +-
+   src/test/java/org/springframework/samples/petclinic/service/ClinicServiceTests.java             |  6 +++---
+   src/test/java/org/springframework/samples/petclinic/system/CrashControllerIntegrationTests.java | 12 +++++++-----
+   src/test/java/org/springframework/samples/petclinic/system/I18nPropertiesSyncTest.java          |  7 ++++---
+   src/test/java/org/springframework/samples/petclinic/vet/VetControllerTests.java                 |  2 +-
+   13 files changed, 47 insertions(+), 33 deletions(-)
+## post-recipe build exit=1
+  [ERROR] Failed to execute goal io.spring.javaformat:spring-javaformat-maven-plugin:0.0.47:validate (default) on project spring-petclinic: Formatting violations found in the following files:
+  Caused by: org.apache.maven.plugin.MojoFailureException: Formatting violations found in the following files:
+  [INFO] BUILD FAILURE
+  tests=0 passed=0 failures=0 errors=0 skipped=0
+## fix1: spring-javaformat:apply on recipe output (formatting-check plugin failed validate)
+  [INFO] Tests run: 56, Failures: 0, Errors: 0, Skipped: 2
+  [INFO] BUILD SUCCESS
+  tests=56 passed=54 failures=0 errors=0 skipped=2

@@ -1,0 +1,90 @@
+# OpenRewrite-only gap map corpus. Machine-readable twin: corpus.tsv (what run.sh loops read).
+# Tooling: rewrite-maven-plugin 6.46.1, rewrite-spring 6.37.1 (latest on Maven Central, 2026-09-29).
+# Historical SHAs are the last commit before the project's own upgrade commit, so each repo's
+# next upstream commit is a human-written reference migration.
+tooling:
+  rewrite_maven_plugin: 6.46.1
+  rewrite_spring: 6.37.1
+  maven: 3.9.12
+repos:
+  - name: spring-petclinic-rest
+    url: https://github.com/spring-petclinic/spring-petclinic-rest
+    sha: 0dbb71e6f4d0ec5939d597650b9ca7bca27eeda0
+    from: 2.6.2
+    recipe: org.openrewrite.java.spring.boot3.UpgradeSpringBoot_3_5
+    jdk: {baseline: 8.0.432-amzn, target: 17.0.13-amzn}
+    why: REST API, JPA + JDBC + Spring Data profiles, Spring Security, openapi-generator codegen, MapStruct; 172 tests. Upstream upgrade commit b3c928e is a reference.
+  - name: jwt-spring-security-demo
+    url: https://github.com/szerhusenBC/jwt-spring-security-demo
+    sha: dcf718c67c0d403f78ee390c23715c3f5e6f5f4c
+    from: 2.1.8.RELEASE
+    recipe: org.openrewrite.java.spring.boot3.UpgradeSpringBoot_3_5
+    jdk: {baseline: 11.0.25-amzn, target: 17.0.13-amzn}
+    why: Old Boot 2.1 app (long recipe chain 2.1 -> 3.5); WebSecurityConfigurerAdapter + JWT, JPA on H2; 16 MockMvc tests.
+  - name: mall-tiny
+    url: https://github.com/macrozheng/mall-tiny
+    sha: a81ec4740a0c7c99a06ebffb43a14168beadffc3
+    from: 2.7.5
+    recipe: org.openrewrite.java.spring.boot3.UpgradeSpringBoot_3_5
+    jdk: {baseline: 8.0.432-amzn, target: 17.0.13-amzn}
+    why: Java 8 app with springfox, MyBatis-Plus, Lombok, Redis, Spring Security. Compile-only signal (pom sets skipTests; its single test needs MySQL).
+  - name: kafdrop
+    url: https://github.com/obsidiandynamics/kafdrop
+    sha: 4fe1e6490e0ec74c725bcc73a5c790ac882e3a93
+    from: 2.7.5
+    recipe: org.openrewrite.java.spring.boot3.UpgradeSpringBoot_3_5
+    jdk: {baseline: 11.0.25-amzn, target: 17.0.13-amzn}
+    why: Real production tool; springfox 3, Lombok, protobuf/avro, custom compiler args. Tests need Docker (not available) and fail equally before/after.
+  - name: WebGoat
+    url: https://github.com/WebGoat/WebGoat
+    sha: ff3a2983e244d17bb774e9933fa923f284909c4b
+    from: 2.7.1
+    recipe: org.openrewrite.java.spring.boot3.UpgradeSpringBoot_3_5
+    jdk: {baseline: 17.0.13-amzn, target: 17.0.13-amzn}
+    why: Largest app (256 main classes, 274 tests); two security configs, actuator HTTP tracing, Flyway + HSQLDB, Thymeleaf, spotless/checkstyle. Upstream upgrade commit ca886b4 is a reference.
+  - name: spring-boot-blog-app
+    url: https://github.com/gtiwari333/spring-boot-blog-app
+    sha: 095e50d8dcb9e01dae519dd9f7b5d394d39811c6
+    from: 2.7.4
+    recipe: org.openrewrite.java.spring.boot3.UpgradeSpringBoot_3_5
+    jdk: {baseline: 17.0.13-amzn, target: 17.0.13-amzn}
+    mvn_args: -Dmodernizer.skip=true -Ddependency-check.skip=true
+    why: Method security with custom expression handler, Hibernate @Type, MapStruct + Lombok, Spock + ArchUnit + Selenide tests, many quality plugins.
+  - name: spring-petclinic
+    url: https://github.com/spring-projects/spring-petclinic
+    sha: 66747e344ec6d4ec5fce2c603c1b61eeeadda8ff
+    from: 3.5.6
+    recipe: org.openrewrite.java.spring.boot4.UpgradeSpringBoot_4_0
+    jdk: {baseline: 17.0.13-amzn, target: 17.0.13-amzn}
+    mvn_args: -Drewrite.exclusions=gradle/wrapper/**,gradlew,gradlew.bat   # recipe phase only; see README
+    why: Canonical Boot app at its last 3.5 commit; JPA, caching, Thymeleaf, spring-javaformat + checkstyle.
+  - name: jhipster-sample-app
+    url: https://github.com/jhipster/jhipster-sample-app
+    sha: 87cea5d16486d219a97c8d5bec09559390ee2e67
+    from: 3.5.8
+    recipe: org.openrewrite.java.spring.boot4.UpgradeSpringBoot_4_0
+    jdk: {baseline: 17.0.13-amzn, target: 17.0.13-amzn}
+    mvn_args: -Dskip.npm -Dskip.installnodenpm
+    why: Enterprise-shaped generated app; tech.jhipster framework lib, Liquibase, Jackson customisation, JWT resource server, 211 tests (163 ITs on H2).
+  - name: spring-petclinic-reactjs
+    url: https://github.com/spring-petclinic/spring-petclinic-reactjs
+    sha: 4a6c26d99f48d8bfac97352130b9fae4feab2509
+    from: 3.2.1
+    recipe: org.openrewrite.java.spring.boot4.UpgradeSpringBoot_4_0
+    jdk: {baseline: 17.0.13-amzn, target: 17.0.13-amzn}
+    why: Boot 3.2 (two minor versions behind) -> 4.0; openapi-generator codegen, several conditional security filter chains, Jackson ObjectMapper builder; 183 tests.
+  - name: dddsample-core
+    url: https://github.com/citerus/dddsample-core
+    sha: d8b896254ed4e18ba8117dcd5bf9a54708bdeaaf
+    from: 3.3.10
+    recipe: org.openrewrite.java.spring.boot4.UpgradeSpringBoot_4_0
+    jdk: {baseline: 17.0.13-amzn, target: 17.0.13-amzn}
+    why: DDD reference app; JPA on HSQLDB, ActiveMQ, Selenium/HtmlUnit acceptance tests; 131 tests. Replaced ali-bouali/spring-boot-3-jwt-security (only test needs Postgres).
+replaced:
+  - name: spring-boot-3-jwt-security
+    url: https://github.com/ali-bouali/spring-boot-3-jwt-security
+    sha: ad5109f1d5435042372db6b4262ad3206fa851cd
+    reason: Its only test needs a live Postgres, so there was no runnable baseline. The pilot run still found one breakage (DaoAuthenticationProvider no-arg constructor removed in Security 7, config/ApplicationConfig.java:33). That result is not counted.
+not_available:
+  - JDK 21 is not installed, so gtiwari333/spring-boot-blog-app at Boot 3.5.6 (java.version 21) was pinned at its 2.7.4 commit instead.
+  - There is no Docker, so Testcontainers tests (kafdrop) and browser tests (blog-app Firefox) are red at baseline and excluded from attribution.

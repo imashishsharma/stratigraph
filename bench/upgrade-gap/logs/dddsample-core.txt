@@ -1,0 +1,83 @@
+# dddsample-core  sha=d8b896254ed4e18ba8117dcd5bf9a54708bdeaaf
+## baseline exit=0
+  tests=131 passed=128 failures=0 errors=0 skipped=3
+## recipe exit=0  18 files changed, 62 insertions(+), 56 deletions(-)
+  pom.xml                                                                                                | 37 ++++++++++++++++++++++++++++++++-----
+   src/main/java/se/citerus/dddsample/infrastructure/persistence/jpa/CargoRepositoryJPA.java              |  3 ++-
+   src/main/java/se/citerus/dddsample/infrastructure/sampledata/SampleDataGenerator.java                  |  4 ++--
+   src/main/java/se/citerus/dddsample/interfaces/InterfacesApplicationContext.java                        |  2 +-
+   src/main/java/se/citerus/dddsample/interfaces/booking/web/CargoAdminController.java                    |  8 ++++----
+   src/main/java/se/citerus/dddsample/interfaces/handling/HandlingEventRegistrationAttempt.java           |  4 ++--
+   src/main/java/se/citerus/dddsample/interfaces/handling/file/UploadDirectoryScanner.java                |  2 +-
+   src/main/java/se/citerus/dddsample/interfaces/tracking/CargoTrackingController.java                    |  9 +++++----
+   src/main/java/se/citerus/dddsample/interfaces/tracking/TrackCommandValidator.java                      |  2 +-
+   src/test/java/se/citerus/dddsample/acceptance/AbstractAcceptanceTest.java                              |  3 ---
+   src/test/java/se/citerus/dddsample/infrastructure/persistence/jpa/CargoRepositoryTest.java             |  5 +----
+   src/test/java/se/citerus/dddsample/infrastructure/persistence/jpa/CarrierMovementRepositoryTest.java   |  5 +----
+   src/test/java/se/citerus/dddsample/infrastructure/persistence/jpa/HandlingEventRepositoryTest.java     |  5 +----
+   src/test/java/se/citerus/dddsample/infrastructure/persistence/jpa/LocationRepositoryTest.java          |  5 +----
+   src/test/java/se/citerus/dddsample/interfaces/handling/HandlingReportIntegrationTest.java              |  8 +++-----
+   src/test/java/se/citerus/dddsample/interfaces/tracking/CargoTrackingControllerTest.java                |  7 ++-----
+   src/test/java/se/citerus/dddsample/interfaces/tracking/ws/CargoTrackingRestServiceIntegrationTest.java |  3 ---
+   src/test/resources/config/application.yml                                                              |  6 +++---
+   18 files changed, 62 insertions(+), 56 deletions(-)
+## post-recipe build exit=0
+  Caused by: org.springframework.beans.factory.NoSuchBeanDefinitionException: No qualifying bean of type 'jakarta.persistence.EntityManager' available: expected at least 1 bean which qualifies as autowire candidate. Dependency annotations: {@org.springframework.
+  Caused by: org.springframework.beans.factory.UnsatisfiedDependencyException: Error creating bean with name 'interfacesApplicationContext': Unsatisfied dependency expressed through field 'entityManager': No qualifying bean of type 'jakarta.persistence.EntityMan
+  Caused by: org.springframework.beans.factory.UnsatisfiedDependencyException: Error creating bean with name 'se.citerus.dddsample.interfaces.InterfacesApplicationContext': Unsatisfied dependency expressed through field 'entityManager': No qualifying bean of typ
+  Caused by: java.lang.IllegalArgumentException: Failed to parse UNLO code: XXX
+  Caused by: java.lang.IllegalArgumentException: XXX is not a valid UN/LOCODE (does not match pattern)
+  [ERROR] Tests run: 131, Failures: 0, Errors: 20, Skipped: 2
+  [INFO] BUILD SUCCESS
+  tests=131 passed=109 failures=0 errors=20 skipped=2
+   - se.citerus.dddsample.acceptance.AdminAcceptanceTest#adminSiteCanBookNewCargo: java.lang.IllegalStateException: Failed to load ApplicationContext for [WebMergedContextConfiguration@2ba024cb testClass = se.citerus.dddsample.acceptance.AdminAcceptanceTest, locations = [], classes = [se.citerus
+   - se.citerus.dddsample.acceptance.AdminAcceptanceTest#adminSiteCargoListContainsCannedCargo: java.lang.IllegalStateException: ApplicationContext failure threshold (1) exceeded: skipping repeated attempt to load context for [WebMergedContextConfiguration@2ba024cb testClass = se.citerus.dddsample.acceptance
+   - se.citerus.dddsample.acceptance.CustomerAcceptanceTest#customerSiteCanTrackValidCargo: java.lang.IllegalStateException: ApplicationContext failure threshold (1) exceeded: skipping repeated attempt to load context for [WebMergedContextConfiguration@6a4af081 testClass = se.citerus.dddsample.acceptance
+   - se.citerus.dddsample.infrastructure.persistence.jpa.CargoRepositoryTest#testNextTrackingId: java.lang.IllegalStateException: ApplicationContext failure threshold (1) exceeded: skipping repeated attempt to load context for [MergedContextConfiguration@3d405fe5 testClass = se.citerus.dddsample.infrastructur
+   - se.citerus.dddsample.infrastructure.persistence.jpa.CarrierMovementRepositoryTest#testFind: java.lang.IllegalStateException: ApplicationContext failure threshold (1) exceeded: skipping repeated attempt to load context for [MergedContextConfiguration@27bbe773 testClass = se.citerus.dddsample.infrastructur
+   - se.citerus.dddsample.infrastructure.persistence.jpa.HandlingEventRepositoryTest#testSave: java.lang.IllegalStateException: ApplicationContext failure threshold (1) exceeded: skipping repeated attempt to load context for [MergedContextConfiguration@49f1184e testClass = se.citerus.dddsample.infrastructur
+   - se.citerus.dddsample.infrastructure.persistence.jpa.LocationRepositoryTest#testFindAll: java.lang.IllegalStateException: Failed to load ApplicationContext for [MergedContextConfiguration@5d4a34ff testClass = se.citerus.dddsample.infrastructure.persistence.jpa.LocationRepositoryTest, locations = [], c
+   - se.citerus.dddsample.infrastructure.persistence.jpa.LocationRepositoryTest#testFind: java.lang.IllegalStateException: ApplicationContext failure threshold (1) exceeded: skipping repeated attempt to load context for [MergedContextConfiguration@5d4a34ff testClass = se.citerus.dddsample.infrastructur
+   - se.citerus.dddsample.interfaces.handling.HandlingReportIntegrationTest#shouldReturn201ResponseWhenHandlingReportIsSubmitted: java.lang.IllegalStateException: Failed to load ApplicationContext for [WebMergedContextConfiguration@5036a286 testClass = se.citerus.dddsample.interfaces.handling.HandlingReportIntegrationTest, locations = [], cl
+   - se.citerus.dddsample.interfaces.handling.HandlingReportIntegrationTest#shouldReturnValidationErrorResponseWhenInvalidHandlingReportIsSubmitted: java.lang.IllegalStateException: ApplicationContext failure threshold (1) exceeded: skipping repeated attempt to load context for [WebMergedContextConfiguration@5036a286 testClass = se.citerus.dddsample.interfaces
+   - se.citerus.dddsample.interfaces.tracking.ws.CargoTrackingRestServiceIntegrationTest#shouldReturnValidationErrorResponseWhenInvalidHandlingReportIsSubmitted: java.lang.IllegalStateException: ApplicationContext failure threshold (1) exceeded: skipping repeated attempt to load context for [WebMergedContextConfiguration@3d00e981 testClass = se.citerus.dddsample.interfaces
+## fix1: Autowired EntityManager -> @PersistenceContext (3 fields)
+  Caused by: org.springframework.orm.ObjectOptimisticLockingFailureException: Row was already updated or deleted by another transaction for entity [se.citerus.dddsample.domain.model.location.Location with id '1']
+  Caused by: org.hibernate.StaleObjectStateException: Row was already updated or deleted by another transaction for entity [se.citerus.dddsample.domain.model.location.Location with id '1']
+  Caused by: org.springframework.beans.factory.BeanCreationException: Error creating bean with name 'sampleDataGenerator': Invocation of init method failed
+  Caused by: java.lang.ClassNotFoundException: org.htmlunit.WebConnection
+  Caused by: java.lang.IllegalArgumentException: Failed to parse UNLO code: XXX
+  Caused by: java.lang.IllegalArgumentException: XXX is not a valid UN/LOCODE (does not match pattern)
+  [ERROR] Tests run: 131, Failures: 0, Errors: 20, Skipped: 2
+  [INFO] BUILD SUCCESS
+  tests=131 passed=109 failures=0 errors=20 skipped=2
+   - se.citerus.dddsample.acceptance.AdminAcceptanceTest#adminSiteCanBookNewCargo: java.lang.NoClassDefFoundError: org/htmlunit/WebConnection
+   - se.citerus.dddsample.acceptance.AdminAcceptanceTest#adminSiteCargoListContainsCannedCargo: java.lang.IllegalStateException: Failed to load ApplicationContext for [WebMergedContextConfiguration@677b00ae testClass = se.citerus.dddsample.acceptance.AdminAcceptanceTest, locations = [], classes = [se.citerus
+   - se.citerus.dddsample.acceptance.CustomerAcceptanceTest#customerSiteCanTrackValidCargo: java.lang.IllegalStateException: ApplicationContext failure threshold (1) exceeded: skipping repeated attempt to load context for [WebMergedContextConfiguration@5084fc91 testClass = se.citerus.dddsample.acceptance
+   - se.citerus.dddsample.infrastructure.persistence.jpa.CargoRepositoryTest#testNextTrackingId: java.lang.IllegalStateException: ApplicationContext failure threshold (1) exceeded: skipping repeated attempt to load context for [MergedContextConfiguration@33ccb7e7 testClass = se.citerus.dddsample.infrastructur
+   - se.citerus.dddsample.infrastructure.persistence.jpa.CarrierMovementRepositoryTest#testFind: java.lang.IllegalStateException: ApplicationContext failure threshold (1) exceeded: skipping repeated attempt to load context for [MergedContextConfiguration@5acee0a3 testClass = se.citerus.dddsample.infrastructur
+   - se.citerus.dddsample.infrastructure.persistence.jpa.HandlingEventRepositoryTest#testSave: java.lang.IllegalStateException: ApplicationContext failure threshold (1) exceeded: skipping repeated attempt to load context for [MergedContextConfiguration@505ceb9a testClass = se.citerus.dddsample.infrastructur
+   - se.citerus.dddsample.infrastructure.persistence.jpa.LocationRepositoryTest#testFindAll: java.lang.IllegalStateException: Failed to load ApplicationContext for [MergedContextConfiguration@7c4eecfc testClass = se.citerus.dddsample.infrastructure.persistence.jpa.LocationRepositoryTest, locations = [], c
+   - se.citerus.dddsample.infrastructure.persistence.jpa.LocationRepositoryTest#testFind: java.lang.IllegalStateException: ApplicationContext failure threshold (1) exceeded: skipping repeated attempt to load context for [MergedContextConfiguration@7c4eecfc testClass = se.citerus.dddsample.infrastructur
+   - se.citerus.dddsample.interfaces.handling.HandlingReportIntegrationTest#shouldReturn201ResponseWhenHandlingReportIsSubmitted: java.lang.IllegalStateException: Failed to load ApplicationContext for [WebMergedContextConfiguration@29cd9511 testClass = se.citerus.dddsample.interfaces.handling.HandlingReportIntegrationTest, locations = [], cl
+   - se.citerus.dddsample.interfaces.handling.HandlingReportIntegrationTest#shouldReturnValidationErrorResponseWhenInvalidHandlingReportIsSubmitted: java.lang.IllegalStateException: ApplicationContext failure threshold (1) exceeded: skipping repeated attempt to load context for [WebMergedContextConfiguration@29cd9511 testClass = se.citerus.dddsample.interfaces
+   - se.citerus.dddsample.interfaces.tracking.ws.CargoTrackingRestServiceIntegrationTest#shouldReturnValidationErrorResponseWhenInvalidHandlingReportIsSubmitted: java.lang.IllegalStateException: ApplicationContext failure threshold (1) exceeded: skipping repeated attempt to load context for [WebMergedContextConfiguration@674916ae testClass = se.citerus.dddsample.interfaces
+## fix2: + htmlunit-driver 4.13.0 pin (added by recipe) removed; artifact -> htmlunit3-driver (Boot-managed)
+  Caused by: org.springframework.orm.ObjectOptimisticLockingFailureException: Row was already updated or deleted by another transaction for entity [se.citerus.dddsample.domain.model.location.Location with id '1']
+  Caused by: org.hibernate.StaleObjectStateException: Row was already updated or deleted by another transaction for entity [se.citerus.dddsample.domain.model.location.Location with id '1']
+  Caused by: org.springframework.beans.factory.BeanCreationException: Error creating bean with name 'sampleDataGenerator': Invocation of init method failed
+  Caused by: java.lang.IllegalArgumentException: Failed to parse UNLO code: XXX
+  Caused by: java.lang.IllegalArgumentException: XXX is not a valid UN/LOCODE (does not match pattern)
+  [ERROR] Tests run: 131, Failures: 0, Errors: 19, Skipped: 2
+  [INFO] BUILD SUCCESS
+  tests=131 passed=110 failures=0 errors=19 skipped=2
+   - se.citerus.dddsample.acceptance.AdminAcceptanceTest#adminSiteCargoListContainsCannedCargo: java.lang.IllegalStateException: Failed to load ApplicationContext for [WebMergedContextConfiguration@34dae070 testClass = se.citerus.dddsample.acceptance.AdminAcceptanceTest, locations = [], classes = [se.citerus
+   - se.citerus.dddsample.acceptance.CustomerAcceptanceTest#customerSiteCanTrackValidCargo: java.lang.IllegalStateException: ApplicationContext failure threshold (1) exceeded: skipping repeated attempt to load context for [WebMergedContextConfiguration@6204fbc1 testClass = se.citerus.dddsample.acceptance
+   - se.citerus.dddsample.infrastructure.persistence.jpa.CargoRepositoryTest#testNextTrackingId: java.lang.IllegalStateException: ApplicationContext failure threshold (1) exceeded: skipping repeated attempt to load context for [MergedContextConfiguration@45a844de testClass = se.citerus.dddsample.infrastructur
+   - se.citerus.dddsample.infrastructure.persistence.jpa.CarrierMovementRepositoryTest#testFind: java.lang.IllegalStateException: ApplicationContext failure threshold (1) exceeded: skipping repeated attempt to load context for [MergedContextConfiguration@68817cd7 testClass = se.citerus.dddsample.infrastructur
+   - se.citerus.dddsample.infrastructure.persistence.jpa.HandlingEventRepositoryTest#testSave: java.lang.IllegalStateException: ApplicationContext failure threshold (1) exceeded: skipping repeated attempt to load context for [MergedContextConfiguration@59a62b0e testClass = se.citerus.dddsample.infrastructur
+   - se.citerus.dddsample.infrastructure.persistence.jpa.LocationRepositoryTest#testFindAll: java.lang.IllegalStateException: Failed to load ApplicationContext for [MergedContextConfiguration@179273ff testClass = se.citerus.dddsample.infrastructure.persistence.jpa.LocationRepositoryTest, locations = [], c
+   - se.citerus.dddsample.infrastructure.persistence.jpa.LocationRepositoryTest#testFind: java.lang.IllegalStateException: ApplicationContext failure threshold (1) exceeded: skipping repeated attempt to load context for [MergedContextConfiguration@179273ff testClass = se.citerus.dddsample.infrastructur
+   - se.citerus.dddsample.interfaces.handling.HandlingReportIntegrationTest#shouldReturn201ResponseWhenHandlingReportIsSubmitted: java.lang.IllegalStateException: Failed to load ApplicationContext for [WebMergedContextConfiguration@6d9c791 testClass = se.citerus.dddsample.interfaces.handling.HandlingReportIntegrationTest, locations = [], cla
+   - se.citerus.dddsample.interfaces.handling.HandlingReportIntegrationTest#shouldReturnValidationErrorResponseWhenInvalidHandlingReportIsSubmitted: java.lang.IllegalStateException: ApplicationContext failure threshold (1) exceeded: skipping repeated attempt to load context for [WebMergedContextConfiguration@6d9c791 testClass = se.citerus.dddsample.interfaces.
+   - se.citerus.dddsample.interfaces.tracking.ws.CargoTrackingRestServiceIntegrationTest#shouldReturnValidationErrorResponseWhenInvalidHandlingReportIsSubmitted: java.lang.IllegalStateException: ApplicationContext failure threshold (1) exceeded: skipping repeated attempt to load context for [WebMergedContextConfiguration@61b4da5c testClass = se.citerus.dddsample.interfaces

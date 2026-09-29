@@ -1,0 +1,170 @@
+# spring-petclinic-reactjs  sha=4a6c26d99f48d8bfac97352130b9fae4feab2509
+## baseline exit=0
+  tests=183 passed=183 failures=0 errors=0 skipped=0
+## recipe exit=0  21 files changed, 157 insertions(+), 170 deletions(-)
+  pom.xml                                                                                               | 43 +++++++++++++++++++++----------------------
+   src/main/java/org/springframework/samples/petclinic/repository/jdbc/JdbcOwnerRepositoryImpl.java      |  5 ++---
+   src/main/java/org/springframework/samples/petclinic/repository/jdbc/JdbcPetRepositoryImpl.java        |  4 ++--
+   src/main/java/org/springframework/samples/petclinic/repository/jdbc/JdbcPetTypeRepositoryImpl.java    |  4 ++--
+   src/main/java/org/springframework/samples/petclinic/repository/jdbc/JdbcSpecialtyRepositoryImpl.java  |  4 ++--
+   src/main/java/org/springframework/samples/petclinic/repository/jdbc/JdbcUserRepositoryImpl.java       |  4 ++--
+   src/main/java/org/springframework/samples/petclinic/repository/jdbc/JdbcVetRepositoryImpl.java        |  4 ++--
+   src/main/java/org/springframework/samples/petclinic/repository/jdbc/JdbcVisitRepositoryImpl.java      |  4 ++--
+   src/main/java/org/springframework/samples/petclinic/rest/advice/ExceptionControllerAdvice.java        |  9 +++++----
+   src/main/java/org/springframework/samples/petclinic/rest/controller/BindingErrorsResponse.java        | 14 +++++++-------
+   src/main/java/org/springframework/samples/petclinic/security/BasicAuthenticationConfig.java           | 17 +++++++++--------
+   src/main/java/org/springframework/samples/petclinic/security/DisableSecurityConfig.java               |  6 +++---
+   src/main/java/org/springframework/samples/petclinic/service/ClinicServiceImpl.java                    |  4 +---
+   src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerTests.java     | 52 ++++++++++++++++++++--------------------------------
+   src/test/java/org/springframework/samples/petclinic/rest/controller/PetRestControllerTests.java       | 37 ++++++++++++++++---------------------
+   src/test/java/org/springframework/samples/petclinic/rest/controller/PetTypeRestControllerTests.java   | 25 ++++++++++++++-----------
+   src/test/java/org/springframework/samples/petclinic/rest/controller/SpecialtyRestControllerTests.java | 23 +++++++++++++----------
+   src/test/java/org/springframework/samples/petclinic/rest/controller/UserRestControllerTests.java      |  9 ++++++---
+   src/test/java/org/springframework/samples/petclinic/rest/controller/VetRestControllerTests.java       | 23 +++++++++++++----------
+   src/test/java/org/springframework/samples/petclinic/rest/controller/VisitRestControllerTests.java     | 33 +++++++++++++--------------------
+   src/test/resources/application.properties                                                             |  3 ++-
+   21 files changed, 157 insertions(+), 170 deletions(-)
+## post-recipe build exit=1
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/api/OopsApi.java:83 ';' expected
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/api/OopsApi.java:83 illegal character: '\'
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/api/OopsApi.java:83 not a statement
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/api/OwnersApi.java:97 ';' expected
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/api/OwnersApi.java:97 illegal character: '\'
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/api/OwnersApi.java:97 not a statement
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/api/OwnersApi.java:102 ';' expected
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/api/OwnersApi.java:102 illegal character: '\'
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/api/OwnersApi.java:102 not a statement
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/api/OwnersApi.java:164 ';' expected
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/api/OwnersApi.java:164 illegal character: '\'
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/api/OwnersApi.java:164 not a statement
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/api/OwnersApi.java:169 ';' expected
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/api/OwnersApi.java:169 illegal character: '\'
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/api/OwnersApi.java:169 not a statement
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/api/OwnersApi.java:174 ';' expected
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/api/OwnersApi.java:174 illegal character: '\'
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/api/OwnersApi.java:174 not a statement
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/api/OwnersApi.java:238 ';' expected
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/api/OwnersApi.java:238 illegal character: '\'
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/api/OwnersApi.java:238 not a statement
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/api/OwnersApi.java:243 ';' expected
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/api/OwnersApi.java:243 illegal character: '\'
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/api/OwnersApi.java:243 not a statement
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/api/OwnersApi.java:248 ';' expected
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/api/OwnersApi.java:248 illegal character: '\'
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/api/OwnersApi.java:248 not a statement
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/api/OwnersApi.java:309 ';' expected
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/api/OwnersApi.java:309 illegal character: '\'
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/api/OwnersApi.java:309 not a statement
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/api/OwnersApi.java:314 ';' expected
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/api/OwnersApi.java:314 illegal character: '\'
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/api/OwnersApi.java:314 not a statement
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/api/OwnersApi.java:319 ';' expected
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/api/OwnersApi.java:319 illegal character: '\'
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/api/OwnersApi.java:319 not a statement
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/api/OwnersApi.java:380 ';' expected
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/api/OwnersApi.java:380 illegal character: '\'
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/api/OwnersApi.java:380 not a statement
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/api/OwnersApi.java:385 ';' expected
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/api/OwnersApi.java:385 illegal character: '\'
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/api/OwnersApi.java:385 not a statement
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/api/OwnersApi.java:390 ';' expected
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/api/OwnersApi.java:390 illegal character: '\'
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/api/OwnersApi.java:390 not a statement
+  tests=0 passed=0 failures=0 errors=0 skipped=0
+## fix1: openapi-generator 7.16.0 (bumped by recipe) emits uncompilable string escapes for spec examples -> back to 6.3.0
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/dto/OwnerDto.java:12 package javax.validation does not exist
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/dto/OwnerDto.java:19 package javax.annotation does not exist
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/dto/OwnerDto.java:27 cannot find symbol
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/dto/OwnerFieldsDto.java:9 package javax.validation does not exist
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/dto/OwnerFieldsDto.java:16 package javax.annotation does not exist
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/dto/OwnerFieldsDto.java:24 cannot find symbol
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/dto/PetDto.java:15 package javax.validation does not exist
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/dto/PetDto.java:22 package javax.annotation does not exist
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/dto/PetDto.java:30 cannot find symbol
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/dto/PetTypeDto.java:9 package javax.validation does not exist
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/dto/PetTypeDto.java:16 package javax.annotation does not exist
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/dto/PetTypeDto.java:24 cannot find symbol
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/dto/VisitDto.java:11 package javax.validation does not exist
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/dto/VisitDto.java:18 package javax.annotation does not exist
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/dto/VisitDto.java:26 cannot find symbol
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/dto/OwnerFieldsDto.java:10 package javax.validation.constraints does not exist
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/dto/OwnerDto.java:13 package javax.validation.constraints does not exist
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/dto/PetDto.java:16 package javax.validation.constraints does not exist
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/dto/VisitDto.java:12 package javax.validation.constraints does not exist
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/dto/PetTypeDto.java:10 package javax.validation.constraints does not exist
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/dto/PetFieldsDto.java:12 package javax.validation does not exist
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/dto/PetFieldsDto.java:19 package javax.annotation does not exist
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/dto/PetFieldsDto.java:27 cannot find symbol
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/dto/PetFieldsDto.java:13 package javax.validation.constraints does not exist
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/dto/PetTypeFieldsDto.java:9 package javax.validation does not exist
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/dto/PetTypeFieldsDto.java:16 package javax.annotation does not exist
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/dto/PetTypeFieldsDto.java:24 cannot find symbol
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/dto/PetTypeFieldsDto.java:10 package javax.validation.constraints does not exist
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/dto/SpecialtyDto.java:9 package javax.validation does not exist
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/dto/SpecialtyDto.java:16 package javax.annotation does not exist
+  tests=0 passed=0 failures=0 errors=0 skipped=0
+## fix2: fix1 reverted; openapi-generator 7.16.0 -> 7.25.0 (keeps recipe's useSpringBoot4); removed javadoc-only import of org.springframework.orm.hibernate5 (package deleted in Spring 7)
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/api/OopsApi.java:82 ';' expected
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/api/OopsApi.java:82 illegal character: '\'
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/api/OopsApi.java:82 not a statement
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/api/OwnersApi.java:96 ';' expected
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/api/OwnersApi.java:96 illegal character: '\'
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/api/OwnersApi.java:96 not a statement
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/api/OwnersApi.java:101 ';' expected
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/api/OwnersApi.java:101 illegal character: '\'
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/api/OwnersApi.java:101 not a statement
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/api/OwnersApi.java:162 ';' expected
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/api/OwnersApi.java:162 illegal character: '\'
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/api/OwnersApi.java:162 not a statement
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/api/OwnersApi.java:167 ';' expected
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/api/OwnersApi.java:167 illegal character: '\'
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/api/OwnersApi.java:167 not a statement
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/api/OwnersApi.java:172 ';' expected
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/api/OwnersApi.java:172 illegal character: '\'
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/api/OwnersApi.java:172 not a statement
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/api/OwnersApi.java:235 ';' expected
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/api/OwnersApi.java:235 illegal character: '\'
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/api/OwnersApi.java:235 not a statement
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/api/OwnersApi.java:240 ';' expected
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/api/OwnersApi.java:240 illegal character: '\'
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/api/OwnersApi.java:240 not a statement
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/api/OwnersApi.java:245 ';' expected
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/api/OwnersApi.java:245 illegal character: '\'
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/api/OwnersApi.java:245 not a statement
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/api/OwnersApi.java:305 ';' expected
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/api/OwnersApi.java:305 illegal character: '\'
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/api/OwnersApi.java:305 not a statement
+  tests=0 passed=0 failures=0 errors=0 skipped=0
+## fix3: + generator configOption skipDefaultInterface=true (7.x example-body escaping bug in default methods; controllers implement all methods)
+  src/main/java/org/springframework/samples/petclinic/rest/controller/BindingErrorsResponse.java:83 cannot find symbol
+  src/main/java/org/springframework/samples/petclinic/rest/controller/OwnerRestController.java:50 org.springframework.samples.petclinic.rest.controller.OwnerRestController is not abstract and does not override abstract method updateOwnersPet(@jakarta.validation.constraints.Min(0L) java.lang.Intege
+  [ERROR] Failed to execute goal org.apache.maven.plugins:maven-compiler-plugin:3.16.0:compile (default-compile) on project spring-petclinic-rest: Compilation failure: Compilation failure: 
+  Caused by: org.apache.maven.plugin.compiler.CompilationFailureException: Compilation failure
+  [INFO] BUILD FAILURE
+  tests=0 passed=0 failures=0 errors=0 skipped=0
+## fix4: skipDefaultInterface reverted; openapi.yml example string with escaped quotes rewritten (generator 7.x escaping bug); Jackson 3 builder .visibility(...) -> changeDefaultVisibility(...)
+  [ERROR] Failed to execute goal org.jacoco:jacoco-maven-plugin:0.8.15:check (check) on project spring-petclinic-rest: Coverage checks have not been met. See log for details. -> [Help 1]
+  Caused by: org.springframework.beans.factory.BeanCreationException: Error creating bean with name 'springSecurityFilterChain': Cannot create inner bean '(inner bean)#120760bd' while setting constructor argument with key [1]
+  Caused by: org.springframework.beans.factory.BeanCreationException: Error creating bean with name '(inner bean)#133ce0c1' defined in class path resource [org/springframework/security/config/annotation/web/configuration/WebSecurityConfiguration.class]: Failed t
+  Caused by: org.springframework.beans.factory.BeanCreationException: Error creating bean with name 'springSecurityFilterChain': Cannot create inner bean '(inner bean)#133ce0c1' while setting constructor argument with key [1]
+  Caused by: org.springframework.beans.factory.BeanCreationException: Error creating bean with name '(inner bean)#33f45a99' defined in class path resource [org/springframework/security/config/annotation/web/configuration/WebSecurityConfiguration.class]: Failed t
+  Caused by: org.springframework.beans.factory.BeanCreationException: Error creating bean with name 'springSecurityFilterChain': Cannot create inner bean '(inner bean)#33f45a99' while setting constructor argument with key [1]
+  Caused by: org.apache.maven.plugin.MojoExecutionException: Coverage checks have not been met. See log for details.
+  [ERROR] Tests run: 183, Failures: 0, Errors: 182, Skipped: 0
+  [INFO] BUILD FAILURE
+  tests=183 passed=1 failures=0 errors=182 skipped=0
+   - org.springframework.samples.petclinic.SpringConfigTests#contextLoads: java.lang.IllegalStateException: Failed to load ApplicationContext for [WebMergedContextConfiguration@6cf10de4 testClass = org.springframework.samples.petclinic.SpringConfigTests, locations = [], classes = [org.sp
+   - org.springframework.samples.petclinic.rest.controller.OwnerRestControllerTests#testDeleteOwnerError: java.lang.IllegalStateException: ApplicationContext failure threshold (1) exceeded: skipping repeated attempt to load context for [WebMergedContextConfiguration@239fd1ad testClass = org.springframework.samples.pet
+   - org.springframework.samples.petclinic.rest.controller.PetRestControllerTests#testGetAllPetsSuccess: java.lang.IllegalStateException: Failed to load ApplicationContext for [WebMergedContextConfiguration@18bf1efb testClass = org.springframework.samples.petclinic.rest.controller.PetRestControllerTests, locations = 
+   - org.springframework.samples.petclinic.rest.controller.PetRestControllerTests#testGetPetNotFound: java.lang.IllegalStateException: ApplicationContext failure threshold (1) exceeded: skipping repeated attempt to load context for [WebMergedContextConfiguration@18bf1efb testClass = org.springframework.samples.pet
+   - org.springframework.samples.petclinic.rest.controller.PetTypeRestControllerTests#testGetAllPetTypesSuccessAsOwnerAdmin: java.lang.IllegalStateException: ApplicationContext failure threshold (1) exceeded: skipping repeated attempt to load context for [WebMergedContextConfiguration@2127ae7d testClass = org.springframework.samples.pet
+   - org.springframework.samples.petclinic.rest.controller.SpecialtyRestControllerTests#testCreateSpecialtySuccess: java.lang.IllegalStateException: ApplicationContext failure threshold (1) exceeded: skipping repeated attempt to load context for [WebMergedContextConfiguration@4c4aaa60 testClass = org.springframework.samples.pet
+   - org.springframework.samples.petclinic.rest.controller.UserRestControllerTests#testCreateUserError: java.lang.IllegalStateException: Failed to load ApplicationContext for [WebMergedContextConfiguration@143cd56e testClass = org.springframework.samples.petclinic.rest.controller.UserRestControllerTests, locations =
+   - org.springframework.samples.petclinic.rest.controller.UserRestControllerTests#testCreateUserSuccess: java.lang.IllegalStateException: ApplicationContext failure threshold (1) exceeded: skipping repeated attempt to load context for [WebMergedContextConfiguration@143cd56e testClass = org.springframework.samples.pet
+   - org.springframework.samples.petclinic.rest.controller.VetRestControllerTests#testDeleteVetSuccess: java.lang.IllegalStateException: ApplicationContext failure threshold (1) exceeded: skipping repeated attempt to load context for [WebMergedContextConfiguration@7f40c766 testClass = org.springframework.samples.pet
+   - org.springframework.samples.petclinic.rest.controller.VisitRestControllerTests#testGetAllVisitsNotFound: java.lang.IllegalStateException: ApplicationContext failure threshold (1) exceeded: skipping repeated attempt to load context for [WebMergedContextConfiguration@23e977f4 testClass = org.springframework.samples.pet
+   - org.springframework.samples.petclinic.service.clinicService.ClinicServiceJdbcTests#shouldFindAllOwners: java.lang.IllegalStateException: Failed to load ApplicationContext for [WebMergedContextConfiguration@77f68e5f testClass = org.springframework.samples.petclinic.service.clinicService.ClinicServiceJdbcTests, locati
+   - org.springframework.samples.petclinic.service.clinicService.ClinicServiceJdbcTests#shouldFindPetTypeById: java.lang.IllegalStateException: ApplicationContext failure threshold (1) exceeded: skipping repeated attempt to load context for [WebMergedContextConfiguration@77f68e5f testClass = org.springframework.samples.pet
+   - org.springframework.samples.petclinic.service.clinicService.ClinicServiceJpaTests#shouldFindAllOwners: java.lang.IllegalStateException: Failed to load ApplicationContext for [WebMergedContextConfiguration@195ec6a1 testClass = org.springframework.samples.petclinic.service.clinicService.ClinicServiceJpaTests, locatio
+   - org.springframework.samples.petclinic.service.clinicService.ClinicServiceJpaTests#shouldFindPetTypeById: java.lang.IllegalStateException: ApplicationContext failure threshold (1) exceeded: skipping repeated attempt to load context for [WebMergedContextConfiguration@195ec6a1 testClass = org.springframework.samples.pet
+   ...

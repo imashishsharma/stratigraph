@@ -1,0 +1,61 @@
+# kafdrop  sha=4fe1e6490e0ec74c725bcc73a5c790ac882e3a93
+## baseline exit=0
+  tests=5 passed=1 failures=0 errors=4 skipped=0
+   - kafdrop.KafdropTest#getReturnsExpectedGutHubStarText: java.lang.IllegalStateException: Failed to load ApplicationContext
+   - kafdrop.KafdropIT#contextTest: java.lang.IllegalStateException: Failed to load ApplicationContext
+## recipe exit=0  23 files changed, 134 insertions(+), 104 deletions(-)
+  .github/workflows/master.yml                                 |  2 +-
+   .github/workflows/pull_request.yml                           |  2 +-
+   pom.xml                                                      | 31 +++++++++++++++++--------------
+   src/main/docker/Dockerfile                                   |  2 +-
+   src/main/java/kafdrop/config/CorsConfiguration.java          | 10 ++++++++--
+   src/main/java/kafdrop/config/InterceptorConfiguration.java   |  3 ++-
+   src/main/java/kafdrop/config/MessageFormatConfiguration.java |  2 +-
+   src/main/java/kafdrop/config/SwaggerConfiguration.java       | 13 +++++--------
+   src/main/java/kafdrop/controller/AclController.java          | 13 ++++++++-----
+   src/main/java/kafdrop/controller/BasicErrorController.java   |  2 +-
+   src/main/java/kafdrop/controller/BrokerController.java       | 16 ++++++++++------
+   src/main/java/kafdrop/controller/ClusterController.java      | 10 +++++++---
+   src/main/java/kafdrop/controller/ConsumerController.java     | 12 ++++++++----
+   src/main/java/kafdrop/controller/MessageController.java      | 22 ++++++++++++----------
+   src/main/java/kafdrop/controller/TopicController.java        | 27 ++++++++++++++++-----------
+   src/main/java/kafdrop/model/ConsumerVO.java                  |  3 +--
+   src/main/java/kafdrop/model/CreateTopicVO.java               | 12 ++++++------
+   src/main/java/kafdrop/model/TopicVO.java                     |  3 +--
+   src/main/java/kafdrop/service/KafkaHighLevelAdminClient.java |  2 +-
+   src/main/java/kafdrop/service/KafkaHighLevelConsumer.java    |  2 +-
+   src/main/java/kafdrop/util/DeserializationException.java     | 11 +++++++----
+   src/test/java/kafdrop/KafdropTest.java                       |  5 +----
+   src/test/java/kafdrop/protos/Person.java                     | 33 ++++++++++++++++++---------------
+   23 files changed, 134 insertions(+), 104 deletions(-)
+## post-recipe build exit=1
+  [ERROR] Failed to execute goal org.apache.maven.plugins:maven-compiler-plugin:3.16.0:compile (default-compile) on project kafdrop: Compilation failure
+  Caused by: org.apache.maven.plugin.compiler.CompilationFailureException: Compilation failure
+  [INFO] BUILD FAILURE
+  tests=0 passed=0 failures=0 errors=0 skipped=0
+## fix1: maven-compiler <release> (added by recipe) conflicts with --add-exports compilerArg -> source/target 17
+  [ERROR] Failed to execute goal org.apache.maven.plugins:maven-compiler-plugin:3.16.0:compile (default-compile) on project kafdrop: Compilation failure
+  Caused by: org.apache.maven.plugin.compiler.CompilationFailureException: Compilation failure
+  [INFO] BUILD FAILURE
+  tests=0 passed=0 failures=0 errors=0 skipped=0
+## fix2: + removed unused --add-exports compilerArg (no source uses jdk.internal.agent); boot parent forces maven.compiler.release
+  src/main/java/kafdrop/config/SwaggerConfiguration.java:47 cannot find symbol
+  src/main/java/kafdrop/config/SwaggerConfiguration.java:30 package springfox.documentation does not exist
+  src/main/java/kafdrop/config/SwaggerConfiguration.java:31 package springfox.documentation.spi does not exist
+  src/main/java/kafdrop/config/SwaggerConfiguration.java:32 package springfox.documentation.spring.web.plugins does not exist
+  src/main/java/kafdrop/config/SwaggerConfiguration.java:62 cannot find symbol
+  src/main/java/kafdrop/config/SwaggerConfiguration.java:64 cannot find symbol
+  [ERROR] Failed to execute goal org.apache.maven.plugins:maven-compiler-plugin:3.16.0:compile (default-compile) on project kafdrop: Compilation failure: Compilation failure: 
+  Caused by: org.apache.maven.plugin.compiler.CompilationFailureException: Compilation failure
+  [INFO] BUILD FAILURE
+  tests=0 passed=0 failures=0 errors=0 skipped=0
+## fix3: + SwaggerConfiguration rewritten from springfox Docket (recipe left TODO) to springdoc OpenAPI + GroupedOpenApi
+  Caused by: java.lang.IllegalStateException: Could not find a valid Docker environment. Please see logs and check configuration
+  Caused by: java.util.concurrent.CompletionException: java.lang.IllegalStateException: Could not find a valid Docker environment. Please see logs and check configuration
+  [ERROR] Tests run: 4, Failures: 0, Errors: 3, Skipped: 0
+  [ERROR] Tests run: 1, Failures: 0, Errors: 1, Skipped: 0
+  [INFO] BUILD SUCCESS
+  tests=5 passed=1 failures=0 errors=4 skipped=0
+   - kafdrop.KafdropTest#getReturnsExpectedGutHubStarText: java.lang.IllegalStateException: Failed to load ApplicationContext for [WebMergedContextConfiguration@14229fa7 testClass = kafdrop.KafdropTest, locations = [], classes = [kafdrop.Kafdrop], contextInitializerClasse
+   - kafdrop.KafdropTest#contextLoads: java.lang.IllegalStateException: ApplicationContext failure threshold (1) exceeded: skipping repeated attempt to load context for [WebMergedContextConfiguration@14229fa7 testClass = kafdrop.KafdropTest, locations 
+   - kafdrop.KafdropIT#contextTest: java.lang.IllegalStateException: Failed to load ApplicationContext for [WebMergedContextConfiguration@6a9b9909 testClass = kafdrop.KafdropIT, locations = [], classes = [kafdrop.Kafdrop], contextInitializerClasses 

@@ -1,0 +1,72 @@
+# spring-boot-blog-app  sha=095e50d8dcb9e01dae519dd9f7b5d394d39811c6
+## baseline exit=0
+  tests=0 passed=0 failures=0 errors=0 skipped=0
+## recipe exit=0  27 files changed, 91 insertions(+), 87 deletions(-)
+  pom.xml                                                         | 56 +++++++++++++++++++++++++++++++++-----------------------
+   src/main/java/gt/app/DataCreator.java                           |  2 +-
+   src/main/java/gt/app/config/AppProperties.java                  |  2 --
+   src/main/java/gt/app/config/AuditorResolver.java                |  2 +-
+   src/main/java/gt/app/config/security/MethodSecurityConfig.java  |  4 ++--
+   src/main/java/gt/app/config/security/SecurityConfig.java        | 33 +++++++++++++++------------------
+   src/main/java/gt/app/domain/AppUser.java                        |  4 ++--
+   src/main/java/gt/app/domain/Authority.java                      |  6 +++---
+   src/main/java/gt/app/domain/BaseAuditingEntity.java             |  2 +-
+   src/main/java/gt/app/domain/BaseEntity.java                     |  6 +++---
+   src/main/java/gt/app/domain/LiteUser.java                       |  4 ++--
+   src/main/java/gt/app/domain/Note.java                           |  2 +-
+   src/main/java/gt/app/domain/ReceivedFile.java                   | 10 +++++-----
+   src/main/java/gt/app/modules/email/EmailService.java            |  2 +-
+   src/main/java/gt/app/modules/email/EmailUtil.java               |  4 ++--
+   src/main/java/gt/app/modules/file/FileDownloadUtil.java         |  2 +-
+   src/main/java/gt/app/modules/file/FileService.java              |  5 ++---
+   src/main/java/gt/app/modules/note/dto/NoteCreateDto.java        |  2 +-
+   src/main/java/gt/app/modules/user/dto/PasswordUpdateDTO.java    |  4 ++--
+   src/main/java/gt/app/modules/user/dto/UserProfileUpdateDTO.java |  6 +++---
+   src/main/java/gt/app/modules/user/dto/UserSignUpDTO.java        |  4 ++--
+   src/main/java/gt/app/web/mvc/DownloadController.java            |  2 +-
+   src/main/java/gt/app/web/mvc/UserController.java                |  2 +-
+   src/main/java/gt/app/web/rest/HelloResource.java                |  4 ++--
+   src/test/java/gt/app/arch/SpringCodingRulesTest.java            |  4 ++--
+  ...
+## post-recipe build exit=1
+  Caused by: org.eclipse.aether.resolution.ArtifactResolutionException: The following artifacts could not be resolved: org.seleniumhq.selenium:selenium-bom:pom:4.3.0 (absent): org.seleniumhq.selenium:selenium-bom:pom:4.3.0 was not found in https://repo.maven.apa
+  Caused by: org.eclipse.aether.transfer.ArtifactNotFoundException: org.seleniumhq.selenium:selenium-bom:pom:4.3.0 was not found in https://repo.maven.apache.org/maven2 during a previous attempt. This failure was cached in the local repository and resolution is 
+  tests=0 passed=0 failures=0 errors=0 skipped=0
+## fix1: removed stale selenium.version=4.3.0 override (Boot 3 imports selenium-bom by that property; bom 4.3.0 does not exist)
+  src/main/java/gt/app/domain/ReceivedFile.java:20 cannot find symbol
+  [ERROR] Failed to execute goal org.apache.maven.plugins:maven-compiler-plugin:3.14.1:compile (default-compile) on project note-app: Compilation failure
+  Caused by: org.apache.maven.plugin.compiler.CompilationFailureException: Compilation failure
+  [INFO] BUILD FAILURE
+  tests=0 passed=0 failures=0 errors=0 skipped=0
+## fix2: + recipe emitted invalid Java @Type(uuid-char.class) -> @JdbcTypeCode(SqlTypes.CHAR) (keeps char(36) storage)
+  src/test/java/gt/app/config/DBMetadataReader.java:27 cannot find symbol
+  src/test/java/gt/app/config/DBMetadataReader.java:43 cannot find symbol
+  src/test/java/gt/app/config/DBMetadataReader.java:50 cannot find symbol
+  src/test/java/gt/app/config/DBMetadataReader.java:54 cannot find symbol
+  [ERROR] Failed to execute goal org.apache.maven.plugins:maven-compiler-plugin:3.14.1:testCompile (default-testCompile) on project note-app: Compilation failure: Compilation failure: 
+  Caused by: org.apache.maven.plugin.compiler.CompilationFailureException: Compilation failure
+  [INFO] BUILD FAILURE
+  tests=0 passed=0 failures=0 errors=0 skipped=0
+## fix3: + test-only DBMetadataReader: Hibernate 6 removed getColumnIterator/getPropertyIterator -> getColumns/getProperties/getSelectables
+  Caused by: org.springframework.beans.BeanInstantiationException: Failed to instantiate [org.springframework.security.access.method.MethodSecurityMetadataSource]: Factory method 'methodSecurityMetadataSource' threw exception with message: org.springframework.se
+  Caused by: java.lang.IllegalArgumentException: org.springframework.security.config.annotation.method.configuration.EnableGlobalMethodSecurity is required
+  Caused by: org.springframework.beans.factory.BeanCreationException: Error creating bean with name 'methodSecurityMetadataSource' defined in class path resource [gt/app/config/security/MethodSecurityConfig.class]: Failed to instantiate [org.springframework.secu
+  Caused by: java.lang.ClassNotFoundException: org.apache.hc.core5.http2.HttpVersionPolicy
+  [ERROR] Tests run: 46, Failures: 2, Errors: 2, Skipped: 0
+  [ERROR] Tests run: 7, Failures: 0, Errors: 7, Skipped: 0
+  [INFO] BUILD SUCCESS
+  tests=0 passed=0 failures=0 errors=0 skipped=0
+## fix4: + MethodSecurityConfig: recipe swapped to @EnableMethodSecurity but left 'extends GlobalMethodSecurityConfiguration' (startup failure) -> @Bean MethodSecurityExpressionHandler; ArchUnit rule allow 'jakarta..' (javax package string not migrated)
+  Caused by: java.lang.ClassNotFoundException: org.apache.hc.core5.http2.HttpVersionPolicy
+  Caused by: java.lang.ExceptionInInitializerError: Exception java.lang.NoClassDefFoundError: org/apache/hc/core5/http2/HttpVersionPolicy [in thread "main"]
+  [ERROR] Tests run: 46, Failures: 1, Errors: 1, Skipped: 0
+  [ERROR] Tests run: 7, Failures: 0, Errors: 2, Skipped: 0
+  [INFO] BUILD SUCCESS
+  tests=0 passed=0 failures=0 errors=0 skipped=0
+## fix5: + Spock 2.3 -> 2.4 (spock-spring 2.3 does not inject into Spring 6 contexts silently)
+  Caused by: java.lang.ClassNotFoundException: org.apache.hc.core5.http2.HttpVersionPolicy
+  Caused by: java.lang.ExceptionInInitializerError: Exception java.lang.NoClassDefFoundError: org/apache/hc/core5/http2/HttpVersionPolicy [in thread "main"]
+  [ERROR] Tests run: 46, Failures: 0, Errors: 1, Skipped: 0
+  [ERROR] Tests run: 7, Failures: 0, Errors: 2, Skipped: 0
+  [INFO] BUILD SUCCESS
+  tests=0 passed=0 failures=0 errors=0 skipped=0

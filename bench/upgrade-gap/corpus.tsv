@@ -1,0 +1,11 @@
+# name	url	sha	base_jdk	target_jdk	recipe	mvn_args
+spring-petclinic-rest	https://github.com/spring-petclinic/spring-petclinic-rest.git	0dbb71e6f4d0ec5939d597650b9ca7bca27eeda0	8.0.432-amzn	17.0.13-amzn	org.openrewrite.java.spring.boot3.UpgradeSpringBoot_3_5	
+jwt-spring-security-demo	https://github.com/szerhusenBC/jwt-spring-security-demo.git	dcf718c67c0d403f78ee390c23715c3f5e6f5f4c	11.0.25-amzn	17.0.13-amzn	org.openrewrite.java.spring.boot3.UpgradeSpringBoot_3_5	
+mall-tiny	https://github.com/macrozheng/mall-tiny.git	a81ec4740a0c7c99a06ebffb43a14168beadffc3	8.0.432-amzn	17.0.13-amzn	org.openrewrite.java.spring.boot3.UpgradeSpringBoot_3_5	
+kafdrop	https://github.com/obsidiandynamics/kafdrop.git	4fe1e6490e0ec74c725bcc73a5c790ac882e3a93	11.0.25-amzn	17.0.13-amzn	org.openrewrite.java.spring.boot3.UpgradeSpringBoot_3_5	
+WebGoat	https://github.com/WebGoat/WebGoat.git	ff3a2983e244d17bb774e9933fa923f284909c4b	17.0.13-amzn	17.0.13-amzn	org.openrewrite.java.spring.boot3.UpgradeSpringBoot_3_5	
+spring-boot-blog-app	https://github.com/gtiwari333/spring-boot-blog-app.git	095e50d8dcb9e01dae519dd9f7b5d394d39811c6	17.0.13-amzn	17.0.13-amzn	org.openrewrite.java.spring.boot3.UpgradeSpringBoot_3_5	-Dmodernizer.skip=true -Ddependency-check.skip=true
+spring-petclinic	https://github.com/spring-projects/spring-petclinic.git	66747e344ec6d4ec5fce2c603c1b61eeeadda8ff	17.0.13-amzn	17.0.13-amzn	org.openrewrite.java.spring.boot4.UpgradeSpringBoot_4_0	-Drewrite.exclusions=gradle/wrapper/**,gradlew,gradlew.bat
+jhipster-sample-app	https://github.com/jhipster/jhipster-sample-app.git	87cea5d16486d219a97c8d5bec09559390ee2e67	17.0.13-amzn	17.0.13-amzn	org.openrewrite.java.spring.boot4.UpgradeSpringBoot_4_0	-Dskip.npm -Dskip.installnodenpm
+spring-petclinic-reactjs	https://github.com/spring-petclinic/spring-petclinic-reactjs.git	4a6c26d99f48d8bfac97352130b9fae4feab2509	17.0.13-amzn	17.0.13-amzn	org.openrewrite.java.spring.boot4.UpgradeSpringBoot_4_0	
+dddsample-core	https://github.com/citerus/dddsample-core.git	d8b896254ed4e18ba8117dcd5bf9a54708bdeaaf	17.0.13-amzn	17.0.13-amzn	org.openrewrite.java.spring.boot4.UpgradeSpringBoot_4_0	

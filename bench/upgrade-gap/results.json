@@ -1,0 +1,991 @@
+{
+ "generated_by": "build_results.py",
+ "rewrite_maven_plugin": "6.46.1",
+ "rewrite_spring": "6.37.1",
+ "repos": [
+  {
+   "name": "spring-petclinic-rest",
+   "url": "https://github.com/spring-petclinic/spring-petclinic-rest.git",
+   "sha": "0dbb71e6f4d0ec5939d597650b9ca7bca27eeda0",
+   "base_jdk": "8.0.432-amzn",
+   "target_jdk": "17.0.13-amzn",
+   "recipe": {
+    "exit": 0,
+    "diff": "44 files changed, 149 insertions(+), 124 deletions(-)"
+   },
+   "mvn_args": "",
+   "baseline": {
+    "exit": 0,
+    "note": "green (172 tests)",
+    "tests": {
+     "tests": 172,
+     "passed": 172,
+     "failures": 0,
+     "errors": 0,
+     "skipped": 0
+    }
+   },
+   "post_recipe": {
+    "exit": 1,
+    "tests": {
+     "tests": 0,
+     "passed": 0,
+     "failures": 0,
+     "errors": 0,
+     "skipped": 0
+    },
+    "green_without_edits": false
+   },
+   "after_manual_fixes": {
+    "fix_iterations": 6,
+    "exit": 0,
+    "tests": {
+     "tests": 172,
+     "passed": 172,
+     "failures": 0,
+     "errors": 0,
+     "skipped": 0
+    },
+    "baseline_parity": true
+   },
+   "failures": [
+    {
+     "category": "codegen (openapi-generator)",
+     "where": "pom.xml openapi-generator-maven-plugin 6.0.1; target/generated-sources/openapi/.../OwnersApi.java:31",
+     "message": "package javax.validation does not exist (generated code still javax)",
+     "fix": "openapi-generator 6.0.1 -> 6.3.0 and configOptions useSpringBoot3=true (same change upstream made in b3c928e)",
+     "kind": "mechanical",
+     "minutes": 10,
+     "status": "fixed",
+     "fix_step": 1,
+     "recipe_introduced": false
+    },
+    {
+     "category": "web-behaviour-change",
+     "where": "OwnerRestControllerTests#testGetAllOwnersSuccess (+24 tests)",
+     "message": "Status expected:<200> but was:<400>; NoHandlerFoundException for '/api/owners/' (Spring 6 dropped trailing-slash match)",
+     "fix": "decide API contract: re-enable trailing-slash match (WebMvcConfigurer + standalone MockMvc setUseTrailingSlashPatternMatch) or change clients/tests",
+     "kind": "judgment",
+     "minutes": 25,
+     "status": "fixed",
+     "fix_step": "2,3",
+     "recipe_introduced": false
+    },
+    {
+     "category": "hibernate-6",
+     "where": "JpaPetRepositoryImpl.java:77, JpaPetTypeRepositoryImpl.java:73 (+SpringData variants)",
+     "message": "SemanticException: Could not interpret path expression 'pet_id' (HQL used column names)",
+     "fix": "rewrite HQL to entity paths visit.pet.id / pet.type.id",
+     "kind": "judgment",
+     "minutes": 10,
+     "status": "fixed",
+     "fix_step": 4,
+     "recipe_introduced": false
+    },
+    {
+     "category": "hibernate-6",
+     "where": "JpaPetTypeRepositoryImpl.delete; ClinicServiceJpaTests#shouldDeletePetType",
+     "message": "TransientObjectException on auto-flush, then deleted PetType still returned from persistence context",
+     "fix": "drop early em.remove(), flush()+clear() after bulk deletes",
+     "kind": "judgment",
+     "minutes": 20,
+     "status": "fixed",
+     "fix_step": "5,6",
+     "recipe_introduced": false
+    }
+   ],
+   "judgment_minutes": 55,
+   "mechanical_minutes": 10
+  },
+  {
+   "name": "jwt-spring-security-demo",
+   "url": "https://github.com/szerhusenBC/jwt-spring-security-demo.git",
+   "sha": "dcf718c67c0d403f78ee390c23715c3f5e6f5f4c",
+   "base_jdk": "11.0.25-amzn",
+   "target_jdk": "17.0.13-amzn",
+   "recipe": {
+    "exit": 0,
+    "diff": "17 files changed, 91 insertions(+), 93 deletions(-)"
+   },
+   "mvn_args": "",
+   "baseline": {
+    "exit": 0,
+    "note": "green (16 tests)",
+    "tests": {
+     "tests": 16,
+     "passed": 16,
+     "failures": 0,
+     "errors": 0,
+     "skipped": 0
+    }
+   },
+   "post_recipe": {
+    "exit": 1,
+    "tests": {
+     "tests": 0,
+     "passed": 0,
+     "failures": 0,
+     "errors": 0,
+     "skipped": 0
+    },
+    "green_without_edits": false
+   },
+   "after_manual_fixes": {
+    "fix_iterations": 3,
+    "exit": 0,
+    "tests": {
+     "tests": 16,
+     "passed": 16,
+     "failures": 0,
+     "errors": 0,
+     "skipped": 0
+    },
+    "baseline_parity": true
+   },
+   "failures": [
+    {
+     "category": "spring-security-dsl",
+     "where": "src/main/java/org/zerhusen/config/WebSecurityConfig.java:26",
+     "message": "cannot find symbol WebSecurityConfigurerAdapter (recipe converted to lambda DSL but kept the adapter)",
+     "fix": "rewrite as SecurityFilterChain + WebSecurityCustomizer @Beans",
+     "kind": "judgment",
+     "minutes": 20,
+     "status": "fixed",
+     "fix_step": 1,
+     "recipe_introduced": false
+    },
+    {
+     "category": "database/h2-2.x",
+     "where": "AuthenticationRestControllerTest#successfulAuthenticationWithUser (+6)",
+     "message": "401 / 'No content to map'; root: DDL 'drop table if exists user' syntax error - USER is reserved in H2 2.x",
+     "fix": "datasource URL ;NON_KEYWORDS=USER (or rename table)",
+     "kind": "judgment",
+     "minutes": 15,
+     "status": "fixed",
+     "fix_step": 2,
+     "recipe_introduced": false
+    }
+   ],
+   "judgment_minutes": 35,
+   "mechanical_minutes": 0
+  },
+  {
+   "name": "mall-tiny",
+   "url": "https://github.com/macrozheng/mall-tiny.git",
+   "sha": "a81ec4740a0c7c99a06ebffb43a14168beadffc3",
+   "base_jdk": "8.0.432-amzn",
+   "target_jdk": "17.0.13-amzn",
+   "recipe": {
+    "exit": 0,
+    "diff": "32 files changed, 307 insertions(+), 285 deletions(-)"
+   },
+   "mvn_args": "",
+   "baseline": {
+    "exit": 0,
+    "note": "compiles; pom sets <skipTests>true</skipTests> (1 test needs MySQL) - compile-only signal",
+    "tests": {
+     "tests": 0,
+     "passed": 0,
+     "failures": 0,
+     "errors": 0,
+     "skipped": 0
+    }
+   },
+   "post_recipe": {
+    "exit": 1,
+    "tests": {
+     "tests": 0,
+     "passed": 0,
+     "failures": 0,
+     "errors": 0,
+     "skipped": 0
+    },
+    "green_without_edits": false
+   },
+   "after_manual_fixes": {
+    "fix_iterations": 2,
+    "exit": 0,
+    "tests": {
+     "tests": 0,
+     "passed": 0,
+     "failures": 0,
+     "errors": 0,
+     "skipped": 0
+    },
+    "baseline_parity": true
+   },
+   "failures": [
+    {
+     "category": "third-party-lib (springfox)",
+     "where": "src/main/java/com/macro/mall/tiny/common/config/BaseSwaggerConfig.java:11,51",
+     "message": "package springfox.documentation.builders does not exist; recipe half-migrated the class (springdoc + springfox types mixed, undefined 'getApiBasePackage')",
+     "fix": "rewrite BaseSwaggerConfig/SwaggerConfig to springdoc OpenAPI + GroupedOpenApi, drop springfox BeanPostProcessor",
+     "kind": "judgment",
+     "minutes": 25,
+     "status": "fixed",
+     "fix_step": 1,
+     "recipe_introduced": true
+    },
+    {
+     "category": "spring-security-dsl",
+     "where": "src/main/java/com/macro/mall/tiny/security/config/SecurityConfig.java:13,48",
+     "message": "dangling WebSecurityConfigurerAdapter import; 'AuthorizationManagerRequestMatcherRegistry registry = http.authorizeHttpRequests(withDefaults())' is ill-typed",
+     "fix": "single authorizeHttpRequests(registry -> ...) lambda chain",
+     "kind": "judgment",
+     "minutes": 15,
+     "status": "fixed",
+     "fix_step": "1,2",
+     "recipe_introduced": true
+    }
+   ],
+   "judgment_minutes": 40,
+   "mechanical_minutes": 0
+  },
+  {
+   "name": "kafdrop",
+   "url": "https://github.com/obsidiandynamics/kafdrop.git",
+   "sha": "4fe1e6490e0ec74c725bcc73a5c790ac882e3a93",
+   "base_jdk": "11.0.25-amzn",
+   "target_jdk": "17.0.13-amzn",
+   "recipe": {
+    "exit": 0,
+    "diff": "23 files changed, 134 insertions(+), 104 deletions(-)"
+   },
+   "mvn_args": "",
+   "baseline": {
+    "exit": 0,
+    "note": "compiles; 4/5 tests need Docker (Testcontainers) and fail identically before and after",
+    "tests": {
+     "tests": 5,
+     "passed": 1,
+     "failures": 0,
+     "errors": 4,
+     "skipped": 0
+    }
+   },
+   "post_recipe": {
+    "exit": 1,
+    "tests": {
+     "tests": 0,
+     "passed": 0,
+     "failures": 0,
+     "errors": 0,
+     "skipped": 0
+    },
+    "green_without_edits": false
+   },
+   "after_manual_fixes": {
+    "fix_iterations": 3,
+    "exit": 0,
+    "tests": {
+     "tests": 5,
+     "passed": 1,
+     "failures": 0,
+     "errors": 4,
+     "skipped": 0
+    },
+    "baseline_parity": true
+   },
+   "failures": [
+    {
+     "category": "build-plugin",
+     "where": "pom.xml maven-compiler-plugin",
+     "message": "error: exporting a package from system module jdk.management.agent is not allowed with --release (recipe added <release>)",
+     "fix": "drop the unused --add-exports compilerArg (or keep source/target)",
+     "kind": "mechanical",
+     "minutes": 10,
+     "status": "fixed",
+     "fix_step": "1,2",
+     "recipe_introduced": true
+    },
+    {
+     "category": "third-party-lib (springfox)",
+     "where": "src/main/java/kafdrop/config/SwaggerConfiguration.java:30,47",
+     "message": "package springfox.documentation does not exist; recipe left '/* TODO: transformation of Docket ... too complex */'",
+     "fix": "rewrite as springdoc OpenAPI + GroupedOpenApi (JSON-only, exclude /actuator)",
+     "kind": "judgment",
+     "minutes": 20,
+     "status": "fixed",
+     "fix_step": 3,
+     "recipe_introduced": false
+    }
+   ],
+   "judgment_minutes": 20,
+   "mechanical_minutes": 10
+  },
+  {
+   "name": "WebGoat",
+   "url": "https://github.com/WebGoat/WebGoat.git",
+   "sha": "ff3a2983e244d17bb774e9933fa923f284909c4b",
+   "base_jdk": "17.0.13-amzn",
+   "target_jdk": "17.0.13-amzn",
+   "recipe": {
+    "exit": 0,
+    "diff": "78 files changed, 267 insertions(+), 248 deletions(-)"
+   },
+   "mvn_args": "",
+   "baseline": {
+    "exit": 0,
+    "note": "green (235 unit + 39 IT)",
+    "tests": {
+     "tests": 274,
+     "passed": 272,
+     "failures": 0,
+     "errors": 0,
+     "skipped": 2
+    }
+   },
+   "post_recipe": {
+    "exit": 1,
+    "tests": {
+     "tests": 0,
+     "passed": 0,
+     "failures": 0,
+     "errors": 0,
+     "skipped": 0
+    },
+    "green_without_edits": false
+   },
+   "after_manual_fixes": {
+    "fix_iterations": 4,
+    "exit": 1,
+    "tests": {
+     "tests": 235,
+     "passed": 224,
+     "failures": 4,
+     "errors": 5,
+     "skipped": 2
+    },
+    "baseline_parity": false
+   },
+   "failures": [
+    {
+     "category": "removed-boot-api",
+     "where": "src/main/java/org/owasp/webgoat/webwolf/requests/WebWolfTraceRepository.java:29 (+WebWolf.java:26, Requests.java:35)",
+     "message": "package org.springframework.boot.actuate.trace.http does not exist",
+     "fix": "HttpTrace/HttpTraceRepository -> HttpExchange/HttpExchangeRepository",
+     "kind": "mechanical",
+     "minutes": 10,
+     "status": "fixed",
+     "fix_step": 1,
+     "recipe_introduced": false
+    },
+    {
+     "category": "javax-jakarta-leftover",
+     "where": "src/main/java/org/owasp/webgoat/container/MvcConfiguration.java:59",
+     "message": "package org.thymeleaf.extras.springsecurity5.dialect does not exist (dependency renamed, import not)",
+     "fix": "import ...springsecurity6.dialect",
+     "kind": "mechanical",
+     "minutes": 2,
+     "status": "fixed",
+     "fix_step": 1,
+     "recipe_introduced": false
+    },
+    {
+     "category": "spring-security-dsl",
+     "where": "src/main/java/org/owasp/webgoat/container/WebSecurityConfig.java:42,51 and webwolf/WebSecurityConfig.java:34,43",
+     "message": "WebSecurityConfigurerAdapter left with '/*~~(Migrate manually ...)~~>*/' marker; ill-typed registry variable",
+     "fix": "two SecurityFilterChain beans + AuthenticationManager from AuthenticationConfiguration",
+     "kind": "judgment",
+     "minutes": 30,
+     "status": "fixed",
+     "fix_step": 1,
+     "recipe_introduced": true
+    },
+    {
+     "category": "build-plugin",
+     "where": "pom.xml spotless-maven-plugin:check",
+     "message": "The following files had format violations (recipe output)",
+     "fix": "spotless:apply",
+     "kind": "mechanical",
+     "minutes": 2,
+     "status": "not fixed (masked by test failures)",
+     "fix_step": null,
+     "recipe_introduced": false
+    },
+    {
+     "category": "third-party-lib (flyway)",
+     "where": "DatabaseConfiguration flyWayContainer",
+     "message": "FlywayException: Unsupported Database: HSQL Database Engine 2.7",
+     "fix": "add flyway-database-hsqldb",
+     "kind": "mechanical",
+     "minutes": 5,
+     "status": "fixed",
+     "fix_step": 2,
+     "recipe_introduced": false
+    },
+    {
+     "category": "javax-jakarta-leftover",
+     "where": "TokenTest.java:52 via io.jsonwebtoken.impl.Base64Codec",
+     "message": "ClassNotFoundException javax.xml.bind.DatatypeConverter (jjwt 0.9.1 needs javax JAXB; recipe swapped jaxb-api for jakarta)",
+     "fix": "keep javax.xml.bind:jaxb-api for jjwt 0.9.1 (lessons depend on the old lib on purpose) or upgrade jjwt",
+     "kind": "judgment",
+     "minutes": 10,
+     "status": "fixed",
+     "fix_step": 2,
+     "recipe_introduced": false
+    },
+    {
+     "category": "build-plugin",
+     "where": "pom.xml maven-compiler-plugin.version 3.8.0; Assignment1Test#success (+24)",
+     "message": "Name for argument of type [String] not specified ... use -parameters (Spring 6.1); compiler 3.8.0 with <release> silently drops <parameters>",
+     "fix": "maven-compiler-plugin 3.14.1 + <parameters>true",
+     "kind": "judgment",
+     "minutes": 25,
+     "status": "fixed",
+     "fix_step": "2,3",
+     "recipe_introduced": false
+    },
+    {
+     "category": "hibernate-6",
+     "where": "UserTrackerRepositoryTest#saveUserTracker (+~100 tests)",
+     "message": "object not found: USER_TRACKER_SEQ (Hibernate 6 per-entity sequences vs Flyway schema's HIBERNATE_SEQUENCE)",
+     "fix": "hibernate.id.db_structure_naming_strategy=legacy (upstream instead migrated columns to IDENTITY, V3__id.sql)",
+     "kind": "judgment",
+     "minutes": 20,
+     "status": "fixed",
+     "fix_step": 4,
+     "recipe_introduced": false
+    },
+    {
+     "category": "third-party-lib (wiremock)",
+     "where": "BlindSendFileAssignmentTest (5 tests)",
+     "message": "NoClassDefFoundError javax/servlet/DispatcherType in wiremock jetty9",
+     "fix": "upgrade to wiremock 3.x (jakarta)",
+     "kind": "judgment",
+     "minutes": 20,
+     "status": "unresolved (time-box)",
+     "fix_step": null,
+     "recipe_introduced": false
+    },
+    {
+     "category": "web-behaviour-change",
+     "where": "JWTVotesEndpointTest#unknownUserShouldSeeGuestView, MailboxControllerTest#sendingMailShouldStoreIt, ShopEndpointTest, SimpleXXETest",
+     "message": "404 / 403 / JSON path mismatches after upgrade",
+     "fix": "not diagnosed",
+     "kind": "judgment",
+     "minutes": 30,
+     "status": "unresolved (time-box)",
+     "fix_step": null,
+     "recipe_introduced": false
+    }
+   ],
+   "judgment_minutes": 135,
+   "mechanical_minutes": 19
+  },
+  {
+   "name": "spring-boot-blog-app",
+   "url": "https://github.com/gtiwari333/spring-boot-blog-app.git",
+   "sha": "095e50d8dcb9e01dae519dd9f7b5d394d39811c6",
+   "base_jdk": "17.0.13-amzn",
+   "target_jdk": "17.0.13-amzn",
+   "recipe": {
+    "exit": 0,
+    "diff": "27 files changed, 91 insertions(+), 87 deletions(-)"
+   },
+   "mvn_args": "-Dmodernizer.skip=true -Ddependency-check.skip=true",
+   "baseline": {
+    "exit": 0,
+    "note": "compiles; 3 browser tests (SampleTest, WebAppIT x2) fail at baseline: no Firefox; OWASP dependency-check and modernizer plugins skipped (plugin/NVD failures unrelated to code); surefire writes reports to a custom dir, so counts come from the console: 46 unit (1 error) + 7 IT (2 errors) at baseline and identical after fixes (logs/spring-boot-blog-app.txt)",
+    "tests": {
+     "tests": 0,
+     "passed": 0,
+     "failures": 0,
+     "errors": 0,
+     "skipped": 0
+    }
+   },
+   "post_recipe": {
+    "exit": 1,
+    "tests": {
+     "tests": 0,
+     "passed": 0,
+     "failures": 0,
+     "errors": 0,
+     "skipped": 0
+    },
+    "green_without_edits": false
+   },
+   "after_manual_fixes": {
+    "fix_iterations": 5,
+    "exit": 0,
+    "tests": {
+     "tests": 0,
+     "passed": 0,
+     "failures": 0,
+     "errors": 0,
+     "skipped": 0
+    },
+    "baseline_parity": true
+   },
+   "failures": [
+    {
+     "category": "build-plugin",
+     "where": "pom.xml <selenium.version>4.3.0",
+     "message": "Non-resolvable import POM selenium-bom:4.3.0 (Boot 3 imports selenium-bom via the property the app overrode)",
+     "fix": "drop stale selenium.version override",
+     "kind": "judgment",
+     "minutes": 10,
+     "status": "fixed",
+     "fix_step": 1,
+     "recipe_introduced": false
+    },
+    {
+     "category": "hibernate-6",
+     "where": "src/main/java/gt/app/domain/ReceivedFile.java:20",
+     "message": "recipe emitted invalid Java '@Type(uuid-char.class)' from @Type(type=\"uuid-char\")",
+     "fix": "@JdbcTypeCode(SqlTypes.CHAR) to keep char(36) storage",
+     "kind": "judgment",
+     "minutes": 10,
+     "status": "fixed",
+     "fix_step": 2,
+     "recipe_introduced": true
+    },
+    {
+     "category": "hibernate-6",
+     "where": "src/test/java/gt/app/config/DBMetadataReader.java:27,43,50,54",
+     "message": "getColumnIterator()/getPropertyIterator() removed",
+     "fix": "getColumns()/getProperties()/getSelectables()",
+     "kind": "mechanical",
+     "minutes": 5,
+     "status": "fixed",
+     "fix_step": 3,
+     "recipe_introduced": false
+    },
+    {
+     "category": "spring-security-dsl",
+     "where": "src/main/java/gt/app/config/security/MethodSecurityConfig.java; ApplicationTest#contextLoads",
+     "message": "startup: 'EnableGlobalMethodSecurity is required' - recipe swapped annotation to @EnableMethodSecurity but kept 'extends GlobalMethodSecurityConfiguration'",
+     "fix": "@Bean MethodSecurityExpressionHandler, drop the superclass",
+     "kind": "judgment",
+     "minutes": 15,
+     "status": "fixed",
+     "fix_step": 4,
+     "recipe_introduced": true
+    },
+    {
+     "category": "javax-jakarta-leftover",
+     "where": "src/test/java/gt/app/arch/SpringCodingRulesTest.java:79",
+     "message": "ArchUnit rule whitelists \"javax..\" as a string; entities now depend on jakarta",
+     "fix": "add \"jakarta..\"",
+     "kind": "mechanical",
+     "minutes": 3,
+     "status": "fixed",
+     "fix_step": 4,
+     "recipe_introduced": false
+    },
+    {
+     "category": "test-framework",
+     "where": "src/test/groovy/gt/app/SpringContextSpec.groovy:19",
+     "message": "Spock 2.3 spock-spring leaves @Autowired field null under Spring 6 (silent)",
+     "fix": "Spock 2.3 -> 2.4",
+     "kind": "judgment",
+     "minutes": 15,
+     "status": "fixed",
+     "fix_step": 5,
+     "recipe_introduced": false
+    }
+   ],
+   "judgment_minutes": 50,
+   "mechanical_minutes": 8
+  },
+  {
+   "name": "spring-petclinic",
+   "url": "https://github.com/spring-projects/spring-petclinic.git",
+   "sha": "66747e344ec6d4ec5fce2c603c1b61eeeadda8ff",
+   "base_jdk": "17.0.13-amzn",
+   "target_jdk": "17.0.13-amzn",
+   "recipe": {
+    "exit": 0,
+    "diff": "13 files changed, 47 insertions(+), 33 deletions(-)"
+   },
+   "mvn_args": "-Drewrite.exclusions=gradle/wrapper/**,gradlew,gradlew.bat",
+   "baseline": {
+    "exit": 0,
+    "note": "green (56 tests, 2 skipped)",
+    "tests": {
+     "tests": 42,
+     "passed": 40,
+     "failures": 0,
+     "errors": 0,
+     "skipped": 2
+    }
+   },
+   "post_recipe": {
+    "exit": 1,
+    "tests": {
+     "tests": 0,
+     "passed": 0,
+     "failures": 0,
+     "errors": 0,
+     "skipped": 0
+    },
+    "green_without_edits": false
+   },
+   "after_manual_fixes": {
+    "fix_iterations": 1,
+    "exit": 0,
+    "tests": {
+     "tests": 56,
+     "passed": 54,
+     "failures": 0,
+     "errors": 0,
+     "skipped": 2
+    },
+    "baseline_parity": true
+   },
+   "failures": [
+    {
+     "category": "recipe-tooling",
+     "where": "recipe run (twice)",
+     "message": "rewrite run aborted: Failed to download https://downloads.gradle.org/distributions/gradle-8.14.5-bin.zip to artifact cache (repo has both pom.xml and build.gradle; UpdateGradleWrapper step)",
+     "fix": "-Drewrite.exclusions=gradle/wrapper/**,gradlew,gradlew.bat",
+     "kind": "mechanical",
+     "minutes": 10,
+     "status": "fixed",
+     "fix_step": "recipe",
+     "recipe_introduced": false
+    },
+    {
+     "category": "build-plugin",
+     "where": "src/test/java/.../system/CrashControllerIntegrationTests.java",
+     "message": "spring-javaformat:validate: Formatting violations (recipe output)",
+     "fix": "spring-javaformat:apply",
+     "kind": "mechanical",
+     "minutes": 2,
+     "status": "fixed",
+     "fix_step": 1,
+     "recipe_introduced": false
+    }
+   ],
+   "judgment_minutes": 0,
+   "mechanical_minutes": 12
+  },
+  {
+   "name": "jhipster-sample-app",
+   "url": "https://github.com/jhipster/jhipster-sample-app.git",
+   "sha": "87cea5d16486d219a97c8d5bec09559390ee2e67",
+   "base_jdk": "17.0.13-amzn",
+   "target_jdk": "17.0.13-amzn",
+   "recipe": {
+    "exit": 0,
+    "diff": "31 files changed, 121 insertions(+), 98 deletions(-)"
+   },
+   "mvn_args": "-Dskip.npm -Dskip.installnodenpm",
+   "baseline": {
+    "exit": 0,
+    "note": "green (48 unit + 163 IT on H2); frontend build skipped (-Dskip.npm)",
+    "tests": {
+     "tests": 211,
+     "passed": 211,
+     "failures": 0,
+     "errors": 0,
+     "skipped": 0
+    }
+   },
+   "post_recipe": {
+    "exit": 1,
+    "tests": {
+     "tests": 0,
+     "passed": 0,
+     "failures": 0,
+     "errors": 0,
+     "skipped": 0
+    },
+    "green_without_edits": false
+   },
+   "after_manual_fixes": {
+    "fix_iterations": 6,
+    "exit": 0,
+    "tests": {
+     "tests": 211,
+     "passed": 211,
+     "failures": 0,
+     "errors": 0,
+     "skipped": 0
+    },
+    "baseline_parity": true
+   },
+   "failures": [
+    {
+     "category": "build-plugin",
+     "where": "pom.xml:94",
+     "message": "'dependencies.dependency.version' for spring-boot-loader-tools is missing (Boot 4 BOM no longer manages it)",
+     "fix": "explicit ${spring-boot.version}",
+     "kind": "mechanical",
+     "minutes": 5,
+     "status": "fixed",
+     "fix_step": 1,
+     "recipe_introduced": false
+    },
+    {
+     "category": "removed-boot-api",
+     "where": "JhipsterSampleApplicationApp.java:16, DatabaseConfiguration.java:7, WebConfigurer.java:13",
+     "message": "package org.springframework.boot.autoconfigure.h2 / boot.web.servlet.server does not exist (Boot 4 modularisation)",
+     "fix": "boot.h2console.autoconfigure (+spring-boot-h2console dep), boot.web.server.servlet",
+     "kind": "mechanical",
+     "minutes": 15,
+     "status": "fixed",
+     "fix_step": 2,
+     "recipe_introduced": false
+    },
+    {
+     "category": "jackson-3",
+     "where": "src/main/java/io/github/jhipster/sample/config/JacksonConfiguration.java:5,6",
+     "message": "tools.jackson.databind.ext.jdk8.Jdk8Module / javatime.JavaTimeModule not found (recipe rewrote packages to classes that do not exist in Jackson 3)",
+     "fix": "delete the beans (built into Jackson 3)",
+     "kind": "judgment",
+     "minutes": 10,
+     "status": "fixed",
+     "fix_step": 2,
+     "recipe_introduced": true
+    },
+    {
+     "category": "other (internal API)",
+     "where": "src/main/java/io/github/jhipster/sample/security/DomainUserDetailsService.java:7",
+     "message": "hibernate-validator internal EmailValidator moved hv -> bv",
+     "fix": "import ...constraintvalidators.bv.EmailValidator",
+     "kind": "mechanical",
+     "minutes": 5,
+     "status": "fixed",
+     "fix_step": 2,
+     "recipe_introduced": false
+    },
+    {
+     "category": "third-party-lib (jhipster-framework)",
+     "where": "src/main/java/io/github/jhipster/sample/config/LiquibaseConfiguration.java:43,54",
+     "message": "cannot access org.springframework.boot.autoconfigure.liquibase.LiquibaseProperties (tech.jhipster 9.0.0-beta.0 built against Boot 3 packages)",
+     "fix": "jhipster-framework 9.0.0",
+     "kind": "judgment",
+     "minutes": 10,
+     "status": "fixed",
+     "fix_step": 3,
+     "recipe_introduced": false
+    },
+    {
+     "category": "removed-boot-api",
+     "where": "src/test/java/io/github/jhipster/sample/config/WebConfigurerTest.java:54-58",
+     "message": "getMimeMappings()/getDocumentRoot() not found on TomcatServletWebServerFactory",
+     "fix": "getSettings().getMimeMappings()/getDocumentRoot()",
+     "kind": "mechanical",
+     "minutes": 5,
+     "status": "fixed",
+     "fix_step": 4,
+     "recipe_introduced": false
+    },
+    {
+     "category": "spring-framework-7",
+     "where": "src/test/java/io/github/jhipster/sample/security/jwt/JwtAuthenticationTestUtils.java:32 (163 ITs)",
+     "message": "@Bean method 'mvcHandlerMappingIntrospector' must not be private or final",
+     "fix": "make @Bean methods non-private",
+     "kind": "mechanical",
+     "minutes": 5,
+     "status": "fixed",
+     "fix_step": 5,
+     "recipe_introduced": false
+    },
+    {
+     "category": "third-party-lib (jackson-datatype-hibernate)",
+     "where": "pom.xml jackson-datatype-hibernate6 3.1.7; JacksonConfiguration",
+     "message": "ServiceConfigurationError Hibernate6Module; NoClassDefFoundError org/hibernate/engine/spi/Mapping (Hibernate 7)",
+     "fix": "jackson-datatype-hibernate7 3.2.3 / Hibernate7Module",
+     "kind": "judgment",
+     "minutes": 10,
+     "status": "fixed",
+     "fix_step": 5,
+     "recipe_introduced": false
+    },
+    {
+     "category": "test-framework",
+     "where": "src/test/java/io/github/jhipster/sample/service/MailServiceIT.java:54 (9 tests)",
+     "message": "NPE: messageCaptor is null - @Captor no longer initialised (Boot 4 removed MockitoTestExecutionListener)",
+     "fix": "ArgumentCaptor.forClass(...) or @ExtendWith(MockitoExtension)",
+     "kind": "judgment",
+     "minutes": 10,
+     "status": "fixed",
+     "fix_step": 6,
+     "recipe_introduced": false
+    }
+   ],
+   "judgment_minutes": 40,
+   "mechanical_minutes": 35
+  },
+  {
+   "name": "spring-petclinic-reactjs",
+   "url": "https://github.com/spring-petclinic/spring-petclinic-reactjs.git",
+   "sha": "4a6c26d99f48d8bfac97352130b9fae4feab2509",
+   "base_jdk": "17.0.13-amzn",
+   "target_jdk": "17.0.13-amzn",
+   "recipe": {
+    "exit": 0,
+    "diff": "21 files changed, 157 insertions(+), 170 deletions(-)"
+   },
+   "mvn_args": "",
+   "baseline": {
+    "exit": 0,
+    "note": "green (183 tests)",
+    "tests": {
+     "tests": 183,
+     "passed": 183,
+     "failures": 0,
+     "errors": 0,
+     "skipped": 0
+    }
+   },
+   "post_recipe": {
+    "exit": 1,
+    "tests": {
+     "tests": 0,
+     "passed": 0,
+     "failures": 0,
+     "errors": 0,
+     "skipped": 0
+    },
+    "green_without_edits": false
+   },
+   "after_manual_fixes": {
+    "fix_iterations": 4,
+    "exit": 1,
+    "tests": {
+     "tests": 183,
+     "passed": 1,
+     "failures": 0,
+     "errors": 182,
+     "skipped": 0
+    },
+    "baseline_parity": false
+   },
+   "failures": [
+    {
+     "category": "codegen (openapi-generator)",
+     "where": "target/generated-sources/openapi/.../OopsApi.java:83 (all *Api.java)",
+     "message": "';' expected / illegal character '\\' - recipe bumped openapi-generator 6.3.0 -> 7.16.0 which mis-escapes quoted strings in spec examples (7.25.0 too)",
+     "fix": "rewrite the example in src/main/resources/openapi.yml:1891 (or skip default interface bodies)",
+     "kind": "judgment",
+     "minutes": 25,
+     "status": "fixed",
+     "fix_step": "1-4",
+     "recipe_introduced": true
+    },
+    {
+     "category": "removed-spring-api",
+     "where": "src/main/java/.../repository/jpa/JpaOwnerRepositoryImpl.java:26",
+     "message": "package org.springframework.orm.hibernate5.support does not exist (javadoc-only import)",
+     "fix": "drop import",
+     "kind": "mechanical",
+     "minutes": 2,
+     "status": "fixed",
+     "fix_step": 2,
+     "recipe_introduced": false
+    },
+    {
+     "category": "jackson-3",
+     "where": "src/main/java/.../rest/controller/BindingErrorsResponse.java:83",
+     "message": "JsonMapper.Builder has no visibility(PropertyAccessor, Visibility)",
+     "fix": "changeDefaultVisibility(vc -> vc.withFieldVisibility(ANY))",
+     "kind": "mechanical",
+     "minutes": 10,
+     "status": "fixed",
+     "fix_step": 4,
+     "recipe_introduced": false
+    },
+    {
+     "category": "spring-security-dsl",
+     "where": "security/WebSecurityConfig.java:22 + BasicAuthenticationConfig.java:28 (182 tests)",
+     "message": "UnreachableFilterChainException: two SecurityFilterChains both match any request (tolerated by Security 6.2, rejected now)",
+     "fix": "decide which chain owns which paths (securityMatcher/@Order) - an authorisation decision",
+     "kind": "judgment",
+     "minutes": 30,
+     "status": "unresolved (time-box)",
+     "fix_step": null,
+     "recipe_introduced": false
+    }
+   ],
+   "judgment_minutes": 55,
+   "mechanical_minutes": 12
+  },
+  {
+   "name": "dddsample-core",
+   "url": "https://github.com/citerus/dddsample-core.git",
+   "sha": "d8b896254ed4e18ba8117dcd5bf9a54708bdeaaf",
+   "base_jdk": "17.0.13-amzn",
+   "target_jdk": "17.0.13-amzn",
+   "recipe": {
+    "exit": 0,
+    "diff": "18 files changed, 62 insertions(+), 56 deletions(-)"
+   },
+   "mvn_args": "",
+   "baseline": {
+    "exit": 0,
+    "note": "green (131 tests, 3 skipped)",
+    "tests": {
+     "tests": 131,
+     "passed": 128,
+     "failures": 0,
+     "errors": 0,
+     "skipped": 3
+    }
+   },
+   "post_recipe": {
+    "exit": 0,
+    "tests": {
+     "tests": 131,
+     "passed": 109,
+     "failures": 0,
+     "errors": 20,
+     "skipped": 2
+    },
+    "green_without_edits": false
+   },
+   "after_manual_fixes": {
+    "fix_iterations": 2,
+    "exit": 0,
+    "tests": {
+     "tests": 131,
+     "passed": 110,
+     "failures": 0,
+     "errors": 19,
+     "skipped": 2
+    },
+    "baseline_parity": false
+   },
+   "failures": [
+    {
+     "category": "spring-framework-7",
+     "where": "src/main/java/se/citerus/dddsample/interfaces/InterfacesApplicationContext.java:44 (+2 test classes)",
+     "message": "NoSuchBeanDefinitionException: No qualifying bean of type 'jakarta.persistence.EntityManager' (@Autowired EntityManager)",
+     "fix": "@PersistenceContext",
+     "kind": "judgment",
+     "minutes": 15,
+     "status": "fixed",
+     "fix_step": 1,
+     "recipe_introduced": false
+    },
+    {
+     "category": "third-party-lib (htmlunit)",
+     "where": "pom.xml dependencyManagement (added by recipe); AdminAcceptanceTest",
+     "message": "ClassNotFoundException org.htmlunit.WebConnection - recipe pinned htmlunit-driver 4.13.0 while Spring 7 needs HtmlUnit 3+",
+     "fix": "use Boot-managed htmlunit3-driver, drop the pin",
+     "kind": "judgment",
+     "minutes": 10,
+     "status": "fixed",
+     "fix_step": 2,
+     "recipe_introduced": true
+    },
+    {
+     "category": "hibernate-6",
+     "where": "SampleDataGenerator.java (@PostConstruct) - 19 tests",
+     "message": "StaleObjectStateException: Row was already updated or deleted ... Location with id '1' (Hibernate 7 merge of detached static sample entities with generated ids)",
+     "fix": "reset/clone static sample entities per context or persist instead of merge",
+     "kind": "judgment",
+     "minutes": 45,
+     "status": "unresolved (time-box)",
+     "fix_step": null,
+     "recipe_introduced": false
+    }
+   ],
+   "judgment_minutes": 70,
+   "mechanical_minutes": 0
+  }
+ ]
+}

@@ -1,0 +1,161 @@
+# spring-petclinic-rest  sha=0dbb71e6f4d0ec5939d597650b9ca7bca27eeda0
+## baseline exit=0
+  tests=172 passed=172 failures=0 errors=0 skipped=0
+## recipe exit=0  44 files changed, 149 insertions(+), 124 deletions(-)
+  .github/workflows/maven-build.yml                                                                                   |  2 +-
+   pom.xml                                                                                                             | 33 ++++++++++++++++++++-------------
+   src/main/java/org/springframework/samples/petclinic/model/BaseEntity.java                                           |  8 ++++----
+   src/main/java/org/springframework/samples/petclinic/model/NamedEntity.java                                          |  6 +++---
+   src/main/java/org/springframework/samples/petclinic/model/Owner.java                                                | 11 ++++++++---
+   src/main/java/org/springframework/samples/petclinic/model/Person.java                                               |  6 +++---
+   src/main/java/org/springframework/samples/petclinic/model/Pet.java                                                  |  9 ++++++++-
+   src/main/java/org/springframework/samples/petclinic/model/PetType.java                                              |  4 ++--
+   src/main/java/org/springframework/samples/petclinic/model/Role.java                                                 | 12 ++++++------
+   src/main/java/org/springframework/samples/petclinic/model/Specialty.java                                            |  4 ++--
+   src/main/java/org/springframework/samples/petclinic/model/User.java                                                 | 14 +++++++-------
+   src/main/java/org/springframework/samples/petclinic/model/Vet.java                                                  |  9 +++++++--
+   src/main/java/org/springframework/samples/petclinic/model/Visit.java                                                |  4 ++--
+   src/main/java/org/springframework/samples/petclinic/repository/jdbc/JdbcOwnerRepositoryImpl.java                    |  6 +++---
+   src/main/java/org/springframework/samples/petclinic/repository/jdbc/JdbcPetRepositoryImpl.java                      |  4 ++--
+   src/main/java/org/springframework/samples/petclinic/repository/jdbc/JdbcPetTypeRepositoryImpl.java                  |  4 ++--
+   src/main/java/org/springframework/samples/petclinic/repository/jdbc/JdbcSpecialtyRepositoryImpl.java                |  4 ++--
+   src/main/java/org/springframework/samples/petclinic/repository/jdbc/JdbcUserRepositoryImpl.java                     |  4 ++--
+   src/main/java/org/springframework/samples/petclinic/repository/jdbc/JdbcVetRepositoryImpl.java                      |  4 ++--
+   src/main/java/org/springframework/samples/petclinic/repository/jdbc/JdbcVisitRepositoryImpl.java                    |  4 ++--
+   src/main/java/org/springframework/samples/petclinic/repository/jpa/JpaOwnerRepositoryImpl.java                      |  6 +++---
+   src/main/java/org/springframework/samples/petclinic/repository/jpa/JpaPetRepositoryImpl.java                        |  4 ++--
+   src/main/java/org/springframework/samples/petclinic/repository/jpa/JpaPetTypeRepositoryImpl.java                    |  4 ++--
+   src/main/java/org/springframework/samples/petclinic/repository/jpa/JpaSpecialtyRepositoryImpl.java                  |  4 ++--
+   src/main/java/org/springframework/samples/petclinic/repository/jpa/JpaUserRepositoryImpl.java                       |  4 ++--
+  ...
+## post-recipe build exit=1
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/dto/SpecialtyDto.java:9 package javax.validation does not exist
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/dto/SpecialtyDto.java:16 package javax.annotation does not exist
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/dto/SpecialtyDto.java:24 cannot find symbol
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/dto/SpecialtyDto.java:10 package javax.validation.constraints does not exist
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/dto/VisitAllOfDto.java:9 package javax.validation does not exist
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/dto/VisitAllOfDto.java:16 package javax.annotation does not exist
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/dto/VisitAllOfDto.java:23 cannot find symbol
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/dto/VisitAllOfDto.java:10 package javax.validation.constraints does not exist
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/dto/RoleDto.java:9 package javax.validation does not exist
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/dto/RoleDto.java:16 package javax.annotation does not exist
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/dto/RoleDto.java:24 cannot find symbol
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/dto/RoleDto.java:10 package javax.validation.constraints does not exist
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/dto/PetFieldsDto.java:12 package javax.validation does not exist
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/dto/PetFieldsDto.java:19 package javax.annotation does not exist
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/dto/PetFieldsDto.java:27 cannot find symbol
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/dto/PetTypeDto.java:11 package javax.validation does not exist
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/dto/PetTypeDto.java:18 package javax.annotation does not exist
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/dto/PetTypeDto.java:26 cannot find symbol
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/dto/PetFieldsDto.java:13 package javax.validation.constraints does not exist
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/dto/PetTypeDto.java:12 package javax.validation.constraints does not exist
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/api/OwnersApi.java:31 package javax.validation does not exist
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/api/OwnersApi.java:36 package javax.annotation does not exist
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/api/OwnersApi.java:38 cannot find symbol
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/dto/OwnerDto.java:14 package javax.validation does not exist
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/dto/OwnerDto.java:21 package javax.annotation does not exist
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/dto/OwnerDto.java:29 cannot find symbol
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/dto/OwnerFieldsDto.java:9 package javax.validation does not exist
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/dto/OwnerFieldsDto.java:16 package javax.annotation does not exist
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/dto/OwnerFieldsDto.java:24 cannot find symbol
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/dto/PetDto.java:17 package javax.validation does not exist
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/dto/PetDto.java:24 package javax.annotation does not exist
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/dto/PetDto.java:32 cannot find symbol
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/dto/VisitFieldsDto.java:11 package javax.validation does not exist
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/dto/VisitFieldsDto.java:18 package javax.annotation does not exist
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/dto/VisitFieldsDto.java:26 cannot find symbol
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/dto/VisitDto.java:13 package javax.validation does not exist
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/dto/VisitDto.java:20 package javax.annotation does not exist
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/dto/VisitDto.java:28 cannot find symbol
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/dto/VisitDto.java:14 package javax.validation.constraints does not exist
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/dto/VisitFieldsDto.java:12 package javax.validation.constraints does not exist
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/dto/PetDto.java:18 package javax.validation.constraints does not exist
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/dto/OwnerFieldsDto.java:10 package javax.validation.constraints does not exist
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/dto/OwnerDto.java:15 package javax.validation.constraints does not exist
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/api/OwnersApi.java:32 package javax.validation.constraints does not exist
+  target/generated-sources/openapi/src/main/java/org/springframework/samples/petclinic/rest/api/SpecialtiesApi.java:26 package javax.validation does not exist
+  tests=0 passed=0 failures=0 errors=0 skipped=0
+## fix1: openapi-generator-maven-plugin 6.0.1->6.3.0 + configOptions useSpringBoot3=true (same as upstream b3c928e)
+  [ERROR] Failed to execute goal org.jacoco:jacoco-maven-plugin:0.8.15:check (check) on project spring-petclinic-rest: Coverage checks have not been met. See log for details. -> [Help 1]
+  Caused by: java.lang.IllegalArgumentException: org.hibernate.query.SemanticException: Could not interpret path expression 'pet_id'
+  Caused by: org.hibernate.query.SemanticException: Could not interpret path expression 'pet_id'
+  Caused by: java.lang.IllegalArgumentException: org.hibernate.query.SemanticException: Could not interpret path expression 'type_id'
+  Caused by: org.hibernate.query.SemanticException: Could not interpret path expression 'type_id'
+  Caused by: org.apache.maven.plugin.MojoExecutionException: Coverage checks have not been met. See log for details.
+  [ERROR] Tests run: 172, Failures: 21, Errors: 4, Skipped: 0
+  [INFO] BUILD FAILURE
+  tests=172 passed=147 failures=21 errors=4 skipped=0
+   - org.springframework.samples.petclinic.rest.controller.OwnerRestControllerTests#testCreatePetSuccess: java.lang.AssertionError: Status expected:<201> but was:<400>
+   - org.springframework.samples.petclinic.rest.controller.OwnerRestControllerTests#testGetOwnersListNotFound: java.lang.AssertionError: Status expected:<404> but was:<400>
+   - org.springframework.samples.petclinic.rest.controller.OwnerRestControllerTests#testGetAllOwnersSuccess: java.lang.AssertionError: Status expected:<200> but was:<400>
+   - org.springframework.samples.petclinic.rest.controller.PetRestControllerTests#testGetAllPetsSuccess: java.lang.AssertionError: Status expected:<200> but was:<400>
+   - org.springframework.samples.petclinic.rest.controller.PetRestControllerTests#testGetAllPetsNotFound: java.lang.AssertionError: Status expected:<404> but was:<400>
+   - org.springframework.samples.petclinic.rest.controller.PetTypeRestControllerTests#testGetAllPetTypesSuccessAsOwnerAdmin: java.lang.AssertionError: Status expected:<200> but was:<400>
+   - org.springframework.samples.petclinic.rest.controller.PetTypeRestControllerTests#testCreatePetTypeSuccess: java.lang.AssertionError: Status expected:<201> but was:<400>
+   - org.springframework.samples.petclinic.rest.controller.PetTypeRestControllerTests#testGetAllPetTypesNotFound: java.lang.AssertionError: Status expected:<404> but was:<400>
+   - org.springframework.samples.petclinic.rest.controller.SpecialtyRestControllerTests#testCreateSpecialtySuccess: java.lang.AssertionError: Status expected:<201> but was:<400>
+   - org.springframework.samples.petclinic.rest.controller.SpecialtyRestControllerTests#testGetAllSpecialtysSuccess: java.lang.AssertionError: Status expected:<200> but was:<400>
+   - org.springframework.samples.petclinic.rest.controller.SpecialtyRestControllerTests#testGetAllSpecialtysNotFound: java.lang.AssertionError: Status expected:<404> but was:<400>
+   - org.springframework.samples.petclinic.rest.controller.UserRestControllerTests#testCreateUserSuccess: java.lang.AssertionError: Status expected:<201> but was:<400>
+   - org.springframework.samples.petclinic.rest.controller.VetRestControllerTests#testGetAllVetsSuccess: java.lang.AssertionError: Status expected:<200> but was:<400>
+   - org.springframework.samples.petclinic.rest.controller.VetRestControllerTests#testCreateVetSuccess: java.lang.AssertionError: Status expected:<201> but was:<400>
+   ...
+## fix2: + WebMvcConfigurer setUseTrailingSlashMatch(true) to keep Spring 5 trailing-slash behaviour
+  [ERROR] Failed to execute goal org.jacoco:jacoco-maven-plugin:0.8.15:check (check) on project spring-petclinic-rest: Coverage checks have not been met. See log for details. -> [Help 1]
+  Caused by: java.lang.IllegalArgumentException: org.hibernate.query.SemanticException: Could not interpret path expression 'pet_id'
+  Caused by: org.hibernate.query.SemanticException: Could not interpret path expression 'pet_id'
+  Caused by: java.lang.IllegalArgumentException: org.hibernate.query.SemanticException: Could not interpret path expression 'type_id'
+  Caused by: org.hibernate.query.SemanticException: Could not interpret path expression 'type_id'
+  Caused by: org.apache.maven.plugin.MojoExecutionException: Coverage checks have not been met. See log for details.
+  [ERROR] Tests run: 172, Failures: 21, Errors: 4, Skipped: 0
+  [INFO] BUILD FAILURE
+  tests=172 passed=147 failures=21 errors=4 skipped=0
+   - org.springframework.samples.petclinic.rest.controller.OwnerRestControllerTests#testCreatePetSuccess: java.lang.AssertionError: Status expected:<201> but was:<400>
+   - org.springframework.samples.petclinic.rest.controller.OwnerRestControllerTests#testGetOwnersListNotFound: java.lang.AssertionError: Status expected:<404> but was:<400>
+   - org.springframework.samples.petclinic.rest.controller.OwnerRestControllerTests#testGetAllOwnersSuccess: java.lang.AssertionError: Status expected:<200> but was:<400>
+   - org.springframework.samples.petclinic.rest.controller.PetRestControllerTests#testGetAllPetsSuccess: java.lang.AssertionError: Status expected:<200> but was:<400>
+   - org.springframework.samples.petclinic.rest.controller.PetRestControllerTests#testGetAllPetsNotFound: java.lang.AssertionError: Status expected:<404> but was:<400>
+   - org.springframework.samples.petclinic.rest.controller.PetTypeRestControllerTests#testGetAllPetTypesSuccessAsOwnerAdmin: java.lang.AssertionError: Status expected:<200> but was:<400>
+   - org.springframework.samples.petclinic.rest.controller.PetTypeRestControllerTests#testCreatePetTypeSuccess: java.lang.AssertionError: Status expected:<201> but was:<400>
+   - org.springframework.samples.petclinic.rest.controller.PetTypeRestControllerTests#testGetAllPetTypesNotFound: java.lang.AssertionError: Status expected:<404> but was:<400>
+   - org.springframework.samples.petclinic.rest.controller.SpecialtyRestControllerTests#testCreateSpecialtySuccess: java.lang.AssertionError: Status expected:<201> but was:<400>
+   - org.springframework.samples.petclinic.rest.controller.SpecialtyRestControllerTests#testGetAllSpecialtysSuccess: java.lang.AssertionError: Status expected:<200> but was:<400>
+   - org.springframework.samples.petclinic.rest.controller.SpecialtyRestControllerTests#testGetAllSpecialtysNotFound: java.lang.AssertionError: Status expected:<404> but was:<400>
+   - org.springframework.samples.petclinic.rest.controller.UserRestControllerTests#testCreateUserSuccess: java.lang.AssertionError: Status expected:<201> but was:<400>
+   - org.springframework.samples.petclinic.rest.controller.VetRestControllerTests#testGetAllVetsSuccess: java.lang.AssertionError: Status expected:<200> but was:<400>
+   - org.springframework.samples.petclinic.rest.controller.VetRestControllerTests#testCreateVetSuccess: java.lang.AssertionError: Status expected:<201> but was:<400>
+   ...
+## fix3: + standalone MockMvc builders: setUseTrailingSlashPatternMatch(true) (tests don't see WebMvcConfigurer)
+  [ERROR] Failed to execute goal org.jacoco:jacoco-maven-plugin:0.8.15:check (check) on project spring-petclinic-rest: Coverage checks have not been met. See log for details. -> [Help 1]
+  Caused by: java.lang.IllegalArgumentException: org.hibernate.query.SemanticException: Could not interpret path expression 'pet_id'
+  Caused by: org.hibernate.query.SemanticException: Could not interpret path expression 'pet_id'
+  Caused by: java.lang.IllegalArgumentException: org.hibernate.query.SemanticException: Could not interpret path expression 'type_id'
+  Caused by: org.hibernate.query.SemanticException: Could not interpret path expression 'type_id'
+  Caused by: org.apache.maven.plugin.MojoExecutionException: Coverage checks have not been met. See log for details.
+  [ERROR] Tests run: 172, Failures: 0, Errors: 4, Skipped: 0
+  [INFO] BUILD FAILURE
+  tests=172 passed=168 failures=0 errors=4 skipped=0
+   - org.springframework.samples.petclinic.service.clinicService.ClinicServiceJpaTests#shouldDeletePet: org.springframework.dao.InvalidDataAccessApiUsageException: org.hibernate.query.SemanticException: Could not interpret path expression 'pet_id'
+   - org.springframework.samples.petclinic.service.clinicService.ClinicServiceJpaTests#shouldDeletePetType: org.springframework.dao.InvalidDataAccessApiUsageException: org.hibernate.query.SemanticException: Could not interpret path expression 'type_id'
+   - org.springframework.samples.petclinic.service.clinicService.ClinicServiceSpringDataJpaTests#shouldDeletePet: org.springframework.dao.InvalidDataAccessApiUsageException: org.hibernate.query.SemanticException: Could not interpret path expression 'pet_id'
+   - org.springframework.samples.petclinic.service.clinicService.ClinicServiceSpringDataJpaTests#shouldDeletePetType: org.springframework.dao.InvalidDataAccessApiUsageException: org.hibernate.query.SemanticException: Could not interpret path expression 'type_id'
+## fix4: + HQL used column names (pet_id, type_id) -> entity paths (visit.pet.id, pet.type.id); Hibernate 6 rejects
+  [ERROR] Failed to execute goal org.jacoco:jacoco-maven-plugin:0.8.15:check (check) on project spring-petclinic-rest: Coverage checks have not been met. See log for details. -> [Help 1]
+  Caused by: java.lang.IllegalStateException: org.hibernate.TransientObjectException: persistent instance references an unsaved transient instance of 'org.springframework.samples.petclinic.model.PetType' (save the transient instance before flushing)
+  Caused by: org.hibernate.TransientObjectException: persistent instance references an unsaved transient instance of 'org.springframework.samples.petclinic.model.PetType' (save the transient instance before flushing)
+  Caused by: org.apache.maven.plugin.MojoExecutionException: Coverage checks have not been met. See log for details.
+  [ERROR] Tests run: 172, Failures: 0, Errors: 2, Skipped: 0
+  [INFO] BUILD FAILURE
+  tests=172 passed=170 failures=0 errors=2 skipped=0
+   - org.springframework.samples.petclinic.service.clinicService.ClinicServiceJpaTests#shouldDeletePetType: org.springframework.dao.InvalidDataAccessApiUsageException: org.hibernate.TransientObjectException: persistent instance references an unsaved transient instance of 'org.springframework.samples.petclinic.model.PetType' (save the transient in
+   - org.springframework.samples.petclinic.service.clinicService.ClinicServiceSpringDataJpaTests#shouldDeletePetType: org.springframework.dao.InvalidDataAccessApiUsageException: org.hibernate.TransientObjectException: persistent instance references an unsaved transient instance of 'org.springframework.samples.petclinic.model.PetType' (save the transient in
+## fix5: + PetType delete: drop early em.remove() (Hibernate 6.6 auto-flush TransientObjectException); bulk DELETE at end remains
+  [ERROR] Tests run: 172, Failures: 2, Errors: 0, Skipped: 0
+  [INFO] BUILD SUCCESS
+  tests=172 passed=170 failures=2 errors=0 skipped=0
+   - org.springframework.samples.petclinic.service.clinicService.ClinicServiceJpaTests#shouldDeletePetType: org.opentest4j.AssertionFailedError: expected: null
+   - org.springframework.samples.petclinic.service.clinicService.ClinicServiceSpringDataJpaTests#shouldDeletePetType: org.opentest4j.AssertionFailedError: expected: null
+## fix6: + PetType delete: em.flush()+em.clear() after bulk deletes so the deleted PetType is not served from the persistence context
+  [INFO] Tests run: 172, Failures: 0, Errors: 0, Skipped: 0
+  [INFO] BUILD SUCCESS
+  tests=172 passed=172 failures=0 errors=0 skipped=0
