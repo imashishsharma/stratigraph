@@ -31,7 +31,7 @@ import type { Db } from '../db/database.js';
 import { busFactorRisks, explainHotspots, topHotspots, type Hotspot } from '../analysis/hotspots.js';
 import {
   buildPackageGraph,
-  supportingEdges,
+  supportingEdgesForPairs,
   DEPENDENCY_EDGE_KINDS,
   type PackageGraph,
   type SupportingEdge,
@@ -980,9 +980,17 @@ function packageEdges(
     .sort((a, b) => b.weight - a.weight)
     .slice(0, limit);
 
+  // One evidence query for every row: each one re-derives package ancestry
+  // over the whole graph, so a query per row is a full walk per row.
+  const evidence = supportingEdgesForPairs(
+    db,
+    runId,
+    rows.map((dep) => [dep.src, dep.dst] as const),
+    EXAMPLES_PER_ROW,
+  );
   return rows.map((dep) => {
     const otherId = direction === 'out' ? dep.dst : dep.src;
-    const examples = supportingEdges(db, runId, dep.src, dep.dst, EXAMPLES_PER_ROW);
+    const examples = evidence.get(`${dep.src} ${dep.dst}`) ?? [];
     return {
       fqn: graph.packages.get(otherId)?.fqn ?? '<unknown>',
       kind: 'package',
@@ -1330,14 +1338,13 @@ function shortestPath(
   }
   ids.reverse();
 
-  const hops = ids.slice(0, -1).map((id, index) => {
-    const next = ids[index + 1] as number;
-    return {
-      from: graph.packages.get(id)?.fqn ?? '<unknown>',
-      to: graph.packages.get(next)?.fqn ?? '<unknown>',
-      evidence: supportingEdges(db, runId, id, next, EXAMPLES_PER_ROW),
-    };
-  });
+  const pairs = ids.slice(0, -1).map((id, index) => [id, ids[index + 1] as number] as const);
+  const evidence = supportingEdgesForPairs(db, runId, pairs, EXAMPLES_PER_ROW);
+  const hops = pairs.map(([id, next]) => ({
+    from: graph.packages.get(id)?.fqn ?? '<unknown>',
+    to: graph.packages.get(next)?.fqn ?? '<unknown>',
+    evidence: evidence.get(`${id} ${next}`) ?? [],
+  }));
 
   return { path: ids.map((id) => graph.packages.get(id)?.fqn ?? '<unknown>'), hops };
 }

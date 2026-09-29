@@ -9,7 +9,7 @@
 import type { Db } from '../db/database.js';
 import {
   buildPackageGraph,
-  supportingEdges,
+  supportingEdgesForPairs,
   type PackageGraph,
   type SupportingEdge,
 } from './package-graph.js';
@@ -64,21 +64,30 @@ export function detectPackageCycles(db: Db, runId: number): CycleFinding[] {
        VALUES (@findingId, 'edge', @edgeId, NULL, @line)`,
     );
 
-    const found: CycleFinding[] = [];
-    for (const component of components) {
+    // Every cycle's path first, then the evidence for every hop in one query:
+    // one query per hop re-derived the whole package ancestry each time, and
+    // on a repository with hundreds of cyclic packages that was most of
+    // `analyze` (nacos: 25 s of 34 s).
+    const cycles = components.flatMap((component) => {
       const path = shortestCycle(component, graph);
-      if (!path) continue; // unreachable for a genuine SCC, but do not guess one
+      return path ? [{ component, path }] : []; // no path is unreachable for a genuine SCC; do not guess one
+    });
+    const hopPairs = (path: number[]) =>
+      path.map((from, i) => [from, path[(i + 1) % path.length] as number] as const);
+    const evidence = supportingEdgesForPairs(
+      db,
+      runId,
+      cycles.flatMap(({ path }) => hopPairs(path)),
+      EVIDENCE_PER_HOP,
+    );
 
-      const hops: CycleHop[] = [];
-      for (let i = 0; i < path.length; i += 1) {
-        const from = path[i] as number;
-        const to = path[(i + 1) % path.length] as number;
-        hops.push({
-          from: fqn(graph, from),
-          to: fqn(graph, to),
-          evidence: supportingEdges(db, runId, from, to, EVIDENCE_PER_HOP),
-        });
-      }
+    const found: CycleFinding[] = [];
+    for (const { component, path } of cycles) {
+      const hops: CycleHop[] = hopPairs(path).map(([from, to]) => ({
+        from: fqn(graph, from),
+        to: fqn(graph, to),
+        evidence: evidence.get(`${from} ${to}`) ?? [],
+      }));
 
       const severity = component.length > 2 ? 'high' : 'medium';
       const names = path.map((id) => fqn(graph, id));

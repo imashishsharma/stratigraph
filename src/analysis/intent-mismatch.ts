@@ -373,33 +373,44 @@ function edgesToClusterMates(
   const kinds = DEPENDENCY_EDGE_KINDS.map((kind) => `'${kind}'`).join(', ');
   const placeholders = mates.map(() => '?').join(', ');
 
+  // Driven from the package's own nodes (package_of by package, then the
+  // edge indexes by src and by dst), not from the run's edges: a scan of every
+  // edge per candidate was 5 s of `analyze` on nacos. CROSS JOIN fixes that
+  // join order for the planner.
   const rows = db
     .prepare(
       /* sql */ `
+      WITH mine(node_id) AS (SELECT node_id FROM temp.package_of WHERE package_id = ?),
+      touching AS (
+          SELECT e.id AS edgeId, e.kind AS kind, e.src_id AS srcId, e.dst_id AS dstId,
+                 e.file_id AS fileId, e.line AS line, e.confidence AS confidence,
+                 op.package_id AS otherId
+            FROM mine m
+            CROSS JOIN edge e ON e.run_id = ? AND e.src_id = m.node_id
+            JOIN temp.package_of op ON op.node_id = e.dst_id
+        UNION ALL
+          SELECT e.id, e.kind, e.src_id, e.dst_id, e.file_id, e.line, e.confidence,
+                 op.package_id
+            FROM mine m
+            CROSS JOIN edge e ON e.run_id = ? AND e.dst_id = m.node_id
+            JOIN temp.package_of op ON op.node_id = e.src_id
+      )
       SELECT edgeId, kind, srcFqn, dstFqn, path, line, otherId FROM (
-        SELECT e.id AS edgeId, e.kind AS kind, sn.fqn AS srcFqn, dn.fqn AS dstFqn,
-               f.path AS path, e.line AS line,
-               CASE WHEN sp.package_id = ? THEN dp.package_id ELSE sp.package_id END AS otherId,
-               ROW_NUMBER() OVER (
-                 PARTITION BY CASE WHEN sp.package_id = ? THEN dp.package_id ELSE sp.package_id END
-                 ORDER BY e.id
-               ) AS rn
-          FROM edge e
-          JOIN temp.package_of sp ON sp.node_id = e.src_id
-          JOIN temp.package_of dp ON dp.node_id = e.dst_id
-          JOIN node sn ON sn.id = e.src_id
-          JOIN node dn ON dn.id = e.dst_id
-          LEFT JOIN source_file f ON f.id = e.file_id
-         WHERE e.run_id = ?
-           AND e.kind IN (${kinds})
-           AND e.confidence = 'fact'
-           AND sp.package_id <> dp.package_id
-           AND ((sp.package_id = ? AND dp.package_id IN (${placeholders}))
-             OR (dp.package_id = ? AND sp.package_id IN (${placeholders})))
+        SELECT t.edgeId, t.kind, sn.fqn AS srcFqn, dn.fqn AS dstFqn,
+               f.path AS path, t.line AS line, t.otherId,
+               ROW_NUMBER() OVER (PARTITION BY t.otherId ORDER BY t.edgeId) AS rn
+          FROM touching t
+          JOIN node sn ON sn.id = t.srcId
+          JOIN node dn ON dn.id = t.dstId
+          LEFT JOIN source_file f ON f.id = t.fileId
+         WHERE t.kind IN (${kinds})
+           AND t.confidence = 'fact'
+           AND t.otherId <> ?
+           AND t.otherId IN (${placeholders})
       ) WHERE rn <= ?
       ORDER BY otherId, edgeId`,
     )
-    .all(self, self, runId, self, ...mates, self, ...mates, perMate) as Array<
+    .all(self, runId, runId, self, ...mates, perMate) as Array<
     SupportingEdge & { otherId: number }
   >;
 
