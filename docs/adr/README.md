@@ -22,7 +22,7 @@ the code when it is incidental. Either way, before the commit.
 | [0012](0012-the-combined-graph-and-louvain.md) | One undirected package graph from both layers, clustered deterministically | accepted |
 | [0013](0013-the-grounding-contract.md) | Opaque evidence packs, and a citation check in code that rejects model output | accepted |
 | [0014](0014-intent-versus-structure.md) | Intent-vs-structure mismatch is algorithmic; the model only describes it | accepted |
-| [0015](0015-the-mcp-query-surface.md) | The MCP surface: one pinned run, read-only, and empty answers that say which kind of empty | accepted |
+| [0015](0015-the-mcp-query-surface.md) | The MCP surface: one pinned run, read-only, and empty answers that say which kind of empty | accepted; run pinning amended by 0046 |
 | [0016](0016-angular-without-the-angular-compiler.md) | Parse the TypeScript source set; no `@angular/compiler-cli`, no install | accepted |
 | [0017](0017-typescript-fact-identity.md) | How a TypeScript node's `fqn` is formed, and where it departs from ADR-0007 | accepted |
 | [0018](0018-cross-stack-links-are-inferences.md) | An Angular-to-Spring link is inferred, matched conservatively, and refused on a tie | accepted |
@@ -53,6 +53,7 @@ the code when it is incidental. Either way, before the commit.
 | [0043](0043-what-the-compiler-would-fold.md) | Source-set constants, first-party meta-annotations and @Bean-built classes are read | accepted |
 | [0044](0044-api-first-controllers.md) | A controller override named for an OpenAPI operationId serves that operation | accepted |
 | [0045](0045-node-server-routes.md) | Koa and Express routes are endpoints when the router provably comes from their imports | accepted |
+| [0046](0046-incremental-runs-replay-unchanged-inputs.md) | Incremental runs replay what an unchanged input produced; the MCP server follows new runs and states drift | accepted |
 
 Format: context, decision, alternatives considered (with why each was rejected),
 consequences — including the costs, not only the benefits.

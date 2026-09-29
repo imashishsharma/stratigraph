@@ -74,6 +74,11 @@ export async function runMcp(options: McpOptions): Promise<McpServing> {
     const server = createServer({
       db,
       runId: run.id,
+      // `--run` pins; otherwise the server moves to each newer completed run
+      // and says so (ADR-0046).
+      follow: options.run === undefined,
+      dbPath: config.dbPath,
+      repoPath: config.repoPath,
       minCommits: config.history.minCommits,
       thresholds: config.coverage,
     });
@@ -91,7 +96,8 @@ export async function runMcp(options: McpOptions): Promise<McpServing> {
     // it is the one line that says which snapshot the answers describe.
     info(
       `serving run ${run.id} of ${run.repoPath} (${run.repoHead ?? 'unknown head'}) ` +
-        `from ${config.dbPath}, read-only`,
+        `from ${config.dbPath}, read-only` +
+        (options.run === undefined ? '; newer completed runs are followed as they land' : '; pinned'),
     );
 
     return { runId: run.id, dbPath: config.dbPath, db, closed };

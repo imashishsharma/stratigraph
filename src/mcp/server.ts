@@ -1,5 +1,6 @@
 /**
- * The MCP surface: nine read-only tools over one pinned run (ADR-0015).
+ * The MCP surface: read-only tools over the latest completed run, or one
+ * pinned run (ADR-0015, amended by ADR-0046).
  *
  * Everything here is presentation. The queries live in `queries.ts` and are
  * tested without a protocol; this module decides what each tool is called, what
@@ -27,6 +28,9 @@ import {
   type ViewId,
 } from '../analysis/coverage.js';
 import type { Db } from '../db/database.js';
+import { latestRun } from '../db/run.js';
+import { runDrift, type RunDrift } from '../facts/reuse.js';
+import { LANGUAGES, type Language } from '../toolchain/languages.js';
 import { NODE_KINDS } from '../facts/types.js';
 import { TOOL_VERSION } from '../version.js';
 import {
@@ -57,8 +61,20 @@ import {
 
 export interface McpContext {
   db: Db;
-  /** Pinned at startup. Every answer for the life of the process comes from it. */
+  /** The run answers come from at startup. */
   runId: number;
+  /**
+   * Move to a newer completed run when one lands, announcing the move in the
+   * first answer after it (ADR-0046). False — the default, and `--run` — keeps
+   * every answer on `runId`.
+   */
+  follow?: boolean | undefined;
+  /**
+   * Where the store and the repository are, to say which files changed since
+   * the run read them (ADR-0046). Without both, nothing is said about drift.
+   */
+  dbPath?: string | undefined;
+  repoPath?: string | undefined;
   /** For the bus-factor floor, from `history.minCommits`. */
   minCommits: number;
   /** When a view counts as below coverage (ADR-0033). Defaults to 50% for all. */
@@ -94,11 +110,82 @@ export function createServer(context: McpContext): McpServer {
   );
 
   const readOnly = { readOnlyHint: true, destructiveHint: false, openWorldHint: false };
-  const { db, runId } = context;
+  const { db } = context;
+  const thresholds = context.thresholds ?? DEFAULT_THRESHOLDS;
+  // Reassigned only between calls, when a newer run is followed; every
+  // handler below reads them at call time.
+  let runId = context.runId;
+  let coverage = runCoverage(db, runId, thresholds);
+  /** Said once, in the first answer from a run the session had not seen. */
+  let pendingNotice: string | null = null;
+  let driftChecked: { runId: number; at: number; drift: RunDrift | null } | null = null;
 
-  // Computed once: the run is pinned and the store read-only, so no answer in
-  // this process can see different coverage from another (ADR-0033).
-  const coverage = runCoverage(db, runId, context.thresholds ?? DEFAULT_THRESHOLDS);
+  const followLatest = (): void => {
+    if (!context.follow) return;
+    const latest = latestRun(db);
+    if (latest === null || latest.id === runId) return;
+    pendingNotice =
+      `Note: run ${latest.id} (commit ${latest.repoHead ?? 'unknown'}) completed since the last answer. ` +
+      `This answer and those after it come from run ${latest.id}; earlier answers in this session ` +
+      `came from run ${runId} and may disagree with these.`;
+    runId = latest.id;
+    coverage = runCoverage(db, runId, thresholds);
+    driftChecked = null;
+  };
+
+  /** Drift since the run read its inputs, re-measured at most every 10 s. */
+  const drift = (): RunDrift | null => {
+    if (context.dbPath === undefined || context.repoPath === undefined) return null;
+    const now = Date.now();
+    if (driftChecked !== null && driftChecked.runId === runId && now - driftChecked.at < DRIFT_TTL_MS) {
+      return driftChecked.drift;
+    }
+    const languages = (
+      db.prepare(`SELECT language FROM extractor_run WHERE run_id = ? AND status = 'ok'`).pluck().all(runId) as string[]
+    ).filter((language): language is Language => (LANGUAGES as readonly string[]).includes(language));
+    let measured: RunDrift | null;
+    try {
+      measured = runDrift(context.dbPath, context.repoPath, runId, languages);
+    } catch {
+      measured = null;
+    }
+    driftChecked = { runId, at: now, drift: measured };
+    return measured;
+  };
+
+  /** The run-change notice first, the drift last, on every answer. */
+  const decorate = (result: ToolText): ToolText => {
+    const first = result.content[0];
+    if (first === undefined) return result;
+    const changes = driftLines(drift(), runId);
+    const notice = pendingNotice;
+    pendingNotice = null;
+    if (notice === null && changes.lines.length === 0) return result;
+    const body = [...(notice === null ? [] : [notice, '']), first.text, ...changes.lines].join('\n');
+    const structured = result.structuredContent;
+    return {
+      ...result,
+      content: [{ ...first, text: body }, ...result.content.slice(1)],
+      ...(structured === undefined
+        ? {}
+        : {
+            structuredContent: {
+              ...structured,
+              ...(notice === null ? {} : { runChanged: { runId, notice } }),
+              ...(changes.structured === null ? {} : { drift: changes.structured }),
+            },
+          }),
+    };
+  };
+
+  // Every tool is registered through this, so no answer skips the run check
+  // or the drift statement.
+  const register = ((name: string, config: unknown, handler: (...args: unknown[]) => ToolText | Promise<ToolText>) =>
+    (server.registerTool as (...args: unknown[]) => unknown)(name, config, (...args: unknown[]) => {
+      followLatest();
+      const result = handler(...args);
+      return result instanceof Promise ? result.then(decorate) : decorate(result);
+    })) as unknown as typeof server.registerTool;
 
   /**
    * Every answer carries the coverage of the view it is drawn from — in the
@@ -121,7 +208,7 @@ export function createServer(context: McpContext): McpServer {
     return text(`${body}\n${footer.join('\n')}`, { ...structured, coverage: stated });
   };
 
-  server.registerTool(
+  register(
     'describe_run',
     {
       title: 'Describe the analysed run',
@@ -133,7 +220,7 @@ export function createServer(context: McpContext): McpServer {
       annotations: readOnly,
     },
     () => {
-      const summary = describeRun(db, runId, context.thresholds ?? DEFAULT_THRESHOLDS);
+      const summary = describeRun(db, runId, thresholds);
       if (summary === null) return text(`Run ${runId} is not in this database.`);
 
       const lines = [
@@ -156,11 +243,20 @@ export function createServer(context: McpContext): McpServer {
         lines.push('', 'What this run cannot answer:');
         for (const gap of summary.gaps) lines.push(`  - ${gap}`);
       }
+      const measured = drift();
+      if (measured !== null && measured.unknown.length > 0) {
+        lines.push(
+          '',
+          `Whether files changed since this run cannot be told for: ${measured.unknown.join(', ')}. ` +
+            'Its inputs were not recorded — extracted before stratigraph 2.1, or a later run ' +
+            'replaced the record.',
+        );
+      }
       return text(lines.join('\n'), summary);
     },
   );
 
-  server.registerTool(
+  register(
     'find_node',
     {
       title: 'Find a package, type or method by name',
@@ -204,7 +300,7 @@ export function createServer(context: McpContext): McpServer {
     },
   );
 
-  server.registerTool(
+  register(
     'query_dependencies',
     {
       title: 'What depends on what',
@@ -230,7 +326,7 @@ export function createServer(context: McpContext): McpServer {
     },
   );
 
-  server.registerTool(
+  register(
     'find_callers',
     {
       title: 'Find callers of a method or type',
@@ -268,7 +364,7 @@ export function createServer(context: McpContext): McpServer {
     },
   );
 
-  server.registerTool(
+  register(
     'describe_module',
     {
       title: 'Describe a package',
@@ -333,7 +429,7 @@ export function createServer(context: McpContext): McpServer {
     },
   );
 
-  server.registerTool(
+  register(
     'list_endpoints',
     {
       title: 'List HTTP endpoints',
@@ -366,7 +462,7 @@ export function createServer(context: McpContext): McpServer {
     },
   );
 
-  server.registerTool(
+  register(
     'find_hotspots',
     {
       title: 'Find hotspots and bus-factor risks',
@@ -403,7 +499,7 @@ export function createServer(context: McpContext): McpServer {
     },
   );
 
-  server.registerTool(
+  register(
     'trace_to_table',
     {
       title: 'Trace code to a database table',
@@ -445,7 +541,7 @@ export function createServer(context: McpContext): McpServer {
     },
   );
 
-  server.registerTool(
+  register(
     'check_cycle',
     {
       title: 'Check for a dependency cycle between two packages',
@@ -481,7 +577,7 @@ export function createServer(context: McpContext): McpServer {
     },
   );
 
-  server.registerTool(
+  register(
     'what_breaks_if',
     {
       title: 'What breaks if this changes',
@@ -516,7 +612,7 @@ export function createServer(context: McpContext): McpServer {
     },
   );
 
-  server.registerTool(
+  register(
     'who_knows',
     {
       title: 'Who knows this file',
@@ -544,7 +640,7 @@ export function createServer(context: McpContext): McpServer {
     },
   );
 
-  server.registerTool(
+  register(
     'where_is_table_written',
     {
       title: 'Where is this table written',
@@ -577,7 +673,7 @@ export function createServer(context: McpContext): McpServer {
     },
   );
 
-  server.registerTool(
+  register(
     'explain_hotspot',
     {
       title: 'Explain a hotspot',
@@ -614,6 +710,49 @@ interface ToolText {
   structuredContent?: Record<string, unknown>;
   /** The SDK's result type is open; without this the handlers do not typecheck. */
   [key: string]: unknown;
+}
+
+const DRIFT_TTL_MS = 10_000;
+const DRIFT_NAMED = 10;
+
+/**
+ * The drift footer: which files the run's extractors read have changed since.
+ * Silent when nothing changed or nothing is known — `describe_run` says when
+ * drift cannot be measured.
+ */
+function driftLines(
+  drift: RunDrift | null,
+  runId: number,
+): { lines: string[]; structured: { changed: string[]; added: string[]; removed: string[] } | null } {
+  if (drift === null) return { lines: [], structured: null };
+  const all = { changed: new Set<string>(), added: new Set<string>(), removed: new Set<string>() };
+  for (const entry of drift.drift) {
+    for (const path of entry.changed) all.changed.add(path);
+    for (const path of entry.added) all.added.add(path);
+    for (const path of entry.removed) all.removed.add(path);
+  }
+  const structured = {
+    changed: [...all.changed].sort(),
+    added: [...all.added].sort(),
+    removed: [...all.removed].sort(),
+  };
+  const total = structured.changed.length + structured.added.length + structured.removed.length;
+  if (total === 0) return { lines: [], structured: null };
+  const named = [
+    ...structured.changed.map((path) => `${path} (changed)`),
+    ...structured.added.map((path) => `${path} (new)`),
+    ...structured.removed.map((path) => `${path} (deleted)`),
+  ];
+  return {
+    lines: [
+      '',
+      `Stale: ${total} file(s) changed on disk since run ${runId} read them — ` +
+        `${named.slice(0, DRIFT_NAMED).join(', ')}${total > DRIFT_NAMED ? `, and ${total - DRIFT_NAMED} more` : ''}. ` +
+        'Anything about them may be out of date. `stratigraph scan` refreshes; extractors whose ' +
+        'inputs did not change are replayed rather than re-run.',
+    ],
+    structured,
+  };
 }
 
 function text(body: string, structured?: unknown): ToolText {

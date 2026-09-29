@@ -31,6 +31,8 @@ export interface ScanOptions extends ConfigOverrides {
   out?: string | undefined;
   /** Passed to `extract`; tests use it to make a toolchain missing. */
   resolveSpawner?: ExtractOptions['resolveSpawner'];
+  /** Passed to `extract` (ADR-0046). */
+  reuse?: boolean | undefined;
 }
 
 export interface ScanResult {

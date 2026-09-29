@@ -559,7 +559,7 @@ in the codebase can ask structural questions instead of grepping for them.
 claude mcp add stratigraph -- stratigraph mcp --repo ../some-monolith
 ```
 
-Nine tools, all read-only:
+Thirteen tools, all read-only:
 
 | Tool | Answers |
 | --- | --- |
@@ -572,11 +572,20 @@ Nine tools, all read-only:
 | `find_hotspots` | Churn × complexity, or files whose history is one person |
 | `trace_to_table` | The types mapped to a table, and what reaches them |
 | `check_cycle` | Whether two packages depend on each other, with the edges |
+| `what_breaks_if` | What depends on a symbol, directly and transitively, with the edges |
+| `who_knows` | Who has changed a file or package, and how concentrated that knowledge is |
+| `where_is_table_written` | The code that writes and reads a table, cited at each access |
+| `explain_hotspot` | Why a file ranks as a hotspot: its commits, authors and complexity |
 
 **The server only reads.** It opens the database read-only and never starts an
 extractor: a stale store is reported as stale, not silently rebuilt, because a
-tool call is a bad place to start a JVM over 4,000 files. It also pins one run
-at startup, so two answers in a session cannot describe two different commits.
+tool call is a bad place to start a JVM over 4,000 files. Every answer ends by
+naming the files that changed on disk since the run read them. When a newer
+run completes, for example after `stratigraph scan` in another terminal, the
+server moves to it, and the first answer after the move says so, naming both
+runs. That way a transcript shows where answers stop agreeing. `--run <id>`
+pins one run for the session instead
+([ADR-0046](docs/adr/0046-incremental-runs-replay-unchanged-inputs.md)).
 
 Every result carries a file and line, an `fqn` or a sha. Anything a model wrote
 comes back labelled `authoredBy: "model"` and is never blended into the
@@ -592,6 +601,21 @@ call site of a method, a bus-factor file, a package summary — and each answer
 was checked by hand against the lines it cited. One of its numbers disagreed
 with `git log --follow`, and the tool turned out to be right; the run is
 recorded in the ADR.
+
+### Keeping it current
+
+Run `stratigraph scan` again after changing code. Extractors whose inputs did
+not change are skipped: their stored facts are replayed instead. An input is
+every file the extractor could read, tracked or not, plus the extractor
+itself. If HEAD has not moved, the history mined last time is reused too. Both
+are exact, not approximate. A replayed stream is byte-for-byte what the
+extractor would print, and the run records `facts reused from run N`. On nacos
+(5,600 files), a TypeScript-only edit refreshes in about 15 s instead of about
+78 s.
+
+The limit: the Java extractor parses the whole program at once, so any
+`.java` or `.kt` change re-parses all of it. `--no-reuse` on `extract`,
+`history` or `scan` turns reuse off.
 
 ### The JVM extractor — Java and Kotlin
 

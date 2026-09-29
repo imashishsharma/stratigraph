@@ -10,6 +10,28 @@ schema carries a `user_version` and is migrated forward, and every JSON
 document carries `format`, which moves only for a change a parser could trip
 over.
 
+## [Unreleased]
+
+### Added
+
+- **Incremental re-runs** ([ADR-0046](docs/adr/0046-incremental-runs-replay-unchanged-inputs.md)).
+  `extract` replays an extractor's stored facts when every file it could read,
+  and the extractor itself, are byte-identical to the last run. `history`
+  reuses the last mine when HEAD and every log option are unchanged. Both are
+  exact by construction; `--no-reuse` turns them off. On nacos, a
+  TypeScript-only edit refreshes in about 15 s instead of about 78 s. A Java
+  or Kotlin edit still re-parses the whole program.
+- **The MCP server stays current.** Without `--run`, it moves to each newer
+  completed run and announces the move in the next answer. Every answer names
+  the files changed on disk since the run read them.
+
+### Changed
+
+- **`analyze` is about 8× faster on large repositories.** Cycle hops, cluster
+  neighbours and MCP dependency rows no longer re-derive package ancestry once
+  per row (nacos: 33 s → 4 s, with identical findings and citations).
+- The README's MCP section lists all thirteen tools.
+
 ## [2.0.1] — 2026-09-29
 
 ### Fixed

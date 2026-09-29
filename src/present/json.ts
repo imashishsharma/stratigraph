@@ -182,6 +182,7 @@ export function extractDocument(result: {
   runId: number;
   languages: string[];
   skipped: Array<{ language: string; reason: string }>;
+  reused?: string[];
   files: number;
   nodes: number;
   stubs: number;
@@ -196,6 +197,8 @@ export function extractDocument(result: {
     // absence in the graph, and a consumer treating this as empty would read
     // "no Java here" from "no JDK here".
     skipped: result.skipped,
+    // Replayed from an earlier run whose inputs were byte-identical (ADR-0046).
+    reused: result.reused ?? [],
     counts: {
       files: result.files,
       nodes: result.nodes,
@@ -209,6 +212,7 @@ export function extractDocument(result: {
 export function historyDocument(result: {
   runId: number;
   reusedRun: boolean;
+  historyReusedFrom?: number | null;
   commits: number;
   merges: number;
   fileChanges: number;
@@ -224,6 +228,9 @@ export function historyDocument(result: {
   return {
     ...envelope('history'),
     run: result.runId,
+    // The run whose mined commits were copied because HEAD and every log
+    // option were unchanged (ADR-0046); null when the log was read.
+    historyReusedFrom: result.historyReusedFrom ?? null,
     // False means this command opened its own run rather than attaching to the
     // one `extract` made — which is what decides whether coupling can be
     // compared against the dependency graph at all.

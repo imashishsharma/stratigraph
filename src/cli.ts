@@ -135,12 +135,14 @@ export function buildProgram(): Command {
       '--lang <names>',
       'extractors to run: java, ts, all, or a comma-separated list (default: detect)',
     )
+    .option('--no-reuse', "run every extractor even when its inputs are unchanged since the last run")
     .action(
       async (options: {
         extractorJar?: string;
         emit?: boolean;
         javaOpts?: string;
         lang?: string;
+        reuse: boolean;
       }) => {
         const result = await runExtract({
           ...overrides(program),
@@ -148,6 +150,7 @@ export function buildProgram(): Command {
           emit: options.emit,
           javaOpts: options.javaOpts ? options.javaOpts.split(/\s+/).filter(Boolean) : undefined,
           languages: parseLanguageFlag(options.lang),
+          reuse: options.reuse,
         });
         // `--emit` already owns stdout: the NDJSON is the product, and a
         // summary document after it would corrupt the stream it describes.
@@ -161,9 +164,10 @@ export function buildProgram(): Command {
     .command('scan [repo]')
     .description('extract, mine history, analyse and report in one go, then say what was and was not seen')
     .option('--out <dir>', 'report directory (default: ./stratigraph-report)')
-    .action(async (repo: string | undefined, options: { out?: string }) => {
+    .option('--no-reuse', "run every extractor even when its inputs are unchanged since the last run")
+    .action(async (repo: string | undefined, options: { out?: string; reuse: boolean }) => {
       const global = overrides(program);
-      await runScan({ ...global, repo: repo ?? global.repo, out: options.out });
+      await runScan({ ...global, repo: repo ?? global.repo, out: options.out, reuse: options.reuse });
     });
 
   program
@@ -213,11 +217,13 @@ export function buildProgram(): Command {
     .description("mine the repository's git history: commits, churn, complexity, authorship")
     .option('--since <when>', 'only commits after this date; anything `git log --since` accepts')
     .option('--run <id>', 'attach to a specific run instead of the most recent')
-    .action(async (options: { since?: string; run?: string }) => {
+    .option('--no-reuse', 'read the log even when HEAD and every option are unchanged since the last mine')
+    .action(async (options: { since?: string; run?: string; reuse: boolean }) => {
       const result = await runHistory({
         ...overrides(program),
         since: options.since,
         run: parsePositiveInt('--run', options.run),
+        reuse: options.reuse,
       });
       if (outputFormat() === 'json') printJson(historyDocument(result));
     });

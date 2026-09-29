@@ -15,6 +15,7 @@ import { assignFileRoles, type FileRole } from '../files/roles.js';
 import { computeFileMetrics, readIgnoreRevs, type MetricsStats } from '../history/metrics.js';
 import { mineHistory, type MineStats } from '../history/mine.js';
 import { inScope, pathScope } from '../history/paths.js';
+import { historyKey, rememberHistory, reuseHistory } from '../history/reuse.js';
 import { info, warn } from '../log.js';
 
 export class HistoryError extends Error {
@@ -29,9 +30,13 @@ export interface HistoryOptions extends ConfigOverrides {
   run?: number | undefined;
   /** Overridable so tests can drive a canned log without a git binary. */
   spawnGit?: SpawnGit | undefined;
+  /** Copy an earlier run's mined commits when the log would be the same (ADR-0046). Default true. */
+  reuse?: boolean | undefined;
 }
 
 export interface HistoryResult extends MineStats, MetricsStats {
+  /** The run whose mined commits were copied instead of reading the log, or null. */
+  historyReusedFrom: number | null;
   runId: number;
   /** False when this command had to open the run itself. */
   reusedRun: boolean;
@@ -91,18 +96,40 @@ export async function runHistory(options: HistoryOptions): Promise<HistoryResult
     let mined: MineStats;
     let metrics: MetricsStats;
     let roles: Partial<Record<FileRole, number>>;
+    let historyReusedFrom: number | null = null;
     try {
-      mined = await mineHistory({
-        db,
-        runId: run.id,
-        repoPath: config.repoPath,
-        since: config.history.since ?? undefined,
-        // Scoping the log to the subtree; paths still come back prefixed.
-        pathspec: prefix === '' ? undefined : ['.'],
-        prefix,
-        scope,
-        spawnGit: options.spawnGit,
-      });
+      // An injected git is a test's, with no identity to key on.
+      const head = readHead(config.repoPath);
+      const key =
+        options.spawnGit !== undefined || options.reuse === false || head === null
+          ? null
+          : historyKey({
+              repoPath: config.repoPath,
+              head,
+              since: config.history.since ?? null,
+              prefix,
+              exclude: config.exclude,
+              include: config.include,
+            });
+      const replayed = key === null ? null : reuseHistory(db, config.dbPath, key, run.id);
+      if (replayed !== null) {
+        mined = replayed.stats;
+        historyReusedFrom = replayed.runId;
+        info(`git: HEAD and every log option unchanged since run ${replayed.runId}; its ${mined.commits} commits reused`);
+      } else {
+        mined = await mineHistory({
+          db,
+          runId: run.id,
+          repoPath: config.repoPath,
+          since: config.history.since ?? undefined,
+          // Scoping the log to the subtree; paths still come back prefixed.
+          pathspec: prefix === '' ? undefined : ['.'],
+          prefix,
+          scope,
+          spawnGit: options.spawnGit,
+        });
+        if (key !== null) rememberHistory(config.dbPath, key, run.id, mined);
+      }
 
       const tracked = listTrackedFiles(config.repoPath).filter((path) => inScope(path, scope));
       roles = assignFileRoles(db, run.id, config.repoPath, tracked);
@@ -119,7 +146,7 @@ export async function runHistory(options: HistoryOptions): Promise<HistoryResult
     if (!reused) finishRun(db, run.id, 'ok');
     report(run.id, mined, metrics, roles, config.history.since, config.history.hotspotMonths);
 
-    return { runId: run.id, reusedRun: reused, shallow, roles, ...mined, ...metrics };
+    return { runId: run.id, reusedRun: reused, historyReusedFrom, shallow, roles, ...mined, ...metrics };
   } finally {
     db.close();
   }

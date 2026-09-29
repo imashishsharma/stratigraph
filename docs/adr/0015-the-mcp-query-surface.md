@@ -57,6 +57,13 @@ that keeps notes across a session can tell whether two answers describe the same
 snapshot. Re-pointing at a newer run is a restart, which is a thing clients
 already know how to do.
 
+> **Amended by [ADR-0046](0046-incremental-runs-replay-unchanged-inputs.md)
+> (2026-09-29):** without `--run`, the server now moves to each newer
+> completed run, and the first answer after a move opens with a notice naming
+> both runs. So the transcript shows where answers stop agreeing, which was
+> the objection below. Every answer also names the files changed on disk since
+> the run read them. `--run` still pins.
+
 ### Every result carries its provenance, and interpretation is labelled
 
 The same rule the report layer already follows, in a shape a caller can branch

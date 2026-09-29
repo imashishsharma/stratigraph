@@ -1,10 +1,14 @@
 import { spawn } from 'node:child_process';
+import { createRequire } from 'node:module';
+import { dirname } from 'node:path';
 import { createInterface } from 'node:readline';
+import { PassThrough, type Readable } from 'node:stream';
 
 import { loadConfig, type ConfigOverrides, type StratigraphConfig } from '../config.js';
 import { assertSchemaCurrent, openDatabase, requireStore, type Db } from '../db/database.js';
 import { createRun, finishRun, recordExtractor } from '../db/run.js';
 import { ingestInto } from '../facts/ingest.js';
+import { FactCache, hashFile, hashTree, inputFingerprint } from '../facts/reuse.js';
 import { listRepoFiles } from '../files/inventory.js';
 import { assignFileRoles } from '../files/roles.js';
 import { pathScope } from '../history/paths.js';
@@ -49,6 +53,16 @@ export interface ExtractOptions extends ConfigOverrides {
    * toolchain missing. Throws when the extractor cannot run on this machine.
    */
   resolveSpawner?: ((language: Language) => SpawnExtractor) | undefined;
+  /**
+   * Replay an extractor's stored facts when nothing it reads, and nothing
+   * about it, has changed (ADR-0046). Default true.
+   */
+  reuse?: boolean | undefined;
+  /**
+   * What identifies an injected extractor, for reuse. Without it an injected
+   * extractor is never reused: its identity is unknown.
+   */
+  extractorIdentity?: ((language: Language) => string[]) | undefined;
 }
 
 export interface ExtractResult extends FactWriterStats {
@@ -58,6 +72,8 @@ export interface ExtractResult extends FactWriterStats {
   languages: Language[];
   /** Extractors that were selected but could not run, with the reason. */
   skipped: Array<{ language: Language; reason: string }>;
+  /** Extractors whose stored facts were replayed instead of running them (ADR-0046). */
+  reused: Language[];
 }
 
 /** How an extractor subprocess is started. Injectable for tests. */
@@ -108,15 +124,19 @@ export async function runExtract(options: ExtractOptions): Promise<ExtractResult
   // What each extractor ran with, for the run record — e.g. whether Java was
   // typed against a classpath or source-only (ADR-0039).
   const notes = new Map<Language, string>();
+  // What each extractor is — its build, its runtime, its classpath — for the
+  // reuse key (ADR-0046). An extractor with no entry here is never reused.
+  const identities = new Map<Language, string[]>();
   const resolve =
     options.resolveSpawner ??
     ((language: Language) =>
-      options.spawnExtractor ?? spawnerFor(language, options, config, env, notes));
+      options.spawnExtractor ?? spawnerFor(language, options, config, env, notes, identities));
   const runnable: Array<{ language: Language; spawn: SpawnExtractor }> = [];
   const skipped: ExtractResult['skipped'] = [];
   for (const language of selected) {
     try {
       runnable.push({ language, spawn: resolve(language) });
+      if (options.extractorIdentity) identities.set(language, options.extractorIdentity(language));
     } catch (err) {
       // ADR-0004: a missing JDK disables the Java extractor and nothing else.
       // A repository that is half Angular still gets its Angular half — the
@@ -161,6 +181,7 @@ export async function runExtract(options: ExtractOptions): Promise<ExtractResult
       jar: null,
       languages: runnable.map((entry) => entry.language),
       skipped,
+      reused: [],
       files: 0,
       nodes: 0,
       stubs: 0,
@@ -176,6 +197,8 @@ export async function runExtract(options: ExtractOptions): Promise<ExtractResult
     const run = createRun(db, config.repoPath);
     const total: FactWriterStats = { files: 0, nodes: 0, stubs: 0, edges: 0, diagnostics: 0 };
     const ran: Language[] = [];
+    const reused: Language[] = [];
+    const cache = new FactCache(config.dbPath);
 
     // What the repository holds, classified before any extractor runs: the
     // denominator of every coverage ratio (ADR-0033) and the test/main split
@@ -197,12 +220,65 @@ export async function runExtract(options: ExtractOptions): Promise<ExtractResult
     }
 
     for (const { language, spawn: spawner } of runnable) {
+      const identity = identities.get(language);
+      // Taken even with reuse off: the inputs recorded with the stream are
+      // what the MCP server compares the disk against (ADR-0046).
+      const fingerprint =
+        identity === undefined ? null : inputFingerprint(config.repoPath, language, [...identity, ...args]);
+
+      // Nothing it reads and nothing about it has changed: the stream it
+      // printed last time is the stream it would print now.
+      const stored =
+        fingerprint === null || options.reuse === false ? null : cache.lookup(language, fingerprint.key);
+      if (stored !== null && fingerprint !== null) {
+        let stats: FactWriterStats;
+        try {
+          stats = await ingestInto(db, run.id, stored.open());
+        } catch (err) {
+          // Part of the stream is already in the run, so this run cannot be
+          // completed from it; drop the damaged stream so the next run
+          // starts the extractor.
+          cache.forget(language);
+          recordExtractor(db, run.id, language, 'failed', `stored facts unreadable: ${(err as Error).message}`);
+          finishRun(db, run.id, 'failed');
+          throw new ExtractError(
+            `the stored ${language} facts from run ${stored.runId} could not be replayed ` +
+              `(${(err as Error).message}); run ${run.id} is marked failed. Extract again: the ` +
+              'damaged store has been removed.',
+          );
+        }
+        {
+          const note = [
+            notes.get(language),
+            `facts reused from run ${stored.runId}: the ${fingerprint.files} files it reads and the ` +
+              'extractor itself are byte-identical',
+          ].filter(Boolean).join('; ');
+          recordExtractor(db, run.id, language, 'ok', note);
+          cache.markUsed(language, run.id);
+          ran.push(language);
+          reused.push(language);
+          accumulate(total, stats);
+          info(`${language.padEnd(10)}  ${summarise(run.id, stats)} (reused from run ${stored.runId})`);
+        }
+        continue;
+      }
+
       const child = start(spawner, language, config.repoPath, args);
+      const recording = fingerprint === null ? null : cache.record(language, fingerprint, run.id);
+      let source: Readable = child.stdout;
+      if (recording !== null) {
+        const tee = new PassThrough();
+        child.stdout.pipe(tee);
+        child.stdout.pipe(recording.sink);
+        source = tee;
+      }
 
       let stats: FactWriterStats;
       try {
-        stats = await ingestInto(db, run.id, child.stdout);
+        stats = await ingestInto(db, run.id, source);
       } catch (err) {
+        child.stdout.unpipe();
+        recording?.abort();
         recordExtractor(db, run.id, language, 'failed', (err as Error).message);
         finishRun(db, run.id, 'failed');
         throw err;
@@ -213,6 +289,8 @@ export async function runExtract(options: ExtractOptions): Promise<ExtractResult
       // analysis, and recording it as one would silently under-report.
       const code = await exitCode(child);
       if (code !== 0) {
+        child.stdout.unpipe();
+        recording?.abort();
         recordExtractor(db, run.id, language, 'failed', `exited with status ${code}`);
         finishRun(db, run.id, 'failed');
         throw new ExtractError(
@@ -220,6 +298,7 @@ export async function runExtract(options: ExtractOptions): Promise<ExtractResult
             `failed and its facts are incomplete`,
         );
       }
+      await recording?.commit();
 
       recordExtractor(db, run.id, language, 'ok', notes.get(language) ?? null);
       ran.push(language);
@@ -235,7 +314,7 @@ export async function runExtract(options: ExtractOptions): Promise<ExtractResult
           `resolved and are absent from the graph; query the diagnostic table for detail`,
       );
     }
-    return { runId: run.id, jar: null, languages: ran, skipped, ...total };
+    return { runId: run.id, jar: null, languages: ran, skipped, reused, ...total };
   } finally {
     db.close();
   }
@@ -286,11 +365,13 @@ function spawnerFor(
   config: StratigraphConfig,
   env: NodeJS.ProcessEnv,
   notes: Map<Language, string>,
+  identities: Map<Language, string[]>,
 ): SpawnExtractor {
   if (language === 'java') {
-    const spawnJava = javaSpawner(options, config.java.home, config.java.jar, env);
+    const spawnJava = javaSpawner(options, config.java.home, config.java.jar, env, identities);
     if (config.java.classpath === 'off') {
       notes.set('java', 'source-only: java.classpath is off');
+      identities.get('java')?.push('classpath:off');
       return spawnJava;
     }
     const javaHome = findJava({ home: options.javaHome ?? config.java.home ?? undefined, env });
@@ -300,26 +381,55 @@ function spawnerFor(
       env,
     });
     notes.set('java', classpath.statement);
+    // The jars' paths are versioned in the local repository, so the list
+    // stands for their contents.
+    identities
+      .get('java')
+      ?.push(`classpath:${classpath.file === null ? classpath.statement : hashFile(classpath.file)}`);
     info(`classpath   ${classpath.statement}`);
     return classpath.file === null
       ? spawnJava
       : (lang, repoPath, args) => spawnJava(lang, repoPath, [...args, '--classpath-file', classpath.file as string]);
   }
-  return language === 'migrations' ? migrationsSpawner() : typescriptSpawner();
+  return language === 'migrations' ? migrationsSpawner(identities) : typescriptSpawner(identities);
 }
 
-function migrationsSpawner(): SpawnExtractor {
+/**
+ * A TypeScript-built extractor is its compiled tree plus the compiler and
+ * template parser it loads, and the Node running it.
+ */
+function nodeExtractorIdentity(extractor: { entry: string; nodeArgs: string[] }): string[] {
+  const require = createRequire(extractor.entry);
+  const version = (name: string): string => {
+    try {
+      return `${name}@${(require(`${name}/package.json`) as { version: string }).version}`;
+    } catch {
+      return `${name}@none`;
+    }
+  };
+  return [
+    `node:${process.version}`,
+    `args:${extractor.nodeArgs.join(' ')}`,
+    `tree:${hashTree(dirname(extractor.entry), /\.(m?js|ts|json)$/)}`,
+    version('typescript'),
+    version('@angular/compiler'),
+  ];
+}
+
+function migrationsSpawner(identities: Map<Language, string[]>): SpawnExtractor {
   const extractor = findMigrationsExtractor();
   if (!extractor) throw new ExtractError(missingTsExtractorMessage());
+  identities.set('migrations', nodeExtractorIdentity(extractor));
   return (_language, _repoPath, args) =>
     spawn(process.execPath, [...extractor.nodeArgs, extractor.entry, ...args], {
       stdio: ['ignore', 'pipe', 'pipe'],
     });
 }
 
-function typescriptSpawner(): SpawnExtractor {
+function typescriptSpawner(identities: Map<Language, string[]>): SpawnExtractor {
   const extractor = findTsExtractor();
   if (!extractor) throw new ExtractError(missingTsExtractorMessage());
+  identities.set('typescript', nodeExtractorIdentity(extractor));
 
   info(`extractor   ${extractor.entry} (${extractor.source})`);
   return (_language, _repoPath, args) =>
@@ -333,6 +443,7 @@ function javaSpawner(
   configJavaHome: string | null,
   configJar: string | null,
   env: NodeJS.ProcessEnv,
+  identities: Map<Language, string[]>,
 ): SpawnExtractor {
   const java = findJava({ home: options.javaHome ?? configJavaHome ?? undefined, env });
   if (!java) {
@@ -359,6 +470,11 @@ function javaSpawner(
     throw new ExtractError(missingJarMessage(jarOptions));
   }
 
+  identities.set('java', [
+    `jar:${hashFile(jar.path)}`,
+    `jvm:${java.javaBin} ${java.version}`,
+    `opts:${(options.javaOpts ?? []).join(' ')}`,
+  ]);
   info(`java        ${java.version} from ${java.source}`);
   info(`extractor   ${jar.path} (${jar.source})`);
 

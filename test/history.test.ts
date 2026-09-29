@@ -326,3 +326,64 @@ describe.skipIf(!GIT)('runHistory against a real repository', () => {
     ).toEqual([{ commits: 2, recent_commits: 1 }]);
   });
 });
+
+describe.skipIf(!GIT)('history reuse (ADR-0046)', () => {
+  function rows(dbPath: string, runId: number) {
+    return read(
+      dbPath,
+      `SELECT c.sha, c.author_email, c.authored_at, c.subject, c.is_merge,
+              f.path, f.canonical_path, f.insertions, f.deletions, f.change_type
+         FROM git_commit c LEFT JOIN commit_file f ON f.commit_id = c.id
+        WHERE c.run_id = ? ORDER BY c.id, f.id`,
+      runId,
+    );
+  }
+
+  function newRun(dbPath: string, target: string): number {
+    const db = openDatabase(dbPath, { mustExist: true });
+    try {
+      const run = createRun(db, target);
+      finishRun(db, run.id, 'ok');
+      return run.id;
+    } finally {
+      db.close();
+    }
+  }
+
+  it('copies the previous mine when HEAD has not moved, and reads the log again when it has', async () => {
+    const own = buildRepo();
+    const { cwd, dbPath } = freshStore(own);
+    const first = await runHistory({ repo: own, cwd });
+    expect(first.historyReusedFrom).toBeNull();
+
+    newRun(dbPath, own);
+    const second = await runHistory({ repo: own, cwd });
+    expect(second.historyReusedFrom).toBe(first.runId);
+    expect(second.commits).toBe(first.commits);
+    expect(rows(dbPath, second.runId)).toEqual(rows(dbPath, first.runId));
+    expect(second.measured).toBe(first.measured);
+
+    // A new commit renames a file: every older change to it gets a new
+    // canonical path, which only a fresh read of the log gets right.
+    git(['mv', 'src/Keep.java', 'src/Kept.java'], own);
+    commit(own, 'rename Keep', '2024-01-06T10:00:00+00:00');
+    newRun(dbPath, own);
+    const third = await runHistory({ repo: own, cwd });
+    expect(third.historyReusedFrom).toBeNull();
+    expect(third.commits).toBe(first.commits + 1);
+
+    newRun(dbPath, own);
+    const fresh = await runHistory({ repo: own, cwd, reuse: false });
+    expect(fresh.historyReusedFrom).toBeNull();
+    expect(rows(dbPath, fresh.runId)).toEqual(rows(dbPath, third.runId));
+  });
+
+  it('does not reuse a mine bounded by a relative date', async () => {
+    const own = buildRepo();
+    const { cwd, dbPath } = freshStore(own);
+    await runHistory({ repo: own, cwd, since: '100 years ago' });
+    newRun(dbPath, own);
+    const second = await runHistory({ repo: own, cwd, since: '100 years ago' });
+    expect(second.historyReusedFrom).toBeNull();
+  });
+});
