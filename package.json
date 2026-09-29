@@ -62,7 +62,7 @@
   "bugs": {
     "url": "https://github.com/imashishsharma/stratigraph/issues"
   },
-  "homepage": "https://github.com/imashishsharma/stratigraph#readme",
+  "homepage": "https://imashishsharma.github.io/stratigraph/",
   "publishConfig": {
     "access": "public",
     "provenance": true
