@@ -1,4 +1,4 @@
-{"v":1,"type":"meta","extractor":"java","extractorVersion":"2.0.0","repoPath":"<repo>"}
+{"v":1,"type":"meta","extractor":"java","extractorVersion":"2.0.1","repoPath":"<repo>"}
 {"v":1,"type":"file","path":"src/main/kotlin/com/example/shop/domain/Order.kt","language":"kotlin","loc":13}
 {"v":1,"type":"file","path":"src/main/kotlin/com/example/shop/repo/OrderRepository.kt","language":"kotlin","loc":9}
 {"v":1,"type":"file","path":"src/main/kotlin/com/example/shop/service/OrderService.kt","language":"kotlin","loc":10}

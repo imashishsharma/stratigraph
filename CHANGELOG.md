@@ -10,6 +10,25 @@ schema carries a `user_version` and is migrated forward, and every JSON
 document carries `format`, which moves only for a change a parser could trip
 over.
 
+## [2.0.1] — 2026-09-29
+
+### Fixed
+
+- **The Docker image ships a JDK, not a JRE.** The 2.0.0 image lacked
+  `jdk.compiler`, so the Java extractor could not run in it and Java code went
+  unread (reported honestly as a skipped extractor).
+- **JHipster-style Angular clients link to their Spring endpoints.** A base
+  URL glued to a relative path (`{}api/x`) is read as that path, and
+  `this.resourceUrl` resolves to a `readonly` field's literal initializer,
+  including one on a base class in the same file. jhipster-sample-app had no
+  cross-stack links in 2.0.0 ([ADR-0018](docs/adr/0018-cross-stack-links-are-inferences.md)).
+- The Windows cache-path test and the image's `doctor` check in CI.
+
+### Added
+
+- A product website at https://imashishsharma.github.io/stratigraph/, now the
+  npm package's homepage.
+
 ## [2.0.0] — 2026-09-29
 
 v1.6.1 was run on a real enterprise repository and produced output a senior

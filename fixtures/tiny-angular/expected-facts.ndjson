@@ -1,4 +1,4 @@
-{"v":1,"type":"meta","extractor":"typescript","extractorVersion":"2.0.0","repoPath":"<repo>"}
+{"v":1,"type":"meta","extractor":"typescript","extractorVersion":"2.0.1","repoPath":"<repo>"}
 {"v":1,"type":"file","path":"src/app/app.routes.ts","language":"typescript","loc":18}
 {"v":1,"type":"file","path":"src/app/core/order.service.ts","language":"typescript","loc":22}
 {"v":1,"type":"file","path":"src/app/core/order.ts","language":"typescript","loc":4}
