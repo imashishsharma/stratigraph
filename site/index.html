@@ -1,0 +1,365 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Stratigraph — architecture maps for Java, Spring Boot &amp; Angular codebases</title>
+<meta name="description" content="Stratigraph reads a Java, Spring Boot and Angular codebase plus its git history and produces C4 architecture diagrams, an ER data model from JPA and Liquibase/Flyway, the HTTP API, hotspots and cited findings — and states what it could not see. Open source, runs locally, with an MCP server for AI agents.">
+<meta name="keywords" content="codebase analysis, software architecture, C4 diagrams, Spring Boot, Java, Angular, legacy code, monolith, ER diagram, JPA, Liquibase, Flyway, hotspots, technical debt, code archaeology, MCP server, static analysis">
+<link rel="canonical" href="https://imashishsharma.github.io/stratigraph/">
+<meta name="theme-color" content="#0f1c2e">
+<link rel="icon" href="assets/img/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="assets/img/favicon-32.png" sizes="32x32" type="image/png">
+<link rel="apple-touch-icon" href="assets/img/apple-touch-icon.png">
+
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Stratigraph">
+<meta property="og:title" content="Stratigraph — read the layers of a codebase">
+<meta property="og:description" content="Architecture, data model, HTTP API and risk for Java, Spring Boot & Angular — every claim cited, every view states its coverage. Open source.">
+<meta property="og:url" content="https://imashishsharma.github.io/stratigraph/">
+<meta property="og:image" content="https://imashishsharma.github.io/stratigraph/assets/img/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Stratigraph: an entity-relationship diagram read from a Spring Boot application's migrations and JPA mappings">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Stratigraph — read the layers of a codebase">
+<meta name="twitter:description" content="Architecture, data model, HTTP API and risk for Java, Spring Boot & Angular — every claim cited. Open source.">
+<meta name="twitter:image" content="https://imashishsharma.github.io/stratigraph/assets/img/og-image.png">
+
+<link rel="stylesheet" href="assets/css/site.css">
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "Stratigraph",
+  "alternateName": "stratigraph",
+  "applicationCategory": "DeveloperApplication",
+  "operatingSystem": "macOS, Linux, Windows",
+  "description": "Reads a Java, Spring Boot and Angular codebase and its git history; produces C4 architecture diagrams, an ER data model, the HTTP surface, hotspots, cycles and cited findings, with coverage stated on every view, and an MCP server for AI coding agents.",
+  "url": "https://imashishsharma.github.io/stratigraph/",
+  "downloadUrl": "https://www.npmjs.com/package/stratigraph",
+  "codeRepository": "https://github.com/imashishsharma/stratigraph",
+  "license": "https://www.apache.org/licenses/LICENSE-2.0",
+  "softwareVersion": "2.0.0",
+  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+  "author": { "@type": "Person", "name": "Ashish Sharma" }
+}
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    { "@type": "Question", "name": "Does Stratigraph send my code anywhere?",
+      "acceptedAnswer": { "@type": "Answer", "text": "No. Extraction and history mining run entirely on your machine with no network access. The optional interpretation layer sends structural metadata to a model API only if you configure a key, and never raw source unless you pass --send-source. Everything works with --no-llm." } },
+    { "@type": "Question", "name": "Which languages and frameworks does it understand?",
+      "acceptedAnswer": { "@type": "Answer", "text": "Java and Kotlin with Spring, Spring Boot, JPA/Hibernate, Spring Data and JAX-RS; Liquibase, Flyway and SQL DDL migrations; TypeScript and Angular (NgModules, standalone components, routes, DI); OpenAPI specs; Koa and Express routes." } },
+    { "@type": "Question", "name": "Do I need a JDK or a working build?",
+      "acceptedAnswer": { "@type": "Answer", "text": "Only for the Java half: the Java extractor needs a JDK 17+. It never runs your build. If your Maven dependencies are already in the local cache it uses them offline for richer type information; otherwise it reads source only and says so." } },
+    { "@type": "Question", "name": "Is it free?",
+      "acceptedAnswer": { "@type": "Answer", "text": "Yes. Stratigraph is open source under the Apache 2.0 licence and published on npm." } },
+    { "@type": "Question", "name": "How accurate is it?",
+      "acceptedAnswer": { "@type": "Answer", "text": "It is benchmarked on 20 pinned public repositories against hand-labelled ground truth: 100% entity and table recall, 99% HTTP endpoint recall, 95% injection resolution, 100% of deployables found as containers, and no non-source file in any hotspot list." } }
+  ]
+}
+</script>
+</head>
+<body>
+
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="nav">
+  <div class="wrap nav-row">
+    <a class="logo" href="./" aria-label="Stratigraph home">
+      <svg viewBox="0 0 64 64" width="30" height="30" aria-hidden="true"><rect x="12" y="10" width="42" height="11" rx="4" class="l1"/><rect x="6" y="26.5" width="52" height="11" rx="4" class="l2"/><rect x="16" y="43" width="32" height="11" rx="4" class="l3"/></svg>
+      <span>stratigraph</span>
+    </a>
+    <nav aria-label="Primary">
+      <a href="#features">Features</a>
+      <a href="#use-cases">Use cases</a>
+      <a href="#how">How it works</a>
+      <a href="#proof">Benchmark</a>
+      <a href="#faq">FAQ</a>
+      <a class="btn btn-ghost" href="https://github.com/imashishsharma/stratigraph">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main id="main">
+
+<section class="hero">
+  <div class="wrap hero-grid">
+    <div>
+      <p class="eyebrow">Open source · Java · Spring Boot · Angular</p>
+      <h1>Read the layers of a codebase.</h1>
+      <p class="lede">Stratigraph reads a large codebase and its git history and gives you the map nobody drew: the deployables and how they depend on each other, the data model, the HTTP API, and where the risk is. Every claim points at a file and line or a commit. Every view says how much of the code it was built from.</p>
+      <div class="cta">
+        <div class="cmd" aria-label="Install and run">
+          <code><span class="prompt">$</span> npx stratigraph scan .</code>
+          <button class="copy" type="button" data-copy="npx stratigraph scan ." aria-label="Copy command">Copy</button>
+        </div>
+        <a class="btn btn-primary" href="#start">Get started</a>
+        <a class="btn btn-ghost" href="https://github.com/imashishsharma/stratigraph">Star on GitHub</a>
+      </div>
+      <p class="fine">Apache 2.0 · runs locally · no code leaves your machine</p>
+    </div>
+    <figure class="hero-shot">
+      <div class="window"><span></span><span></span><span></span></div>
+      <img src="assets/img/er-diagram.webp" width="1800" height="548" alt="Entity-relationship diagram of Spring PetClinic, read from its Flyway schema and JPA mappings: owners, pets, visits, vets, specialties and types with their keys and relationships">
+      <figcaption>Spring PetClinic's schema, read from its migrations and JPA mappings — tables, columns, keys and foreign keys, each cited.</figcaption>
+    </figure>
+  </div>
+</section>
+
+<section class="stats" aria-label="Benchmark results">
+  <div class="wrap stat-row">
+    <div><strong>20</strong><span>public repositories benchmarked</span></div>
+    <div><strong>100%</strong><span>JPA entity &amp; table recall</span></div>
+    <div><strong>99%</strong><span>HTTP endpoint recall</span></div>
+    <div><strong>0</strong><span>lockfiles or tests ranked as “risky”</span></div>
+  </div>
+</section>
+
+<section class="section problem">
+  <div class="wrap narrow">
+    <h2>Nobody remembers why it is shaped like this.</h2>
+    <p>You inherit a 300,000-line Spring monolith with an Angular front end. The architecture diagram on the wiki is four years old. The people who designed the data model have left. Every change is a guess about what else it touches.</p>
+    <p>Most tools either draw boxes that look confident and are wrong, or give you a thousand lint warnings. Stratigraph is built on one rule: <strong>static analysis produces the facts, and nothing is ever asserted without a citation</strong>. When it could not see something — no JDK, an unread module, a type from a jar — it says so on the page, and withholds a view rather than draw a partial one as if it were whole.</p>
+  </div>
+</section>
+
+<section class="section" id="features">
+  <div class="wrap">
+    <p class="eyebrow center">What you get</p>
+    <h2 class="center">One command, a map you can defend.</h2>
+    <div class="grid features">
+      <article>
+        <h3>Architecture that matches the build</h3>
+        <p>C4 diagrams at context, container and component level. A container is a real deployable — a Spring Boot app, a WAR, an Angular or Nx application — proved by its build file or main class. Aggregator and BOM poms are grouping, not boxes. Test code is left out and counted.</p>
+      </article>
+      <article>
+        <h3>The data model as the database has it</h3>
+        <p>Tables, columns and foreign keys from Liquibase, Flyway and SQL DDL, overlaid with JPA mappings — default naming strategies, inheritance, embedded ids, <code>@MappedSuperclass</code>. Where the classes and the migrations disagree, that is a finding.</p>
+      </article>
+      <article>
+        <h3>Who reads and writes each table</h3>
+        <p>Spring Data repositories, JPQL and native <code>@Query</code>, and JDBC SQL become read/write edges, so “what touches <code>orders</code>?” has a cited answer.</p>
+      </article>
+      <article>
+        <h3>The whole HTTP surface</h3>
+        <p>Spring MVC, JAX-RS, custom meta-annotations, paths built from constants, API-first controllers joined to their OpenAPI spec, Koa and Express routes — and Angular calls linked to the endpoints they hit.</p>
+      </article>
+      <article>
+        <h3>Risk from history, not size</h3>
+        <p>Hotspots rank recent change in source files, scaled by complexity — never lockfiles or generated code. Co-change coupling finds files that move together with no dependency between them. Knowledge silos flag files one person owns that the rest of the code depends on.</p>
+      </article>
+      <article>
+        <h3>Findings with evidence</h3>
+        <p>Package cycles with the shortest path and the lines that close it, schema drift, hidden coupling, bus factor. Each finding cites the edges, files or commits it rests on; one that cannot is not shown.</p>
+      </article>
+      <article>
+        <h3>Coverage on every view</h3>
+        <p>“Built from 412 of 1,030 Java files; the Java extractor did not run: no JDK 17+.” Every diagram, ranking and answer states its coverage. Below 50%, a view is withheld with the reason instead of drawn.</p>
+      </article>
+      <article>
+        <h3>An MCP server for AI agents</h3>
+        <p>Point Claude Code or any MCP client at the fact store: <code>what_breaks_if</code>, <code>who_knows</code>, <code>where_is_table_written</code>, <code>find_callers</code>, <code>check_cycle</code> and more — each answer cited and carrying its coverage.</p>
+      </article>
+      <article>
+        <h3>Fits in CI</h3>
+        <p><code>--format json</code> on every command, <code>--fail-on</code> severity gates, and <code>stratigraph diff</code> to fail a build only on findings that are new — the gate a repository with existing debt can switch on today.</p>
+      </article>
+    </div>
+  </div>
+</section>
+
+<section class="section showcase" aria-labelledby="showcase-title">
+  <div class="wrap">
+    <p class="eyebrow center">The report</p>
+    <h2 class="center" id="showcase-title">A static HTML report you can hand to anyone.</h2>
+    <p class="center sub">Self-contained, no server, no scripts, prints cleanly. These are real reports of public repositories, generated by <code>stratigraph scan</code>.</p>
+    <div class="tabs" role="tablist" aria-label="Report screenshots">
+      <button role="tab" aria-selected="true" aria-controls="shot-summary" id="t-summary">The first hour</button>
+      <button role="tab" aria-selected="false" aria-controls="shot-architecture" id="t-architecture">Architecture</button>
+      <button role="tab" aria-selected="false" aria-controls="shot-data" id="t-data">Data model</button>
+      <button role="tab" aria-selected="false" aria-controls="shot-hotspots" id="t-hotspots">Hotspots</button>
+      <button role="tab" aria-selected="false" aria-controls="shot-findings" id="t-findings">Findings</button>
+    </div>
+    <div class="shots">
+      <figure role="tabpanel" id="shot-summary" aria-labelledby="t-summary">
+        <img src="assets/img/report-summary.webp" loading="lazy" width="1800" height="1375" alt="Report summary for Spring PetClinic: five first-hour answers — the parts, the data, the risk, what is changing, who holds the knowledge — each with its coverage">
+        <figcaption>The first hour: the parts, the data, the risk, what is changing and who holds the knowledge — each with the coverage it rests on.</figcaption>
+      </figure>
+      <figure role="tabpanel" id="shot-architecture" aria-labelledby="t-architecture" hidden>
+        <img src="assets/img/report-architecture.webp" loading="lazy" width="1800" height="1500" alt="Architecture tab for jhipster-sample-app with its coverage statement and the C4 system context diagram, every relationship cited">
+        <figcaption>C4 levels 1–3, with the coverage statement first and every relationship traced to the rows it came from.</figcaption>
+      </figure>
+      <figure role="tabpanel" id="shot-data" aria-labelledby="t-data" hidden>
+        <img src="assets/img/report-data-model.webp" loading="lazy" width="1800" height="1500" alt="Data model tab for Spring PetClinic: tables from migrations and mappings, with columns, keys and relationships">
+        <figcaption>The schema as the migrations build it, overlaid with the JPA mapping, every column cited.</figcaption>
+      </figure>
+      <figure role="tabpanel" id="shot-hotspots" aria-labelledby="t-hotspots" hidden>
+        <img src="assets/img/report-hotspots.webp" loading="lazy" width="1800" height="1500" alt="Coupling tab for Spring PetClinic: dependency matrix and the hotspot ranking with recent commits and authors">
+        <figcaption>The dependency matrix and the hotspot ranking — recent change in source files, scaled by complexity.</figcaption>
+      </figure>
+      <figure role="tabpanel" id="shot-findings" aria-labelledby="t-findings" hidden>
+        <img src="assets/img/report-findings.webp" loading="lazy" width="1800" height="1250" alt="Findings tab for Spring PetClinic, ranked by severity, each with its evidence">
+        <figcaption>Findings ranked by severity, each with the edges, files or commits it rests on.</figcaption>
+      </figure>
+    </div>
+  </div>
+</section>
+
+<section class="section" id="use-cases">
+  <div class="wrap">
+    <p class="eyebrow center">Use cases</p>
+    <h2 class="center">For the first day on a system, and every day after.</h2>
+    <div class="grid cases">
+      <article><h3>Inheriting a monolith</h3><p>Get the parts, the data model and the risky corners of a system you did not build in an hour, with every claim checkable at a file and line.</p></article>
+      <article><h3>Planning a modernisation</h3><p>Find the seams before you cut: package cycles, co-change clusters that ignore module boundaries, and the tables each part of the code writes.</p></article>
+      <article><h3>Onboarding engineers</h3><p>Hand new joiners a map that is regenerated from the code, not a wiki page that went stale the week after it was written.</p></article>
+      <article><h3>Technical due diligence</h3><p>Assess an acquisition or a vendor codebase with a scorecard of structure, risk and knowledge concentration — and an explicit statement of what could not be read.</p></article>
+      <article><h3>Architecture reviews &amp; ADRs</h3><p>Compare the intended structure with the real one; clusters that cut across declared modules become ADR candidates with evidence attached.</p></article>
+      <article><h3>Grounding AI coding agents</h3><p>Give Claude Code or another MCP client structural answers it can cite — callers, impact, table writers — instead of letting it guess from grep.</p></article>
+    </div>
+  </div>
+</section>
+
+<section class="section how" id="how">
+  <div class="wrap">
+    <p class="eyebrow center">How it works</p>
+    <h2 class="center">Facts first. Interpretation is labelled.</h2>
+    <ol class="pipeline">
+      <li><span class="n">1</span><h3>Extract</h3><p>Separate extractors parse Java/Kotlin (OpenRewrite), TypeScript/Angular (the TS compiler API) and migrations, emitting facts as NDJSON.</p></li>
+      <li><span class="n">2</span><h3>Store</h3><p>Nodes and edges land in a local SQLite fact store, each with a file and line. Every file gets a role — source, test, generated, migration, lockfile.</p></li>
+      <li><span class="n">3</span><h3>Mine history</h3><p><code>git log</code> gives recent change, authorship and co-change, with bulk sweeps and <code>.git-blame-ignore-revs</code> left out.</p></li>
+      <li><span class="n">4</span><h3>Analyse</h3><p>Cycles, clusters, hotspots, schema drift and coupling become findings with citations. An optional model may name clusters — marked as inference.</p></li>
+      <li><span class="n">5</span><h3>Present</h3><p>HTML report, Mermaid and Structurizr diagrams, <code>findings.md</code>, JSON, and an MCP server — all projections of the same stored facts.</p></li>
+    </ol>
+    <blockquote class="rule">A confidently wrong dependency map is worse than no map. If a relationship cannot be cited, the answer is “no evidence found” — not a plausible guess.</blockquote>
+  </div>
+</section>
+
+<section class="section mcp">
+  <div class="wrap mcp-grid">
+    <div>
+      <p class="eyebrow">For agents</p>
+      <h2>Ask the codebase, get citations back.</h2>
+      <p>Run <code>stratigraph mcp</code> and connect it to Claude Code, Cursor or any MCP client. Thirteen read-only tools answer structural questions from the stored facts — and every answer ends with the coverage of the view it came from, so the agent knows when an empty answer means “unknown”.</p>
+      <ul class="ticks">
+        <li><code>what_breaks_if</code> — transitive dependents, the tests that reach them, the endpoints they serve</li>
+        <li><code>who_knows</code> — authors, share and recency, from git</li>
+        <li><code>where_is_table_written</code> — repositories, queries and SQL, cited</li>
+        <li><code>explain_hotspot</code> — every number behind a file's rank</li>
+      </ul>
+      <p class="fine">The answer shown is illustrative; its shape is the tool's.</p>
+    </div>
+<pre class="term" aria-label="Illustrative MCP answer"><span class="c"># what_breaks_if com.acme.billing.InvoiceService</span>
+6 element(s) depend on it within 3 hop(s):
+  [1] com.acme.billing.InvoiceController — injects
+      (billing/web/InvoiceController.java:38)
+  [1] com.acme.billing.DunningJob — calls issue(Invoice)
+      (billing/jobs/DunningJob.java:71)
+  [2] com.acme.api.AccountResource — injects DunningJob
+      (api/AccountResource.java:22)
+  …
+2 HTTP endpoint(s) served by impacted code:
+  POST /api/invoices — InvoiceController#create
+  POST /api/accounts/{id}/dunning — AccountResource#dun
+
+<span class="c">Coverage (architecture): Built from 1,204 of 1,230
+main source files parsed (97%).</span></pre>
+  </div>
+</section>
+
+<section class="section proof" id="proof">
+  <div class="wrap">
+    <p class="eyebrow center">Measured, not asserted</p>
+    <h2 class="center">Benchmarked on 20 public repositories.</h2>
+    <p class="center sub"><code>stratigraph bench</code> runs the full pipeline over a pinned corpus — Spring PetClinic and its variants, JHipster, eladmin, killbill, OpenMRS, nacos, Apache Dubbo, Spring Cloud Gateway, Spring Boot Admin, bitwarden/clients, analog and more — and scores it against ground truth labelled from the source, without the tool.</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Metric</th><th>Target</th><th>Stratigraph 2.0</th></tr></thead>
+        <tbody>
+          <tr><td>Non-source files (lockfiles, manifests, tests) in the hotspot top 20</td><td>0</td><td class="ok">0</td></tr>
+          <tr><td>Hotspot top-10 overlap with a senior engineer's list</td><td>≥ 60%</td><td class="ok">66%</td></tr>
+          <tr><td>JPA entity recall, with the physical table name</td><td>≥ 90%</td><td class="ok">100% (146/146)</td></tr>
+          <tr><td>Table recall</td><td>≥ 90%</td><td class="ok">100% (274/274)</td></tr>
+          <tr><td>HTTP endpoint recall</td><td>≥ 95%</td><td class="ok">99% (519/520)</td></tr>
+          <tr><td>Dependency-injection edges resolved</td><td>≥ 85%</td><td class="ok">95% (215/226)</td></tr>
+          <tr><td>Deployables found as containers / containers that are deployables</td><td>100%</td><td class="ok">100% / 100%</td></tr>
+          <tr><td>Views rendered without a coverage statement</td><td>0</td><td class="ok">0</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="center"><a href="https://github.com/imashishsharma/stratigraph/blob/main/bench/scorecard.md">Read the full scorecard — every miss is listed by name →</a></p>
+  </div>
+</section>
+
+<section class="section start" id="start">
+  <div class="wrap narrow">
+    <p class="eyebrow center">Get started</p>
+    <h2 class="center">Five minutes to your first map.</h2>
+<pre class="term"><span class="c"># Node 18.18+; a JDK 17+ for Java code</span>
+npm install -g stratigraph
+stratigraph doctor              <span class="c"># what this machine can analyse</span>
+stratigraph fetch-extractor     <span class="c"># the Java extractor, checksum-verified</span>
+
+<span class="c"># the whole pipeline, then open the report</span>
+stratigraph scan path/to/repo --no-llm
+open stratigraph-report/index.html
+
+<span class="c"># let your agent query it</span>
+stratigraph mcp --repo path/to/repo</pre>
+    <p class="center fine">Prefer containers? <code>docker run --rm -v "$PWD:/repo:ro" ghcr.io/imashishsharma/stratigraph doctor</code></p>
+  </div>
+</section>
+
+<section class="section faq" id="faq">
+  <div class="wrap narrow">
+    <h2 class="center">Questions</h2>
+    <details><summary>Does Stratigraph send my code anywhere?</summary><p>No. Extraction and history mining run entirely on your machine with no network access. The optional interpretation layer sends structural metadata to a model API only if you configure a key, and never raw source unless you pass <code>--send-source</code>. Everything works with <code>--no-llm</code>.</p></details>
+    <details><summary>Which languages and frameworks does it understand?</summary><p>Java and Kotlin with Spring, Spring Boot, JPA/Hibernate, Spring Data and JAX-RS; Liquibase, Flyway and SQL DDL; TypeScript and Angular — NgModules, standalone components, routes and DI; OpenAPI specs; Koa and Express routes.</p></details>
+    <details><summary>Do I need a JDK or a working build?</summary><p>Only for the Java half, which needs a JDK 17+. Stratigraph never runs your build. If your Maven dependencies are already in the local cache it uses them offline for richer types; otherwise it reads source only — and says so in every view.</p></details>
+    <details><summary>How is this different from SonarQube or Structurizr?</summary><p>SonarQube reports rule violations file by file; Structurizr draws the architecture you describe. Stratigraph derives the architecture, data model and API from the code and its history, cites every element, and tells you how much of the code each view covers.</p></details>
+    <details><summary>Is it free?</summary><p>Yes — open source under Apache 2.0, on <a href="https://www.npmjs.com/package/stratigraph">npm</a> and <a href="https://github.com/imashishsharma/stratigraph">GitHub</a>.</p></details>
+  </div>
+</section>
+
+</main>
+
+<footer class="footer">
+  <div class="wrap foot-row">
+    <a class="logo" href="./"><svg viewBox="0 0 64 64" width="24" height="24" aria-hidden="true"><rect x="12" y="10" width="42" height="11" rx="4" class="l1"/><rect x="6" y="26.5" width="52" height="11" rx="4" class="l2"/><rect x="16" y="43" width="32" height="11" rx="4" class="l3"/></svg><span>stratigraph</span></a>
+    <nav aria-label="Footer">
+      <a href="https://github.com/imashishsharma/stratigraph">GitHub</a>
+      <a href="https://www.npmjs.com/package/stratigraph">npm</a>
+      <a href="https://github.com/imashishsharma/stratigraph/tree/main/docs/adr">Design decisions</a>
+      <a href="https://github.com/imashishsharma/stratigraph/blob/main/CHANGELOG.md">Changelog</a>
+    </nav>
+    <p class="fine">Apache 2.0 · Named for stratigraphy — reading layers of deposit to reconstruct a site's history.</p>
+  </div>
+</footer>
+
+<script>
+  document.querySelectorAll('.copy').forEach(function (b) {
+    b.addEventListener('click', function () {
+      navigator.clipboard.writeText(b.dataset.copy).then(function () {
+        b.textContent = 'Copied'; setTimeout(function () { b.textContent = 'Copy'; }, 1500);
+      });
+    });
+  });
+  var tabs = document.querySelectorAll('[role=tab]');
+  tabs.forEach(function (t) {
+    t.addEventListener('click', function () {
+      tabs.forEach(function (o) {
+        var on = o === t;
+        o.setAttribute('aria-selected', on);
+        document.getElementById(o.getAttribute('aria-controls')).hidden = !on;
+      });
+    });
+  });
+</script>
+</body>
+</html>

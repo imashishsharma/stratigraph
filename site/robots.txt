@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://imashishsharma.github.io/stratigraph/sitemap.xml
