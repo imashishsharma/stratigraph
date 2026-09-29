@@ -38,7 +38,9 @@ RUN apt-get update \
   && apt-get install -y --no-install-recommends git ca-certificates \
   && rm -rf /var/lib/apt/lists/*
 
-COPY --from=eclipse-temurin:17-jre /opt/java/openjdk /opt/java/openjdk
+# A JDK, not a JRE: OpenRewrite parses with javac's own classes (the
+# jdk.compiler module), which a JRE does not ship.
+COPY --from=eclipse-temurin:17-jdk /opt/java/openjdk /opt/java/openjdk
 ENV JAVA_HOME=/opt/java/openjdk
 ENV PATH="${JAVA_HOME}/bin:${PATH}"
 
