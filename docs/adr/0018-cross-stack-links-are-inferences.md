@@ -170,3 +170,13 @@ reports nothing at all and says so. That is the failure mode this ADR chose.
 - Both stacks must be extracted into one run for any of this to exist. That is
   what `stratigraph extract` now guarantees, and a run holding only one stack
   produces zero links rather than a wrong number of them.
+
+## Amendment (2.0.1)
+
+Two readings of a client URL, both of facts in the source: an interpolated base
+glued to a relative path (`${serverApiUrl}api/activate`, reduced to
+`{}api/activate`) is that path under an unknown base; and `this.<field>` where
+the class — or a base class in the same file — declares that field `readonly`
+with a literal or template initializer takes the initializer as its value.
+A mutable field, a getter or a call stays unknown. On jhipster-sample-app this
+took the Angular → Spring links from 0 to the entity services' calls.

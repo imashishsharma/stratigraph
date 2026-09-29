@@ -181,6 +181,18 @@ describe('linkHttpCalls', () => {
     expect(linkHttpCalls(db, RUN).linked).toBe(1);
   });
 
+  it('reads an interpolated base URL glued to a relative path as that path', () => {
+    // JHipster: getEndpointFor('api/activate') — the base URL is unknown, the
+    // extractor reduces it to {}, and it is glued to the path with no slash.
+    write([
+      endpoint('GET /api/activate'),
+      ...caller('src/app/activate.service:ActivateService#get()', [
+        { method: 'GET', url: '{}api/activate', line: 13 },
+      ]),
+    ]);
+    expect(linkHttpCalls(db, RUN).linked).toBe(1);
+  });
+
   it('says nothing at all about a URL that matches nothing', () => {
     // Almost always a third-party service. Not a defect, and a diagnostic per
     // occurrence would drown the ones that mean something.

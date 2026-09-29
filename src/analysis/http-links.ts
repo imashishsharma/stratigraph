@@ -226,7 +226,11 @@ function isWildcard(segment: string): boolean {
  */
 function splitPath(path: string): string[] {
   const withoutQuery = path.split('?')[0] ?? path;
-  return withoutQuery.split('/').filter((segment) => segment.length > 0);
+  // An interpolated base URL glued to a relative path — `${base}api/activate`,
+  // JHipster's getEndpointFor('api/activate') — is that path under an unknown
+  // base: the `{}` is not part of the first segment.
+  const withoutBase = withoutQuery.replace(/^\{\}(?=[^/])/, '/');
+  return withoutBase.split('/').filter((segment) => segment.length > 0);
 }
 
 function loadEndpoints(db: Db, runId: number): EndpointPattern[] {

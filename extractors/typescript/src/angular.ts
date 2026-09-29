@@ -776,16 +776,57 @@ function looksLikeHttpClient(access: ts.PropertyAccessExpression): boolean {
  * against a Spring `{id}`. Anything else — a concatenation, a variable, a call
  * — returns null, and the caller records a diagnostic instead of an edge.
  */
-function literalUrl(node: ts.Node): string | null {
+function literalUrl(node: ts.Node, depth = 0): string | null {
   if (ts.isStringLiteralLike(node) && !ts.isTemplateExpression(node)) {
     return node.text;
   }
   if (ts.isTemplateExpression(node)) {
     let url = node.head.text;
     for (const span of node.templateSpans) {
-      url += `{}${span.literal.text}`;
+      url += `${readonlyFieldUrl(span.expression, depth) ?? '{}'}${span.literal.text}`;
     }
     return url;
+  }
+  return readonlyFieldUrl(node, depth);
+}
+
+/**
+ * `this.resourceUrl` where the class declares `readonly resourceUrl = …` with
+ * a literal or template initializer: the field cannot be reassigned, so its
+ * initializer is its value (JHipster's entity services build every URL this
+ * way). Anything else — a mutable field, a getter, a call — stays unknown.
+ */
+function readonlyFieldUrl(node: ts.Node, depth: number): string | null {
+  if (depth > 3 || !ts.isPropertyAccessExpression(node) || node.expression.kind !== ts.SyntaxKind.ThisKeyword) {
+    return null;
+  }
+  let start: ts.Node | undefined = node.parent;
+  while (start !== undefined && !ts.isClassDeclaration(start)) start = start.parent;
+  // The field may be inherited from a base class declared in the same file.
+  const seen = new Set<ts.ClassDeclaration>();
+  for (let owner = start as ts.ClassDeclaration | undefined; owner !== undefined && !seen.has(owner); ) {
+    seen.add(owner);
+    for (const member of owner.members) {
+      if (
+        ts.isPropertyDeclaration(member) &&
+        ts.isIdentifier(member.name) &&
+        member.name.text === node.name.text &&
+        member.initializer !== undefined &&
+        (ts.getCombinedModifierFlags(member) & ts.ModifierFlags.Readonly) !== 0
+      ) {
+        return literalUrl(member.initializer, depth + 1);
+      }
+    }
+    const base = owner.heritageClauses
+      ?.find((clause) => clause.token === ts.SyntaxKind.ExtendsKeyword)
+      ?.types[0]?.expression;
+    const baseName = base !== undefined && ts.isIdentifier(base) ? base.text : null;
+    owner = baseName === null
+      ? undefined
+      : owner.getSourceFile().statements.find(
+          (statement): statement is ts.ClassDeclaration =>
+            ts.isClassDeclaration(statement) && statement.name?.text === baseName,
+        );
   }
   return null;
 }

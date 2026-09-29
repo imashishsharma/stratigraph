@@ -335,3 +335,40 @@ describe('Koa and Express routes (ADR-0045)', () => {
     ).toContain('src/serve:OssServeConfigurator#configureRouter()');
   });
 });
+
+describe('HTTP call URLs through readonly fields', () => {
+  it('reads this.resourceUrl from its readonly literal initializer, and nothing mutable', async () => {
+    const { mkdtempSync, writeFileSync, mkdirSync } = await import('node:fs');
+    const { tmpdir } = await import('node:os');
+    const { join } = await import('node:path');
+    const repo = mkdtempSync(join(tmpdir(), 'stratigraph-url-'));
+    mkdirSync(join(repo, 'src'));
+    writeFileSync(join(repo, 'package.json'), '{"name":"web"}');
+    writeFileSync(
+      join(repo, 'src', 'order.service.ts'),
+      [
+        "import { Injectable } from '@angular/core';",
+        "import { HttpClient } from '@angular/common/http';",
+        "const serverApiUrl = '';",
+        '@Injectable()',
+        'export class OrderService {',
+        '  protected readonly resourceUrl = `${serverApiUrl}api/orders`;',
+        "  protected mutableUrl = 'api/nope';",
+        '  constructor(private http: HttpClient) {}',
+        '  find(id: number) { return this.http.get(`${this.resourceUrl}/${id}`); }',
+        '  all() { return this.http.get(this.resourceUrl); }',
+        '  other() { return this.http.get(this.mutableUrl); }',
+        '}',
+        '',
+      ].join('\n'),
+    );
+    const stdout: string[] = [];
+    await run(['--repo', repo], { stdout: { write: (l) => stdout.push(l) }, stderr: { write: () => undefined } });
+    const urls = stdout
+      .map((l) => JSON.parse(l) as { attrs?: { httpCalls?: Array<{ url: string }> } })
+      .flatMap((f) => f.attrs?.httpCalls ?? [])
+      .map((c) => c.url)
+      .sort();
+    expect(urls).toEqual(['{}api/orders', '{}api/orders/{}']);
+  });
+});
