@@ -47,7 +47,8 @@ describe('the cache location', () => {
   });
 
   it('falls back to XDG_CACHE_HOME when there is no override', () => {
-    expect(cacheRoot({ env: { XDG_CACHE_HOME: '/x' } })).toBe('/x/stratigraph/java-extractor');
+    // join, not a literal: the platform's separator is the right answer on Windows.
+    expect(cacheRoot({ env: { XDG_CACHE_HOME: '/x' } })).toBe(join('/x', 'stratigraph', 'java-extractor'));
   });
 });
 

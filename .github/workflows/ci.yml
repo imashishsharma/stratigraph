@@ -127,7 +127,7 @@ jobs:
           docker run --rm stratigraph:ci --version
           docker run --rm stratigraph:ci doctor | tee /tmp/doctor.txt
           grep -qE '^ok +java ' /tmp/doctor.txt
-          grep -qE '^ok +java extractor' /tmp/doctor.txt
+          grep -qE '^ok +jvm extractor' /tmp/doctor.txt
           grep -qE '^ok +git' /tmp/doctor.txt
 
       - name: Analyse a mounted repository end to end

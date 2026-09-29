@@ -157,7 +157,7 @@ ok   node            v20.11.1 on darwin-arm64
 ok   git             git version 2.50.1
 warn java            1.8.0_432 from JAVA_HOME is below JDK 17; the Java extractor
                      will not run (this limits the analyser, not the code it can analyse)
-warn java extractor  jar not found — see the README for the two commands that build it
+warn jvm extractor   jar not found — see the README for the two commands that build it
 ok   ts extractor    dist/extractors/typescript/main.js (built, no JDK required)
 ok   config          defaults (no stratigraph.config.json found)
 warn model           claude-opus-5, but no credential found
