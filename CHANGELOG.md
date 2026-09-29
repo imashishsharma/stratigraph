@@ -10,7 +10,7 @@ schema carries a `user_version` and is migrated forward, and every JSON
 document carries `format`, which moves only for a change a parser could trip
 over.
 
-## [2.0.0] — unreleased
+## [2.0.0] — 2026-09-29
 
 v1.6.1 was run on a real enterprise repository and produced output a senior
 engineer rejects in thirty seconds: lockfiles ranked riskiest, an empty ER

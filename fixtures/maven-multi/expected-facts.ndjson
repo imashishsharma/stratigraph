@@ -1,4 +1,4 @@
-{"v":1,"type":"meta","extractor":"java","extractorVersion":"1.1.0","repoPath":"<repo>"}
+{"v":1,"type":"meta","extractor":"java","extractorVersion":"2.0.0","repoPath":"<repo>"}
 {"v":1,"type":"file","path":"billing-app/src/main/java/com/example/multi/billing/BillingApplication.java","language":"java","loc":15}
 {"v":1,"type":"file","path":"orders-app/src/main/java/com/example/multi/orders/OrdersApplication.java","language":"java","loc":15}
 {"v":1,"type":"file","path":"shared/src/main/java/com/example/multi/shared/Money.java","language":"java","loc":13}
