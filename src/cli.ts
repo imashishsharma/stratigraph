@@ -13,6 +13,7 @@ import { runScan } from './commands/scan.js';
 import { ExtractError, runExtract } from './commands/extract.js';
 import { runFetchExtractor } from './commands/fetch-extractor.js';
 import { HistoryError, runHistory } from './commands/history.js';
+import { runUpgradePlan, runUpgradeRun, UpgradeError } from './commands/upgrade.js';
 import { runIngest } from './commands/ingest.js';
 import { runInit } from './commands/init.js';
 import { McpError, runMcp } from './commands/mcp.js';
@@ -340,6 +341,79 @@ export function buildProgram(): Command {
       if (outputFormat() === 'json') printJson(pruneDocument(result));
     });
 
+  const upgrade = program
+    .command('upgrade')
+    .description('upgrade Spring Boot: OpenRewrite, known fixes, an opt-in AI loop, and a report of what needs you');
+
+  upgrade
+    .command('plan [repo]')
+    .description('read the project and say what an upgrade will meet; no build, no network')
+    .option('--to <version>', 'target Spring Boot line: 3.5 or 4.0', '3.5')
+    .action((repo: string | undefined, options: { to: string }) => {
+      const plan = runUpgradePlan({ repo: repo ?? overrides(program).repo, to: options.to });
+      if (outputFormat() === 'json') printJson({ format: 'stratigraph-upgrade-plan/1', ...plan, installed: undefined });
+    });
+
+  upgrade
+    .command('run [repo]')
+    .description('upgrade on a new branch; keeps only changes that leave fewer failures and no newly red test')
+    .option('--to <version>', 'target Spring Boot line: 3.5 or 4.0', '3.5')
+    .option('--ai <fixer>', 'let an AI attempt what known fixes cannot: claude-code (sends source to the model)')
+    .option('--ai-budget <usd>', 'spending cap per AI attempt, in US dollars (default 5)')
+    .option('--ai-model <model>', 'model for the AI fixer')
+    .option('--max-builds <n>', 'stop after this many builds (default 25)')
+    .option('--max-minutes <n>', 'stop after this long (default 180)')
+    .option('--attempts <n>', 'AI attempts per failure category before handing it off (default 2)')
+    .option('--maven-args <args>', 'extra Maven arguments for every build, e.g. "-Dskip.npm"')
+    .option('--baseline-java-home <path>', 'JDK for the build before the upgrade (default: the declared Java level)')
+    .option('--target-java-home <path>', 'JDK for the upgraded build (default: lowest installed 17+)')
+    .option('--branch <name>', 'branch to create (default stratigraph/upgrade-spring-boot-<to>)')
+    .option('--build-timeout <minutes>', 'per build (default 30)')
+    .option('--rewrite-spring <version>', 'rewrite-spring recipe version')
+    .option('--rewrite-plugin <version>', 'rewrite-maven-plugin version')
+    .action(
+      async (
+        repo: string | undefined,
+        options: {
+          to: string;
+          ai?: string;
+          aiBudget?: string;
+          aiModel?: string;
+          maxBuilds?: string;
+          maxMinutes?: string;
+          attempts?: string;
+          mavenArgs?: string;
+          baselineJavaHome?: string;
+          targetJavaHome?: string;
+          branch?: string;
+          buildTimeout?: string;
+          rewriteSpring?: string;
+          rewritePlugin?: string;
+        },
+      ) => {
+        const report = await runUpgradeRun({
+          repo: repo ?? overrides(program).repo,
+          to: options.to,
+          ai: options.ai,
+          aiBudgetUsd: options.aiBudget === undefined ? undefined : Number(options.aiBudget),
+          aiModel: options.aiModel,
+          maxBuilds: parsePositiveInt('--max-builds', options.maxBuilds),
+          maxMinutes: parsePositiveInt('--max-minutes', options.maxMinutes),
+          attemptsPerCategory: parsePositiveInt('--attempts', options.attempts),
+          mavenArgs: options.mavenArgs,
+          baselineJavaHome: options.baselineJavaHome,
+          javaHome: options.targetJavaHome,
+          branch: options.branch,
+          buildTimeoutMinutes: parsePositiveInt('--build-timeout', options.buildTimeout),
+          rewriteSpring: options.rewriteSpring,
+          rewritePlugin: options.rewritePlugin,
+        });
+        if (outputFormat() === 'json') printJson({ format: 'stratigraph-upgrade/1', ...report });
+        // Like --fail-on: the run finished, and the verdict is not green.
+        if (report.status !== 'parity') throw new GateError(`upgrade ${report.status}: see upgrade-report.md on ${report.branch}`);
+      },
+    );
+
   program
     .command('mcp')
     .description('serve the fact store over MCP on stdio, for an agent to query')
@@ -413,7 +487,8 @@ export async function main(argv: string[]): Promise<number> {
       err instanceof JarFetchError ||
       err instanceof MissingStoreError ||
       err instanceof PruneError ||
-      err instanceof ReportError
+      err instanceof ReportError ||
+      err instanceof UpgradeError
     ) {
       error(err.message);
       return 2;
