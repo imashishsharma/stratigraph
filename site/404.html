@@ -7,6 +7,21 @@
 <meta name="robots" content="noindex">
 <link rel="icon" href="/stratigraph/assets/img/favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="/stratigraph/assets/css/site.css">
+<!-- Google tag (gtag.js), with Consent Mode v2 defaults set before it; see assets/js/analytics.js -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-4F9RVK46DY"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  var noAds = { ad_storage: 'denied', ad_user_data: 'denied', ad_personalization: 'denied' };
+  gtag('consent', 'default', Object.assign({ analytics_storage: 'denied', region: ['AT','BE','BG','HR','CY','CZ','DK','EE','FI','FR','DE','GR','HU','IE','IT','LV','LT','LU','MT','NL','PL','PT','RO','SK','SI','ES','SE','IS','LI','NO','GB','CH'] }, noAds));
+  gtag('consent', 'default', Object.assign({ analytics_storage: 'granted' }, noAds));
+  try {
+    var choice = localStorage.getItem('stratigraph-analytics-consent');
+    if (choice === 'granted' || choice === 'denied') gtag('consent', 'update', Object.assign({ analytics_storage: choice }, noAds));
+  } catch (e) {}
+  gtag('js', new Date());
+  gtag('config', 'G-4F9RVK46DY', { allow_google_signals: false });
+</script>
 <script src="/stratigraph/assets/js/analytics.js" async></script>
 </head>
 <body>

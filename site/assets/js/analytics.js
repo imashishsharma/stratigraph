@@ -1,7 +1,6 @@
 /*
  * Site analytics: Google Analytics 4, with Consent Mode v2.
  *
- * - Nothing loads until GA_ID is set to a real Measurement ID ("G-...").
  * - In the EEA, the UK and Switzerland, analytics storage is denied by default:
  *   GA receives cookieless pings only, until the visitor chooses "Allow".
  *   Elsewhere it is granted by default. Either way the banner lets a visitor
@@ -13,20 +12,13 @@
  *   command, and Core Web Vitals (LCP, INP, CLS) from real visits.
  */
 (function () {
-  var GA_ID = 'G-4F9RVK46DY';
-  if (!/^G-[A-Z0-9]{6,}$/.test(GA_ID) || GA_ID === 'G-XXXXXXXXXX') return;
+  // The Google tag itself, and the consent defaults, are inline in each page's
+  // <head>: Search Console's "Google Analytics" verification looks for the
+  // standard snippet in the page source, not for one injected by script.
+  var gtag = window.gtag;
+  if (typeof gtag !== 'function') return;
 
   var KEY = 'stratigraph-analytics-consent';
-  var CONSENT_REGIONS = [
-    'AT', 'BE', 'BG', 'HR', 'CY', 'CZ', 'DK', 'EE', 'FI', 'FR', 'DE', 'GR', 'HU', 'IE', 'IT',
-    'LV', 'LT', 'LU', 'MT', 'NL', 'PL', 'PT', 'RO', 'SK', 'SI', 'ES', 'SE', 'IS', 'LI', 'NO',
-    'GB', 'CH',
-  ];
-
-  window.dataLayer = window.dataLayer || [];
-  function gtag() { window.dataLayer.push(arguments); }
-  window.gtag = gtag;
-
   var NO_ADS = { ad_storage: 'denied', ad_user_data: 'denied', ad_personalization: 'denied' };
   function consent(state) {
     return Object.assign({ analytics_storage: state }, NO_ADS);
@@ -34,18 +26,6 @@
 
   var stored = null;
   try { stored = localStorage.getItem(KEY); } catch (e) { /* storage blocked: ask each visit */ }
-
-  gtag('consent', 'default', Object.assign(consent('denied'), { region: CONSENT_REGIONS }));
-  gtag('consent', 'default', consent('granted'));
-  if (stored === 'granted' || stored === 'denied') gtag('consent', 'update', consent(stored));
-
-  gtag('js', new Date());
-  gtag('config', GA_ID, { allow_google_signals: false });
-
-  var s = document.createElement('script');
-  s.async = true;
-  s.src = 'https://www.googletagmanager.com/gtag/js?id=' + GA_ID;
-  document.head.appendChild(s);
 
   function remember(state) {
     try { localStorage.setItem(KEY, state); } catch (e) { /* not remembered; asked again next visit */ }
