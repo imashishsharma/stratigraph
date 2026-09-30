@@ -13,7 +13,7 @@
  *   command, and Core Web Vitals (LCP, INP, CLS) from real visits.
  */
 (function () {
-  var GA_ID = 'G-XXXXXXXXXX';
+  var GA_ID = 'G-4F9RVK46DY';
   if (!/^G-[A-Z0-9]{6,}$/.test(GA_ID) || GA_ID === 'G-XXXXXXXXXX') return;
 
   var KEY = 'stratigraph-analytics-consent';
