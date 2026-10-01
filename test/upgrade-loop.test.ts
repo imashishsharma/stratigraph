@@ -515,6 +515,27 @@ describe('upgrade run', () => {
     expect(report.final?.missing).toBe(0);
     expect(turn).toBeGreaterThanOrEqual(1);
   });
+
+  it('reads the line a compiler error points at to categorise it (blog-app: the recipe\'s @Type(uuid-char.class))', async () => {
+    const repo = repoWith({
+      'pom.xml': POM('2.7.4'),
+      'src/main/java/a/ReceivedFile.java': 'package a;\nclass ReceivedFile {\n    @Type(type = "uuid-char")\n    Object id;\n}\n',
+    });
+    const maven = fakeMaven(
+      repo,
+      (readFile) =>
+        readFile('pom.xml').includes('2.7.4')
+          ? { build: 'ok', tests: {} }
+          : { build: `${repo}/src/main/java/a/ReceivedFile.java:[3,11] cannot find symbol\n  symbol:   variable uuid`, tests: {} },
+      () => {
+        writeFileSync(join(repo, 'pom.xml'), POM('3.5.6'));
+        writeFileSync(join(repo, 'src/main/java/a/ReceivedFile.java'), 'package a;\nclass ReceivedFile {\n    @Type(uuid-char.class)\n    Object id;\n}\n');
+      },
+      [],
+    );
+    const report = await runUpgrade(options(repo, maven));
+    expect(report.remaining.map((handoff) => handoff.category)).toEqual(['hibernate-6']);
+  });
 });
 
 function read(repo: string): string {

@@ -5,12 +5,12 @@
  * remaining failure is a decision for a person.
  */
 
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { info, warn } from '../log.js';
 import { parseBuildLog, type BuildLog } from './build-log.js';
-import { categoriseBuildFailure, categoriseTest, categoriseText } from './categories.js';
+import { categoriseTest, categoriseText } from './categories.js';
 import { guardrailViolations, type Fixer } from './fixer.js';
 import {
   branchExists,
@@ -185,7 +185,7 @@ export async function runUpgrade(options: RunOptions): Promise<UpgradeReport> {
     const log = parseBuildLog(result.log, repoPath);
     const tests = readTestReports(repoPath);
     const diff = diffTests(baselineTests, tests);
-    return { label, result, log, tests, diff, failures: classify(log, diff) };
+    return { label, result, log, tests, diff, failures: classify(log, diff, repoPath) };
   };
 
   let state = await evaluate('build-1');
@@ -331,12 +331,15 @@ function isParity(state: BuildState): boolean {
 }
 
 /** The failures to work on: build errors, then baseline-green tests that are red now. */
-function classify(log: BuildLog, diff: TestDiff): Classified[] {
-  const out: Classified[] = log.failures.map((failure) => ({
-    category: categoriseBuildFailure(failure),
-    build: failure,
-    text: [failure.message, failure.symbol ?? '', failure.file ?? '', ...failure.excerpt].join('\n'),
-  }));
+function classify(log: BuildLog, diff: TestDiff, repoPath: string | null = null): Classified[] {
+  const out: Classified[] = log.failures.map((failure) => {
+    // The line the compiler points at often names the problem its message
+    // does not: "cannot find symbol (variable uuid)" is @Type(uuid-char.class),
+    // the recipe's own invalid Java (blog-app).
+    const source = repoPath !== null ? sourceLine(repoPath, failure.file, failure.line) : null;
+    const text = [failure.message, failure.symbol ?? '', failure.file ?? '', ...failure.excerpt, ...(source ? [`source: ${source}`] : [])].join('\n');
+    return { category: categoriseText(text), build: failure, text };
+  });
   // A compiler error no rule recognises, in a file whose other errors one does,
   // is almost always the same problem seen from another line: "method does not
   // override" under a removed superclass is the security migration too.
@@ -378,6 +381,15 @@ function stage(state: BuildState): number {
     return early || state.log.failures.length === 0 ? 3 : 2;
   }
   return state.diff.regressed.length + state.diff.missing.length > 0 ? 1 : 0;
+}
+
+function sourceLine(repoPath: string, file: string | null, line: number | null): string | null {
+  if (file === null || line === null || !/\.(java|kt)$/.test(file)) return null;
+  try {
+    return readFileSync(join(repoPath, file), 'utf8').split('\n')[line - 1]?.trim().slice(0, 200) ?? null;
+  } catch {
+    return null;
+  }
 }
 
 function score(state: BuildState): [number, number, number, number] {
