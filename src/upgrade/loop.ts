@@ -389,9 +389,12 @@ function score(state: BuildState): [number, number, number, number] {
 /** null when `next` is better than `previous`; otherwise why it is not. */
 export function judge(previous: BuildState, next: BuildState): string | null {
   if (previous.log.success && next.log.success) {
-    const before = new Set(previous.diff.regressed.map((test) => test.id));
-    const newlyRed = next.diff.regressed.filter((test) => !before.has(test.id));
-    if (newlyRed.length > 0) return `turned ${newlyRed.length} baseline-green test(s) red (${newlyRed[0]!.id})`;
+    // Newly red means passing in the previous build and failing now. A test
+    // that did not run before was not passing either: getting 39 skipped
+    // tests to run, 34 green and 5 red, is progress (WebGoat).
+    const notPassing = new Set([...previous.diff.regressed.map((test) => test.id), ...previous.diff.missing]);
+    const newlyRed = next.diff.regressed.filter((test) => !notPassing.has(test.id));
+    if (newlyRed.length > 0) return `turned ${newlyRed.length} passing test(s) red (${newlyRed[0]!.id})`;
   }
   const a = score(previous);
   const b = score(next);

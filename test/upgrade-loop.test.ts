@@ -247,7 +247,7 @@ describe('upgrade run', () => {
 
     expect(report.status).toBe('stuck');
     expect(report.attempts).toEqual([
-      expect.objectContaining({ by: 'known-fix', id: 'compiler-parameters', accepted: false, reason: expect.stringMatching(/turned 1 baseline-green test\(s\) red \(demo\.AppTest#other\)/) }),
+      expect.objectContaining({ by: 'known-fix', id: 'compiler-parameters', accepted: false, reason: expect.stringMatching(/turned 1 passing test\(s\) red \(demo\.AppTest#other\)/) }),
     ]);
     expect(readFileSync(join(repo, 'pom.xml'), 'utf8')).not.toContain('maven.compiler.parameters');
   });
@@ -485,6 +485,35 @@ describe('upgrade run', () => {
     const report = await runUpgrade(options(repo, maven));
     expect(report.attempts[0]).toMatchObject({ id: 'maven-wrapper-version', accepted: true });
     expect(report.remaining.map((handoff) => handoff.category)).toEqual(['compiler-release-conflict']);
+  });
+
+  it('counts getting skipped tests to run as progress, even when some of them fail (WebGoat\'s integration tests)', async () => {
+    const repo = repoWith({ 'pom.xml': POM('2.7.1') });
+    let turn = 0;
+    const fixer: Fixer = {
+      name: 'fake',
+      attempt: async (request) => {
+        turn += 1;
+        writeFileSync(join(request.repoPath, 'it.txt'), 'restored the integration test setup');
+        return { summary: 'Restored the process the integration tests start.', costUsd: 0, error: null };
+      },
+    };
+    const its = ['a', 'b', 'c', 'd'];
+    const maven = fakeMaven(
+      repo,
+      (readFile) => {
+        if (readFile('pom.xml').includes('2.7.1')) return { build: 'ok', tests: Object.fromEntries([['unit', 'passed'], ...its.map((id) => [id, 'passed'])]) };
+        if (!readFile('it.txt')) return { build: 'ok', tests: { unit: 'passed' } };
+        return { build: 'ok', tests: { unit: 'passed', a: 'passed', b: 'passed', c: 'passed', d: 'java.lang.AssertionError: 403' } };
+      },
+      () => writeFileSync(join(repo, 'pom.xml'), POM('3.5.6')),
+      [],
+    );
+    const report = await runUpgrade(options(repo, maven, fixer));
+    expect(report.attempts[0]).toMatchObject({ by: 'ai', accepted: true });
+    expect(report.final?.regressed).toEqual(['demo.AppTest#d']);
+    expect(report.final?.missing).toBe(0);
+    expect(turn).toBeGreaterThanOrEqual(1);
   });
 });
 
