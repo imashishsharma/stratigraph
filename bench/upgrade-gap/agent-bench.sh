@@ -50,11 +50,12 @@ for f in sorted(os.listdir(d)):
     layers = {}
     for c in r.get('commits', []): layers[c['layer']] = layers.get(c['layer'], 0) + 1
     decisions = sum(1 for h in r.get('remaining', []) if h['disposition'] == 'decision')
-    rows.append((f[:-5], r['status'], f"{fin.get('passed','-')}/{fin.get('tests','-')}", len(fin.get('regressed') or []),
+    status = r['status'] + (' (no tests: unverified)' if r['status'] == 'parity' and (r.get('baseline') or {}).get('passed', 0) == 0 else '')
+    rows.append((f[:-5], status, f"{fin.get('passed','-')}/{fin.get('tests','-')}", len(fin.get('regressed') or []),
                  layers.get('known-fix', 0), layers.get('ai', 0), decisions, len(r.get('remaining', [])) - decisions,
                  r.get('minutes'), round(r.get('costUsd', 0), 2)))
 print('| Repo | Status | Tests passing | Red vs baseline | Known fixes | AI fixes | Decisions left | Unresolved | Minutes | AI $ |')
 print('|---|---|---|---|---|---|---|---|---|---|')
 for row in rows: print('| ' + ' | '.join(str(x) for x in row) + ' |')
-print(f"\nParity: {sum(1 for r in rows if r[1] == 'parity')}/{len(rows)}")
+print(f"\nParity (tests verified): {sum(1 for r in rows if r[1] == 'parity')}/{len(rows)}; builds but untested: {sum(1 for r in rows if 'unverified' in r[1])}")
 EOF
