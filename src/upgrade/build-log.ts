@@ -27,6 +27,12 @@ export interface BuildLog {
   /** Maven reported BUILD SUCCESS. */
   success: boolean;
   failures: BuildFailure[];
+  /**
+   * Plugin goals Maven started ("--- plugin:version:goal"): how far through
+   * the lifecycle a failing build got. A fix that lets `clean` run and fails
+   * at `compile` instead has made progress, though both fail once.
+   */
+  goals: number;
 }
 
 const ERROR = /^\[ERROR\] ?(.*)$/;
@@ -135,7 +141,8 @@ export function parseBuildLog(text: string, repoPath: string): BuildLog {
     }
   }
 
-  return { success: /^\[INFO\] BUILD SUCCESS\s*$/m.test(text), failures };
+  const goals = (text.match(/^\[INFO\] --- [\w.-]+:[\w.-]+:[\w.-]+/gm) ?? []).length;
+  return { success: /^\[INFO\] BUILD SUCCESS\s*$/m.test(text), failures, goals };
 }
 
 function pomLine(message: string): number | null {

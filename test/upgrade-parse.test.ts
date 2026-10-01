@@ -103,7 +103,8 @@ describe('parseBuildLog', () => {
   });
 
   it('knows a successful build', () => {
-    expect(parseBuildLog('[INFO] BUILD SUCCESS\n', '/repo')).toEqual({ success: true, failures: [] });
+    expect(parseBuildLog('[INFO] BUILD SUCCESS\n', '/repo')).toEqual({ success: true, failures: [], goals: 0 });
+    expect(parseBuildLog('[INFO] --- maven-clean-plugin:3.4.1:clean (default-clean) @ demo ---\n[INFO] --- maven-resources-plugin:3.3.1:resources (default-resources) @ demo ---\n', '/repo').goals).toBe(2);
   });
 });
 

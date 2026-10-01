@@ -456,6 +456,36 @@ describe('upgrade run', () => {
     expect(report.notes[0]).toMatch(/No tests ran before the upgrade/);
     expect(readFileSync(join(repo, 'upgrade-report.md'), 'utf8')).toContain('nothing about its behaviour was verified');
   });
+
+  it('keeps a fix that gets the build further, though it fails just once again (kafdrop: clean, then compile)', async () => {
+    const repo = repoWith({
+      'pom.xml': POM('2.7.5'),
+      '.mvn/wrapper/maven-wrapper.properties': 'distributionUrl=https://repo.maven.apache.org/maven2/org/apache/maven/apache-maven/3.6.1/apache-maven-3.6.1-bin.zip\n',
+    });
+    const wrapper = () => readFileSync(join(repo, '.mvn/wrapper/maven-wrapper.properties'), 'utf8');
+    const maven: Maven = async (args, label) => {
+      const logPath = join(repo, '..', `${label}.log`);
+      const ok = (text = '') => ({ exitCode: 0, timedOut: false, logPath, log: `${text}[INFO] BUILD SUCCESS\n`, seconds: 1 });
+      if (args.some((arg) => arg.includes('rewrite-maven-plugin'))) {
+        writeFileSync(join(repo, 'pom.xml'), POM('3.5.6'));
+        return ok();
+      }
+      if (read(repo).includes('2.7.5')) return ok();
+      if (wrapper().includes('3.6.1')) {
+        return { exitCode: 1, timedOut: false, logPath, seconds: 1, log: '[ERROR] Failed to execute goal org.apache.maven.plugins:maven-clean-plugin:3.4.1:clean (default-clean) on project k: The plugin org.apache.maven.plugins:maven-clean-plugin:3.4.1 requires Maven version 3.6.3 -> [Help 1]\n[INFO] BUILD FAILURE\n' };
+      }
+      return {
+        exitCode: 1,
+        timedOut: false,
+        logPath,
+        seconds: 1,
+        log: '[INFO] --- maven-clean-plugin:3.4.1:clean (default-clean) @ k ---\n[INFO] --- maven-compiler-plugin:3.14.0:compile (default-compile) @ k ---\n[ERROR] COMPILATION ERROR : \n[ERROR] error: exporting a package from system module jdk.management.agent is not allowed with --release\n[INFO] BUILD FAILURE\n',
+      };
+    };
+    const report = await runUpgrade(options(repo, maven));
+    expect(report.attempts[0]).toMatchObject({ id: 'maven-wrapper-version', accepted: true });
+    expect(report.remaining.map((handoff) => handoff.category)).toEqual(['compiler-release-conflict']);
+  });
 });
 
 function read(repo: string): string {

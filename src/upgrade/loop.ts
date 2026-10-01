@@ -380,8 +380,10 @@ function stage(state: BuildState): number {
   return state.diff.regressed.length + state.diff.missing.length > 0 ? 1 : 0;
 }
 
-function score(state: BuildState): [number, number, number] {
-  return [stage(state), state.log.failures.length, state.diff.regressed.length + state.diff.missing.length];
+function score(state: BuildState): [number, number, number, number] {
+  // Among failing builds, the one that got further through the lifecycle is better.
+  const further = state.log.success ? 0 : -state.log.goals;
+  return [stage(state), further, state.log.failures.length, state.diff.regressed.length + state.diff.missing.length];
 }
 
 /** null when `next` is better than `previous`; otherwise why it is not. */
