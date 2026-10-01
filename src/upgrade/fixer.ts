@@ -158,7 +158,8 @@ export function fixPrompt(request: FixerRequest): string {
   const evidence = request.target
     .slice(0, 12)
     .map((failure) => {
-      if (failure.test) return `- test ${failure.test.id}: ${failure.test.message ?? '(no message)'}`;
+      if (failure.test) return `- test ${failure.test.id}: ${failure.test.message ?? '(no message)'}${failure.test.cause ? ` (cause: ${failure.test.cause})` : ''}`;
+      if (!failure.build) return `- ${failure.text.split('\n').slice(1).join(' ')}`;
       const where = failure.build?.file ? `${failure.build.file}${failure.build.line ? `:${failure.build.line}` : ''}` : '(no file)';
       return `- ${where}: ${failure.build?.message ?? failure.text.split('\n')[0]}${failure.build?.symbol ? ` (symbol: ${failure.build.symbol})` : ''}`;
     })

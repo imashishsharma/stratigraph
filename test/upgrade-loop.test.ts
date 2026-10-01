@@ -342,4 +342,26 @@ describe('upgrade run', () => {
     expect(report.final?.missing).toBe(1);
     expect(report.remaining.map((handoff) => handoff.category)).toEqual(['maven-too-old']);
   });
+
+  it('treats a green build that ran fewer of the baseline\'s tests as a failure (WebGoat\'s integration tests)', async () => {
+    const repo = repoWith({ 'pom.xml': POM('2.7.1') });
+    const maven = fakeMaven(
+      repo,
+      (read) => ({
+        build: 'ok',
+        tests: read('pom.xml').includes('2.7.1') ? { unit: 'passed', integration: 'passed' } : { unit: 'passed' },
+      }),
+      () => writeFileSync(join(repo, 'pom.xml'), POM('3.5.6')),
+      [],
+    );
+    const report = await runUpgrade(options(repo, maven));
+    expect(report.status).toBe('stuck');
+    expect(report.remaining).toEqual([
+      expect.objectContaining({
+        category: 'tests-not-run',
+        evidence: [expect.objectContaining({ message: expect.stringContaining('demo.AppTest#integration') })],
+      }),
+    ]);
+    expect(readFileSync(join(repo, 'upgrade-report.md'), 'utf8')).toContain('the build succeeded, but these tests were not run');
+  });
 });

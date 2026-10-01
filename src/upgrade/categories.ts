@@ -37,6 +37,17 @@ const has = (pattern: RegExp) => (text: string) => pattern.test(text);
 /** First match wins, so narrower rules come before broader ones. */
 const RULES: Rule[] = [
   {
+    id: 'tests-not-run',
+    title: 'Tests that ran before the upgrade did not run after it',
+    disposition: 'judgment',
+    match: has(/^stratigraph: tests did not run/m),
+    guidance:
+      'The build succeeded but these tests never ran: a test plugin found nothing (e.g. an old Surefire/Failsafe ' +
+      'with JUnit 5), an excluded or renamed test directory, or a process the tests need (the application ' +
+      'started by the build for integration tests) that failed to start. Read the build log around the test ' +
+      'plugin, find why they were not run, and restore it. Never mark them skipped.',
+  },
+  {
     id: 'security-filter-chain-conflict',
     title: 'Two security filter chains match the same requests',
     disposition: 'decision',

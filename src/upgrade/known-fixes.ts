@@ -116,26 +116,39 @@ const formatter: KnownFix = {
   },
 };
 
-/** Spring 6.1 reads parameter names only from -parameters. */
+/**
+ * Spring 6.1 reads parameter names only from -parameters. Passed as an
+ * explicit compiler argument: on an old pinned maven-compiler-plugin (WebGoat:
+ * 3.8.0 with the recipe's <release>) the `parameters` setting never reaches
+ * javac, and the agent benchmark showed the explicit <arg> does.
+ */
 const parameters: KnownFix = {
   id: 'compiler-parameters',
   categories: ['compiler-parameters'],
   attempt: async (context) => {
     if (failuresOf(context, 'compiler-parameters').length === 0) return null;
-    const pom = parsePom(readText(context.repoPath, POM) ?? '');
-    const oldPlugin = pom.properties.get('maven-compiler-plugin.version');
-    const changed = editPom(context.repoPath, (xml) => {
-      let next = setProperty(xml, 'maven.compiler.parameters', 'true');
-      // An overridden compiler plugin older than the one Boot 3 manages (3.11+)
-      // can drop -parameters when the recipe sets <release> (WebGoat: 3.8.0).
-      if (next !== null && oldPlugin !== undefined && older(oldPlugin, '3.11.0')) {
-        next = setProperty(next, 'maven-compiler-plugin.version', '3.14.1');
-      }
-      return next;
-    });
+    const changed = editPom(context.repoPath, (xml) => addCompilerArg(xml, '-parameters') ?? setProperty(xml, 'maven.compiler.parameters', 'true'));
     return changed ? { description: 'compile with -parameters (Spring 6.1 no longer reads debug info)', changed: [POM] } : null;
   },
 };
+
+/** Add `<arg>` to maven-compiler-plugin's <compilerArgs>, creating it in <configuration> if needed. */
+export function addCompilerArg(xml: string, arg: string): string | null {
+  const plugin = /<plugin>(?:(?!<\/plugin>)[\s\S])*?<artifactId>maven-compiler-plugin<\/artifactId>[\s\S]*?<\/plugin>/.exec(xml);
+  if (!plugin) return null;
+  const block = plugin[0];
+  if (block.includes(`<arg>${arg}</arg>`)) return null;
+  let next: string | null = null;
+  if (/<compilerArgs>/.test(block)) {
+    next = block.replace(/(\n([ \t]*)<compilerArgs>)/, (open, _all, indent: string) => `${open}\n${indent}  <arg>${arg}</arg>`);
+  } else if (/<configuration>/.test(block)) {
+    next = block.replace(
+      /(\n([ \t]*)<configuration>)/,
+      (open, _all, indent: string) => `${open}\n${indent}  <compilerArgs>\n${indent}    <arg>${arg}</arg>\n${indent}  </compilerArgs>`,
+    );
+  }
+  return next === null ? null : xml.replace(block, next);
+}
 
 /** An artifact the new Boot BOM stopped managing gets the Boot version explicitly. */
 const managedVersion: KnownFix = {

@@ -114,7 +114,12 @@ export function renderReport(report: UpgradeReport): string {
       const regressed = report.final.regressed ?? [];
       out.push(`- **Passed before, fail now:** ${regressed.length === 0 ? 'none' : regressed.length}`);
       for (const id of regressed.slice(0, 20)) out.push(`  - \`${id}\``);
-      if ((report.final.missing ?? 0) > 0) out.push(`- **Passed before, did not run now:** ${report.final.missing} (the build stopped before the tests)`);
+      if ((report.final.missing ?? 0) > 0) {
+        out.push(
+          `- **Passed before, did not run now:** ${report.final.missing} ` +
+            (report.final.built ? '(the build succeeded, but these tests were not run)' : '(the build failed before running them)'),
+        );
+      }
       const still = report.final.stillFailing ?? [];
       if (still.length > 0) {
         out.push(`- **Failed before and still fail** (not the upgrade's; e.g. they need Docker or a network): ${still.length}`);

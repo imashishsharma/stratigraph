@@ -146,7 +146,7 @@ describe('known fixes (from the gap map)', () => {
     expect(read(used)).toContain('--add-exports');
   });
 
-  it('compiles with -parameters, lifting a compiler plugin too old to honour it (WebGoat)', async () => {
+  it('passes -parameters to javac explicitly, as the AI found works on an old pinned compiler plugin (WebGoat)', async () => {
     const repo = project({ 'pom.xml': POM });
     const result = await run(
       'compiler-parameters',
@@ -154,8 +154,11 @@ describe('known fixes (from the gap map)', () => {
       failing("Name for argument of type [java.lang.String] not specified, and parameter name information not available via reflection. Ensure that the compiler uses the '-parameters' flag."),
     );
     expect(result).not.toBeNull();
-    expect(read(repo)).toContain('<maven.compiler.parameters>true</maven.compiler.parameters>');
-    expect(read(repo)).toContain('<maven-compiler-plugin.version>3.14.1</maven-compiler-plugin.version>');
+    expect(read(repo)).toMatch(/<compilerArgs>\s*<arg>-parameters<\/arg>\s*<arg>--add-exports<\/arg>/);
+
+    const bare = project({ 'pom.xml': POM.replace(/<build>[\s\S]*<\/build>/, '') });
+    expect(await run('compiler-parameters', bare, failing("Name for argument of type [java.lang.String] not specified, use -parameters flag"))).not.toBeNull();
+    expect(read(bare)).toContain('<maven.compiler.parameters>true</maven.compiler.parameters>');
   });
 
   it('adds the Flyway database module (WebGoat)', async () => {

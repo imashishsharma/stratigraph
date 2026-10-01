@@ -10,7 +10,7 @@ import { join } from 'node:path';
 
 import { info, warn } from '../log.js';
 import { parseBuildLog, type BuildLog } from './build-log.js';
-import { categoriseBuildFailure, categoriseTest } from './categories.js';
+import { categoriseBuildFailure, categoriseTest, categoriseText } from './categories.js';
 import { guardrailViolations, type Fixer } from './fixer.js';
 import {
   branchExists,
@@ -341,6 +341,14 @@ function classify(log: BuildLog, diff: TestDiff): Classified[] {
   for (const test of diff.regressed) {
     out.push({ category: categoriseTest(test), test, text: `${test.id}\n${test.message ?? ''}` });
   }
+  // A green build that ran fewer of the baseline's passing tests is a silent
+  // regression (WebGoat: the app its integration tests need did not start,
+  // and Failsafe found 0 tests). Only after a successful build: a failed one
+  // runs no tests and is already a failure of its own.
+  if (log.success && diff.missing.length > 0) {
+    const text = `stratigraph: tests did not run\n${diff.missing.length} test(s) passed at baseline and did not run: ${diff.missing.slice(0, 20).join(', ')}`;
+    out.push({ category: categoriseText(text), text });
+  }
   return out;
 }
 
@@ -421,7 +429,9 @@ function handoffs(failures: Classified[], attempts: Attempt[]): UpgradeReport['r
       evidence: group.slice(0, 10).map((failure) =>
         failure.test
           ? { test: failure.test.id, message: failure.test.message ?? '', file: null, line: null }
-          : { test: null, message: failure.build!.message + (failure.build!.symbol ? ` (${failure.build!.symbol})` : ''), file: failure.build!.file, line: failure.build!.line },
+          : failure.build
+            ? { test: null, message: failure.build.message + (failure.build.symbol ? ` (${failure.build.symbol})` : ''), file: failure.build.file, line: failure.build.line }
+            : { test: null, message: failure.text.split('\n').slice(1).join(' '), file: null, line: null },
       ),
       more: Math.max(0, group.length - 10),
       tried: attempts.filter((attempt) => attempt.category === id && !attempt.accepted),
