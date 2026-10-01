@@ -364,4 +364,52 @@ describe('upgrade run', () => {
     ]);
     expect(readFileSync(join(repo, 'upgrade-report.md'), 'utf8')).toContain('the build succeeded, but these tests were not run');
   });
+
+  it('counts getting past dependency resolution as progress, though the compiler then reports more errors (blog-app)', async () => {
+    const repo = repoWith({ 'pom.xml': POM('2.7.4', '\n        <selenium.version>4.3.0</selenium.version>') });
+    const maven = fakeMaven(
+      repo,
+      (read) => {
+        const pom = read('pom.xml');
+        if (pom.includes('2.7.4')) return { build: 'ok', tests: { boots: 'passed' } };
+        if (pom.includes('selenium.version')) {
+          return {
+            build: '[ERROR] Some problems were encountered while processing the POMs:\n[ERROR] Non-resolvable import POM: Could not find artifact org.seleniumhq.selenium:selenium-bom:pom:4.3.0 in central @ line 9, column 25',
+            tests: {},
+          };
+        }
+        return {
+          build:
+            '/r/src/main/java/a/A.java:[1,1] cannot find symbol\n[ERROR] /r/src/main/java/a/B.java:[2,1] cannot find symbol\n[ERROR] /r/src/main/java/a/C.java:[3,1] cannot find symbol',
+          tests: {},
+        };
+      },
+      () => writeFileSync(join(repo, 'pom.xml'), read(repo).replace('2.7.4', '3.5.6')),
+      [],
+    );
+    const report = await runUpgrade(options(repo, maven));
+    expect(report.attempts[0]).toMatchObject({ id: 'stale-bom-override', accepted: true });
+    expect(report.commits.map((commit) => commit.layer)).toContain('known-fix');
+  });
+
+  it('finds test reports in a configured reportsDirectory (JHipster: target/test-results)', async () => {
+    const repo = repoWith({ 'pom.xml': POM('2.7.1') });
+    const maven: Maven = async (args, label) => {
+      const logPath = join(repo, '..', `${label}.log`);
+      if (args.some((arg) => arg.includes('rewrite-maven-plugin'))) {
+        writeFileSync(join(repo, 'pom.xml'), POM('3.5.6'));
+        return { exitCode: 0, timedOut: false, logPath, log: '[INFO] BUILD SUCCESS\n', seconds: 1 };
+      }
+      mkdirSync(join(repo, 'target', 'test-results', 'test'), { recursive: true });
+      writeFileSync(join(repo, 'target', 'test-results', 'test', 'TEST-a.ATest.xml'), '<testsuite><testcase name="t" classname="a.ATest"/></testsuite>');
+      return { exitCode: 0, timedOut: false, logPath, log: '[INFO] BUILD SUCCESS\n', seconds: 1 };
+    };
+    const report = await runUpgrade(options(repo, maven));
+    expect(report.baseline?.tests).toBe(1);
+    expect(report.status).toBe('parity');
+  });
 });
+
+function read(repo: string): string {
+  return readFileSync(join(repo, 'pom.xml'), 'utf8');
+}

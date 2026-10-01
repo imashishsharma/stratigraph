@@ -26,64 +26,65 @@ export interface TestResult {
   report: string;
 }
 
-const REPORT_DIRS = new Set(['surefire-reports', 'failsafe-reports']);
 const SKIP_DIRS = new Set(['.git', 'node_modules', 'src', '.idea']);
+const REPORT_FILE = /^TEST-.+\.xml$/;
 
 /**
- * Remove every Surefire/Failsafe report directory. Done before each build
- * rather than trusting `mvn clean`: a build whose clean step fails would
- * otherwise leave the previous build's reports to be read as its own.
+ * Every Surefire/Failsafe report file under a `target/` directory, wherever
+ * the build put it: the default surefire-reports and failsafe-reports, or a
+ * configured reportsDirectory (JHipster: target/test-results/test).
+ */
+function reportFiles(repoPath: string): string[] {
+  const found: string[] = [];
+  const inTarget = (dir: string, depth: number): void => {
+    if (depth > 6) return;
+    let entries;
+    try {
+      entries = readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      const path = join(dir, entry.name);
+      if (entry.isDirectory()) {
+        if (entry.name !== 'classes' && entry.name !== 'test-classes') inTarget(path, depth + 1);
+      } else if (REPORT_FILE.test(entry.name)) {
+        found.push(path);
+      }
+    }
+  };
+  const walk = (dir: string, depth: number): void => {
+    if (depth > 8) return;
+    let entries;
+    try {
+      entries = readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      const path = join(dir, entry.name);
+      if (entry.name === 'target') inTarget(path, 0);
+      else if (!SKIP_DIRS.has(entry.name)) walk(path, depth + 1);
+    }
+  };
+  walk(repoPath, 0);
+  return found.sort();
+}
+
+/**
+ * Remove every report file. Done before each build rather than trusting
+ * `mvn clean`: a build whose clean step fails would otherwise leave the
+ * previous build's reports to be read as its own.
  */
 export function clearTestReports(repoPath: string): void {
-  const walk = (dir: string, depth: number): void => {
-    if (depth > 8) return;
-    let entries;
-    try {
-      entries = readdirSync(dir, { withFileTypes: true });
-    } catch {
-      return;
-    }
-    for (const entry of entries) {
-      if (!entry.isDirectory()) continue;
-      const path = join(dir, entry.name);
-      if (REPORT_DIRS.has(entry.name)) rmSync(path, { recursive: true, force: true });
-      else if (!SKIP_DIRS.has(entry.name)) walk(path, depth + 1);
-    }
-  };
-  walk(repoPath, 0);
+  for (const file of reportFiles(repoPath)) rmSync(file, { force: true });
 }
 
-/** Every test in every report under `repoPath`'s `target/` directories. */
+/** Every test in every report file under the repository's `target/` directories. */
 export function readTestReports(repoPath: string): Map<string, TestResult> {
   const results = new Map<string, TestResult>();
-  const walk = (dir: string, depth: number): void => {
-    if (depth > 8) return;
-    let entries;
-    try {
-      entries = readdirSync(dir, { withFileTypes: true });
-    } catch {
-      return;
-    }
-    for (const entry of entries) {
-      if (!entry.isDirectory()) continue;
-      const path = join(dir, entry.name);
-      if (REPORT_DIRS.has(entry.name)) readReportDir(path, repoPath, results);
-      else if (!SKIP_DIRS.has(entry.name)) walk(path, depth + 1);
-    }
-  };
-  walk(repoPath, 0);
-  return results;
-}
-
-function readReportDir(dir: string, repoPath: string, into: Map<string, TestResult>): void {
-  let names: string[];
-  try {
-    names = readdirSync(dir).filter((name) => /^TEST-.+\.xml$/.test(name)).sort();
-  } catch {
-    return;
-  }
-  for (const name of names) {
-    const file = join(dir, name);
+  for (const file of reportFiles(repoPath)) {
     let xml: string;
     try {
       xml = readFileSync(file, 'utf8');
@@ -92,10 +93,11 @@ function readReportDir(dir: string, repoPath: string, into: Map<string, TestResu
     }
     for (const result of parseReport(xml, relative(repoPath, file).split('\\').join('/'))) {
       // A test run by both plugins, or re-run: the worse outcome stands.
-      const previous = into.get(result.id);
-      if (previous === undefined || rank(result.outcome) > rank(previous.outcome)) into.set(result.id, result);
+      const previous = results.get(result.id);
+      if (previous === undefined || rank(result.outcome) > rank(previous.outcome)) results.set(result.id, result);
     }
   }
+  return results;
 }
 
 function rank(outcome: TestOutcome): number {

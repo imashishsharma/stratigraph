@@ -352,8 +352,24 @@ function classify(log: BuildLog, diff: TestDiff): Classified[] {
   return out;
 }
 
+/**
+ * How far the build got, worst first: the POM could not be read or resolved
+ * (3), it did not compile or a plugin failed (2), it built and tests are red
+ * or missing (1), parity (0). A fix that moves the build to a later stage is
+ * progress whatever the counts: unblocking dependency resolution lets the
+ * compiler run for the first time, and its errors were always there
+ * (spring-boot-blog-app: one POM error became several compile errors).
+ */
+function stage(state: BuildState): number {
+  if (!state.log.success) {
+    const early = state.log.failures.some((failure) => failure.kind === 'pom' || failure.kind === 'dependency');
+    return early || state.log.failures.length === 0 ? 3 : 2;
+  }
+  return state.diff.regressed.length + state.diff.missing.length > 0 ? 1 : 0;
+}
+
 function score(state: BuildState): [number, number, number] {
-  return [state.log.success ? 0 : 1, state.log.failures.length, state.diff.regressed.length + state.diff.missing.length];
+  return [stage(state), state.log.failures.length, state.diff.regressed.length + state.diff.missing.length];
 }
 
 /** null when `next` is better than `previous`; otherwise why it is not. */
