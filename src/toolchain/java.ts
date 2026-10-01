@@ -14,7 +14,7 @@
  * - No JVM at all is not an error. A repo with no Java in it does not need one.
  */
 
-import { execFileSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync, readdirSync, realpathSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
@@ -220,18 +220,12 @@ export function readReleaseVersion(home: string): string | null {
 }
 
 function probeVersion(javaBin: string): string | null {
-  try {
-    // `java -version` writes to stderr on every JDK ever shipped.
-    const out = execFileSync(javaBin, ['-version'], {
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
-    return extractVersion(out);
-  } catch (err) {
-    const stderr = (err as { stderr?: string | Buffer }).stderr;
-    if (stderr) return extractVersion(stderr.toString());
-    return null;
-  }
+  // `java -version` writes to stderr on every JDK ever shipped, and exits 0:
+  // read stderr whether or not it succeeded (a JDK 8 with no \`release\` file
+  // was reported as no JDK at all).
+  const result = spawnSync(javaBin, ['-version'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+  if (result.error) return null;
+  return extractVersion(`${result.stderr ?? ''}\n${result.stdout ?? ''}`);
 }
 
 export function extractVersion(output: string): string | null {

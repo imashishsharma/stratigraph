@@ -113,6 +113,20 @@ describe('inspectJavaHome', () => {
     expect(inspectJavaHome(empty, 'config', 'darwin')).toBeNull();
   });
 
+  it.skipIf(process.platform === 'win32')(
+    'asks a JDK with no release file, reading the version from stderr on a clean exit (Corretto 8)',
+    () => {
+      const home = mkdtempSync(join(tmpdir(), 'strat-jdk8-norelease-'));
+      mkdirSync(join(home, 'bin'));
+      writeFileSync(
+        join(home, 'bin', 'java'),
+        '#!/bin/sh\necho \'openjdk version "1.8.0_432"\' >&2\nexit 0\n',
+        { mode: 0o755 },
+      );
+      expect(inspectJavaHome(home, 'config', 'darwin')).toMatchObject({ major: 8, version: '1.8.0_432' });
+    },
+  );
+
   it('marks an old JDK as not meeting the minimum', () => {
     const home = fakeJdk(mkdtempSync(join(tmpdir(), 'strat-jdk8-')), '1.8.0_432');
     expect(inspectJavaHome(home, 'config', 'darwin')).toMatchObject({
