@@ -267,4 +267,54 @@ describe('upgrade run', () => {
     expect(report.status).toBe('baseline-broken');
     expect(report.commits.map((commit) => commit.layer)).toEqual(['report']);
   });
+
+  it('stops asking an AI fixer that cannot run, and says so once', async () => {
+    const repo = repoWith({
+      'pom.xml': POM('2.7.1'),
+      'src/main/java/demo/Docs.java': 'import springfox.documentation.Docket;\nclass Docs {}\n',
+    });
+    const maven = fakeMaven(
+      repo,
+      (read) =>
+        read('pom.xml').includes('2.7.1')
+          ? { build: 'ok', tests: { boots: 'passed' } }
+          : { build: '/r/src/main/java/demo/Docs.java:[1,34] package springfox.documentation does not exist', tests: {} },
+      () => writeFileSync(join(repo, 'pom.xml'), POM('3.5.6')),
+      [],
+    );
+    let calls = 0;
+    const fixer: Fixer = {
+      name: 'fake',
+      attempt: async () => {
+        calls += 1;
+        return { summary: '', costUsd: 0, error: 'Credit balance is too low', unavailable: true };
+      },
+    };
+    const report = await runUpgrade(options(repo, maven, fixer));
+    expect(calls).toBe(1);
+    expect(report.status).toBe('stuck');
+    expect(report.attempts).toEqual([]);
+    expect(report.notes).toContain('The AI fixer could not run (Credit balance is too low); no AI attempts were made. Fix that and run again.');
+  });
+
+  it('files an unrecognised compiler error under the category of its file\'s other errors', async () => {
+    const repo = repoWith({ 'pom.xml': POM('2.7.1') });
+    const maven = fakeMaven(
+      repo,
+      (read) =>
+        read('pom.xml').includes('2.7.1')
+          ? { build: 'ok', tests: {} }
+          : {
+              build:
+                '/r/src/main/java/c/WebSecurityConfig.java:[10,72] cannot find symbol\n  symbol:   class WebSecurityConfigurerAdapter\n' +
+                '[ERROR] /r/src/main/java/c/WebSecurityConfig.java:[54,4] method does not override or implement a method from a supertype',
+              tests: {},
+            },
+      () => writeFileSync(join(repo, 'pom.xml'), POM('3.5.6')),
+      [],
+    );
+    const report = await runUpgrade(options(repo, maven));
+    expect(report.remaining.map((handoff) => handoff.category)).toEqual(['spring-security-config']);
+    expect(report.remaining[0]?.evidence).toHaveLength(2);
+  });
 });

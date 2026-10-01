@@ -33,6 +33,11 @@ export interface FixerResult {
   summary: string;
   costUsd: number | null;
   error: string | null;
+  /**
+   * The fixer could not run at all (no credit, not logged in, the API down):
+   * not a failed fix, and no reason to try the next one.
+   */
+  unavailable?: boolean;
 }
 
 export interface Fixer {
@@ -47,6 +52,12 @@ export interface ClaudeCodeOptions {
   /** Per attempt. */
   maxBudgetUsd: number;
   timeoutMs: number;
+  /**
+   * Keep ANTHROPIC_API_KEY in the CLI's environment. Off by default: the
+   * Claude Code CLI prefers that key over the user's login, and a key left in
+   * a shell for something else should not silently pay for (or fail) an upgrade.
+   */
+  useApiKey?: boolean | undefined;
 }
 
 export function claudeCodeFixer(options: ClaudeCodeOptions): Fixer {
@@ -86,7 +97,7 @@ export function claudeCodeFixer(options: ClaudeCodeOptions): Fixer {
         const child = spawn(options.command ?? 'claude', args, {
           cwd: request.repoPath,
           env: {
-            ...process.env,
+            ...withoutApiKey(process.env, options.useApiKey === true),
             JAVA_HOME: request.javaHome,
             PATH: `${join(request.javaHome, 'bin')}${delimiter}${process.env['PATH'] ?? ''}`,
           },
@@ -102,20 +113,44 @@ export function claudeCodeFixer(options: ClaudeCodeOptions): Fixer {
           writeFileSync(join(request.logDir, `ai-${request.attempt}-output.json`), stdout || stderr);
           let summary = '';
           let costUsd: number | null = null;
+          let unavailable = false;
           try {
-            const parsed = JSON.parse(stdout) as { result?: string; total_cost_usd?: number; is_error?: boolean };
+            const parsed = JSON.parse(stdout) as {
+              result?: string;
+              total_cost_usd?: number;
+              is_error?: boolean;
+              api_error_status?: number;
+              terminal_reason?: string;
+            };
             summary = (parsed.result ?? '').trim();
             costUsd = typeof parsed.total_cost_usd === 'number' ? parsed.total_cost_usd : null;
-            if (parsed.is_error && error === null) error = summary || 'the fixer reported an error';
+            if (parsed.is_error) {
+              error = summary || error || 'the fixer reported an error';
+              unavailable =
+                parsed.terminal_reason === 'api_error' ||
+                typeof parsed.api_error_status === 'number' ||
+                UNAVAILABLE.test(summary);
+              // An error message is not the model's account of a change.
+              summary = '';
+            }
           } catch {
             if (error === null) error = (stderr || stdout).trim().slice(0, 500) || 'no output';
+            unavailable = UNAVAILABLE.test(stderr) || /could not start/.test(error ?? '');
           }
-          resolvePromise({ summary, costUsd, error });
+          resolvePromise({ summary, costUsd, error, unavailable });
         };
         child.on('error', (err) => finish(`could not start ${options.command ?? 'claude'}: ${err.message}`));
         child.on('close', (code) => finish(code === 0 ? null : `exited with status ${code}`));
       }),
   };
+}
+
+const UNAVAILABLE = /credit balance|not logged in|please run \/login|invalid api key|authentication|unauthori[sz]ed|rate limit|overloaded/i;
+
+function withoutApiKey(env: NodeJS.ProcessEnv, keep: boolean): NodeJS.ProcessEnv {
+  if (keep) return env;
+  const { ANTHROPIC_API_KEY: _dropped, ...rest } = env;
+  return rest;
 }
 
 export function fixPrompt(request: FixerRequest): string {

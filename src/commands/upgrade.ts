@@ -32,6 +32,8 @@ export interface UpgradeRunOptions extends UpgradeCommandOptions {
   attemptsPerCategory?: number | undefined;
   aiBudgetUsd?: number | undefined;
   aiModel?: string | undefined;
+  /** Let the Claude Code CLI use ANTHROPIC_API_KEY instead of the user's login. */
+  aiUseApiKey?: boolean | undefined;
   branch?: string | undefined;
   buildTimeoutMinutes?: number | undefined;
   rewriteSpring?: string | undefined;
@@ -106,6 +108,7 @@ export async function runUpgradeRun(options: UpgradeRunOptions): Promise<Upgrade
             maxBudgetUsd: options.aiBudgetUsd ?? 5,
             timeoutMs: 30 * 60000,
             model: options.aiModel,
+            useApiKey: options.aiUseApiKey,
           })
         : null,
     maxBuilds: options.maxBuilds ?? 25,

@@ -64,6 +64,8 @@ export interface Plan {
   hasWrapper: boolean;
   expected: PlanCategory[];
   blockers: string[];
+  /** What will work less well here, without stopping the run. */
+  limits: string[];
 }
 
 export function planUpgrade(repoPath: string, target: UpgradeTarget, runtimes = discoverJavaRuntimes()): Plan {
@@ -71,7 +73,10 @@ export function planUpgrade(repoPath: string, target: UpgradeTarget, runtimes = 
   const blockers: string[] = [];
   if (pom === null) blockers.push('no pom.xml: the upgrade supports Maven projects');
   else if (pom.bootVersion === null) blockers.push('the Spring Boot version is not declared in pom.xml (parent, BOM import or spring-boot.version)');
-  if (pom !== null && pom.modules.length > 0) blockers.push(`multi-module build (${pom.modules.length} modules): not yet supported; the recipe runs, but the loop reads one module's reports`);
+  const limits: string[] = [];
+  if (pom !== null && pom.modules.length > 0) {
+    limits.push(`multi-module build (${pom.modules.length} modules): every module is built and tested, but known fixes edit only the root pom.xml`);
+  }
   const upgradeNeeded = pom?.bootVersion ? needsUpgrade(pom.bootVersion, target) : false;
   if (pom?.bootVersion && !upgradeNeeded) blockers.push(`already on Spring Boot ${pom.bootVersion}`);
 
@@ -121,6 +126,7 @@ export function planUpgrade(repoPath: string, target: UpgradeTarget, runtimes = 
     hasWrapper: files.includes('mvnw'),
     expected,
     blockers,
+    limits,
   };
 }
 
@@ -189,6 +195,8 @@ export function renderPlan(plan: Plan): string {
     for (const blocker of plan.blockers) out.push(`  ✗ ${blocker}`);
     out.push('');
   }
+  for (const limit of plan.limits) out.push(`  limit: ${limit}`);
+  if (plan.limits.length > 0) out.push('');
   if (plan.expected.length === 0) {
     out.push('Expected trouble: none of the patterns the gap map saw break are present.', '');
   } else {

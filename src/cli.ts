@@ -361,6 +361,7 @@ export function buildProgram(): Command {
     .option('--ai <fixer>', 'let an AI attempt what known fixes cannot: claude-code (sends source to the model)')
     .option('--ai-budget <usd>', 'spending cap per AI attempt, in US dollars (default 5)')
     .option('--ai-model <model>', 'model for the AI fixer')
+    .option('--ai-use-api-key', 'let Claude Code bill ANTHROPIC_API_KEY instead of your Claude login')
     .option('--max-builds <n>', 'stop after this many builds (default 25)')
     .option('--max-minutes <n>', 'stop after this long (default 180)')
     .option('--attempts <n>', 'AI attempts per failure category before handing it off (default 2)')
@@ -379,6 +380,7 @@ export function buildProgram(): Command {
           ai?: string;
           aiBudget?: string;
           aiModel?: string;
+          aiUseApiKey?: boolean;
           maxBuilds?: string;
           maxMinutes?: string;
           attempts?: string;
@@ -397,6 +399,7 @@ export function buildProgram(): Command {
           ai: options.ai,
           aiBudgetUsd: options.aiBudget === undefined ? undefined : Number(options.aiBudget),
           aiModel: options.aiModel,
+          aiUseApiKey: options.aiUseApiKey,
           maxBuilds: parsePositiveInt('--max-builds', options.maxBuilds),
           maxMinutes: parsePositiveInt('--max-minutes', options.maxMinutes),
           attemptsPerCategory: parsePositiveInt('--attempts', options.attempts),

@@ -188,6 +188,7 @@ export async function runUpgrade(options: RunOptions): Promise<UpgradeReport> {
 
   let state = await evaluate('build-1');
   const tried = new Set<string>();
+  let fixer = options.fixer;
   const aiTries = new Map<string, number>();
   const outOfBudget = () => report.builds >= options.maxBuilds || now() - started > options.maxMinutes * 60000;
 
@@ -230,7 +231,7 @@ export async function runUpgrade(options: RunOptions): Promise<UpgradeReport> {
     if (progressed) continue;
 
     // Then the AI fixer, for what is not a decision.
-    if (options.fixer === null) break;
+    if (fixer === null) break;
     const groups = groupByCategory(state.failures.filter((failure) => failure.category.disposition !== 'decision'));
     const group = groups.find(([id]) => (aiTries.get(id) ?? 0) < options.attemptsPerCategory);
     if (group === undefined) break;
@@ -238,7 +239,7 @@ export async function runUpgrade(options: RunOptions): Promise<UpgradeReport> {
     aiTries.set(categoryId, (aiTries.get(categoryId) ?? 0) + 1);
     const number = attempts.filter((attempt) => attempt.by === 'ai').length + 1;
     info(`upgrade: AI attempt ${number} on ${categoryId} (${targetFailures.length} failure(s))`);
-    const fixed = await options.fixer.attempt({
+    const fixed = await fixer.attempt({
       repoPath,
       from: report.from,
       to: target.boot,
@@ -251,9 +252,19 @@ export async function runUpgrade(options: RunOptions): Promise<UpgradeReport> {
     });
     report.costUsd += fixed.costUsd ?? 0;
     const touched = dirtyFiles(repoPath, preexisting);
+    if (fixed.unavailable) {
+      // Not a failed fix: the fixer never ran. Say so once and stop asking it.
+      resetTo(repoPath, lastGood, preexisting);
+      report.notes.push(`The AI fixer could not run (${fixed.error ?? 'unavailable'}); no AI attempts were made. Fix that and run again.`);
+      warn(`upgrade: the AI fixer could not run: ${fixed.error}`);
+      fixer = null;
+      continue;
+    }
     if (fixed.error !== null || touched.length === 0) {
       resetTo(repoPath, lastGood, preexisting);
-      attempts.push({ by: 'ai', id: `ai-${number}`, category: categoryId, accepted: false, reason: fixed.error ?? 'made no change', sha: null, description: fixed.summary });
+      const reason = fixed.error ?? 'made no change';
+      attempts.push({ by: 'ai', id: `ai-${number}`, category: categoryId, accepted: false, reason, sha: null, description: fixed.summary });
+      info(`upgrade: AI attempt ${number} rejected (${reason})`);
       continue;
     }
     // New files join the diff the guardrails read.
@@ -271,7 +282,7 @@ export async function runUpgrade(options: RunOptions): Promise<UpgradeReport> {
     const verdict = judge(state, next);
     if (verdict === null) {
       const subject = `upgrade(ai): ${targetFailures[0]!.category.title}`;
-      const body = `Written by an AI fixer (${options.fixer.name}); kept because the build had fewer failures and no newly red test.\n\n${fixed.summary}`;
+      const body = `Written by an AI fixer (${fixer.name}); kept because the build had fewer failures and no newly red test.\n\n${fixed.summary}`;
       const sha = commitChanges(repoPath, `${subject}\n\n${body}`, preexisting);
       if (sha) {
         report.commits.push({ sha, layer: 'ai', subject });
@@ -312,6 +323,19 @@ function classify(log: BuildLog, diff: TestDiff): Classified[] {
     build: failure,
     text: [failure.message, failure.symbol ?? '', failure.file ?? '', ...failure.excerpt].join('\n'),
   }));
+  // A compiler error no rule recognises, in a file whose other errors one does,
+  // is almost always the same problem seen from another line: "method does not
+  // override" under a removed superclass is the security migration too.
+  const byFile = new Map<string, Classified>();
+  for (const failure of out) {
+    if (failure.build?.file && failure.category.id !== 'uncategorised' && !byFile.has(failure.build.file)) {
+      byFile.set(failure.build.file, failure);
+    }
+  }
+  for (const failure of out) {
+    const sibling = failure.build?.file ? byFile.get(failure.build.file) : undefined;
+    if (failure.category.id === 'uncategorised' && sibling) failure.category = sibling.category;
+  }
   for (const test of diff.regressed) {
     out.push({ category: categoriseTest(test), test, text: `${test.id}\n${test.message ?? ''}` });
   }
