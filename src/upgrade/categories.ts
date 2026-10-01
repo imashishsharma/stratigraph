@@ -249,8 +249,13 @@ export function categoriseBuildFailure(failure: BuildFailure): Category {
   return categoriseText([failure.message, failure.symbol ?? '', failure.file ?? '', ...failure.excerpt].join('\n'));
 }
 
+/** A test is categorised by its root cause when one is recognised, and by its symptom otherwise. */
 export function categoriseTest(test: TestResult): Category {
-  return categoriseText(`${test.id}\n${test.message ?? ''}`);
+  if (test.cause) {
+    const byCause = categoriseText(test.cause);
+    if (byCause.id !== 'uncategorised') return byCause;
+  }
+  return categoriseText(`${test.id}\n${test.message ?? ''}\n${test.cause ?? ''}`);
 }
 
 export const CATEGORY_IDS = [...RULES.map((rule) => rule.id), UNCATEGORISED.id];

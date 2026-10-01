@@ -172,12 +172,14 @@ describe('test reports', () => {
         outcome: 'failed',
         message: 'org.opentest4j.AssertionFailedError: expected: <400> but was: <200>',
         report: 'target/surefire-reports/TEST-shop.OrderTest.xml',
+        cause: null,
       },
       {
         id: 'shop.OrderTest#boots',
         outcome: 'error',
         message: 'java.lang.IllegalStateException: Failed to load ApplicationContext',
         report: 'target/surefire-reports/TEST-shop.OrderTest.xml',
+        cause: null,
       },
       { id: 'shop.OrderTest#later', outcome: 'skipped', message: null, report: 'target/surefire-reports/TEST-shop.OrderTest.xml' },
     ]);
@@ -198,5 +200,27 @@ describe('test reports', () => {
     expect(diff.added.map((r) => r.id)).toEqual(['f']);
     expect(atParity(diff)).toBe(false);
     expect(atParity(diffTests(baseline, baseline))).toBe(true);
+  });
+});
+
+describe('root causes over symptoms', () => {
+  it('reads a schema failure behind an HTTP assertion as the schema problem (jwt-demo, H2 2.x)', () => {
+    const xml = `<testsuite><testcase name="login" classname="org.zerhusen.AuthTest">
+<failure message="Status expected:&lt;200&gt; but was:&lt;401&gt;" type="java.lang.AssertionError">java.lang.AssertionError: Status expected:&lt;200&gt; but was:&lt;401&gt;</failure>
+</testcase>
+<system-out>2026 WARN ScriptUtils: Failed to execute SQL
+org.h2.jdbc.JdbcSQLSyntaxErrorException: Syntax error in SQL statement "drop table if exists [*]user"; expected "identifier"; SQL statement:
+</system-out></testsuite>`;
+    const [test] = parseReport(xml, 'r');
+    expect(test?.cause).toMatch(/^Syntax error in SQL statement "drop table if exists \[\*\]user"/);
+    expect(categoriseTest(test!).id).toBe('h2-reserved-word');
+  });
+
+  it('keeps the symptom when the cause is not recognised', () => {
+    const [test] = parseReport(
+      '<testsuite><testcase name="t" classname="C"><failure message="Status expected:&lt;200&gt; but was:&lt;404&gt;">x</failure></testcase></testsuite>',
+      'r',
+    );
+    expect(categoriseTest(test!).id).toBe('http-contract-change');
   });
 });

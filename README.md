@@ -806,6 +806,55 @@ co-change all become unavailable until you run `stratigraph history` again.
 Nothing prunes automatically. A tool that silently discarded the run you were
 about to compare against would be worse than a large file.
 
+### Upgrading Spring Boot
+
+`stratigraph upgrade` upgrades a Maven project's Spring Boot version: 2.7 →
+3.5, or 3.x → 4.0. It runs OpenRewrite's upgrade recipe, then works through
+what the recipe leaves broken. It never decides anything that is really your
+choice ([ADR-0047](docs/adr/0047-the-upgrade-agent.md)).
+
+```sh
+stratigraph upgrade plan --to 3.5          # read-only: versions, JDKs, and where trouble is expected, cited
+stratigraph upgrade run --to 3.5           # recipe + known fixes + verification, on a new branch
+stratigraph upgrade run --to 3.5 --ai claude-code   # ...and let Claude Code attempt the rest
+```
+
+What `run` does:
+
+1. **Baseline.** It creates a new branch, then builds and tests the project
+   as it is. The result is the reference: afterwards, "red" means *passed
+   before, fails now*. A test that already failed before the upgrade (one
+   that needs Docker, say) is not the upgrade's problem, and the report says
+   so.
+2. **The recipe**, as one commit, so you can review it separately.
+3. **The loop.** It builds, reads each failure, and sorts it into a category:
+   - **mechanical**: a known fix exists (a moved class, a missing
+     `-parameters`, a formatter, a module Flyway split out…);
+   - **judgment**: the fix needs someone to read the code;
+   - **decision**: any fix changes behaviour you have to choose, such as an
+     authorisation rule or an HTTP contract.
+
+   Known fixes run first. With `--ai claude-code`, the Claude Code CLI then
+   attempts the judgment failures. It never touches decisions. A change is
+   kept only if the rebuild has fewer failures and no newly red test. A change
+   that disables or deletes a test is rejected outright.
+4. **The report.** `upgrade-report.md` is committed on the branch. It shows:
+   - the status;
+   - every test compared with its baseline result;
+   - each layer's commits (recipe, known fixes, AI);
+   - which test files changed;
+   - for everything left, the evidence, what was already tried, and, for a
+     decision, the options.
+
+Why it works this way: on 10 public applications, OpenRewrite alone got
+**0/10** to a green build. It left 44 breakages, 9 of them introduced by the
+recipe itself. See [`bench/upgrade-gap/`](bench/upgrade-gap/README.md).
+
+Unlike the rest of stratigraph, `upgrade` builds your project, so Maven
+downloads the new versions. It also commits, but only on its own branch, and
+it never pushes. Without `--ai`, no source leaves the machine. With it, the
+Claude Code CLI reads the source under your own account.
+
 ### In a pipeline: JSON and a quality gate
 
 `--format json` is global. Every command that produces a result emits one

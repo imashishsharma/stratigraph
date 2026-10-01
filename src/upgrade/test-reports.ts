@@ -15,6 +15,13 @@ export interface TestResult {
   outcome: TestOutcome;
   /** The failure's message and type, when it failed. */
   message: string | null;
+  /**
+   * The deepest cause the report shows for a failure: the last "Caused by:"
+   * or SQL error in the failure's trace or the suite's output. A test that
+   * fails with "expected 200 but was 401" because the schema did not load
+   * is about the schema, not the HTTP contract.
+   */
+  cause?: string | null;
   /** Report file it was read from, repo-relative. */
   report: string;
 }
@@ -73,8 +80,20 @@ function rank(outcome: TestOutcome): number {
 
 const TESTCASE = /<testcase\b([^>]*?)(?:\/>|>([\s\S]*?)<\/testcase>)/g;
 
+const CAUSE = /(?:Caused by: ([^\n]{0,300}))|(Syntax error in SQL statement[^\n]{0,200})|(UnreachableFilterChainException[^\n]{0,200})/g;
+
+/** The deepest cause in a trace or log: the last one printed. */
+export function deepestCause(text: string): string | null {
+  let last: string | null = null;
+  for (const match of decode(text).matchAll(CAUSE)) last = (match[1] ?? match[2] ?? match[3] ?? '').trim() || last;
+  return last;
+}
+
 export function parseReport(xml: string, report: string): TestResult[] {
   const results: TestResult[] = [];
+  // Output the suite printed (Spring logs a failed context here).
+  const suiteOutput = [...xml.matchAll(/<system-(?:out|err)>([\s\S]*?)<\/system-(?:out|err)>/g)].map((m) => m[1] ?? '').join('\n');
+  const suiteCause = deepestCause(suiteOutput);
   for (const match of xml.matchAll(TESTCASE)) {
     const attrs = match[1] ?? '';
     const body = match[2] ?? '';
@@ -89,6 +108,8 @@ export function parseReport(xml: string, report: string): TestResult[] {
       const type = attribute(problem[2] ?? '', 'type');
       const text = attribute(problem[2] ?? '', 'message') ?? firstLine(decode(problem[3] ?? ''));
       message = [type, text].filter(Boolean).join(': ').slice(0, 500) || null;
+      results.push({ id: `${cls}#${name}`, outcome, message, report, cause: deepestCause(problem[3] ?? '') ?? suiteCause });
+      continue;
     } else if (/<skipped\b/.test(body)) {
       outcome = 'skipped';
     }
