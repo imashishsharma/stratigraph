@@ -308,6 +308,11 @@ export async function runUpgrade(options: RunOptions): Promise<UpgradeReport> {
   report.remaining = handoffs(state.failures, attempts);
   // Test files changed after the recipe, by a known fix or the AI: a reviewer reads these first.
   report.testFilesChanged = changedFiles(repoPath, recipeSha ?? startSha).filter((path) => /(^|\/)src\/test\//.test(path));
+  if (report.baseline && report.baseline.passed === 0) {
+    report.notes.push(
+      'No tests ran before the upgrade, so "parity" here means only that the project builds: its behaviour after the upgrade is unverified. Review the AI fixes as unverified code.',
+    );
+  }
   if (outOfBudget() && !isParity(state)) {
     report.notes.push(`Stopped at the budget (${report.builds} builds, ${Math.round((now() - started) / 60000)} min).`);
   }

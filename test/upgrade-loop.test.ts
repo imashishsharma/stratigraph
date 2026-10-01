@@ -447,6 +447,15 @@ describe('upgrade run', () => {
     ]);
     expect(readFileSync(join(repo, 'upgrade-report.md'), 'utf8')).toContain('## Expected to clear with the above');
   });
+
+  it('says plainly when parity rests on no tests at all (mall-tiny)', async () => {
+    const repo = repoWith({ 'pom.xml': POM('2.7.5') });
+    const maven = fakeMaven(repo, () => ({ build: 'ok', tests: {} }), () => writeFileSync(join(repo, 'pom.xml'), POM('3.5.6')), []);
+    const report = await runUpgrade(options(repo, maven));
+    expect(report.status).toBe('parity');
+    expect(report.notes[0]).toMatch(/No tests ran before the upgrade/);
+    expect(readFileSync(join(repo, 'upgrade-report.md'), 'utf8')).toContain('nothing about its behaviour was verified');
+  });
 });
 
 function read(repo: string): string {

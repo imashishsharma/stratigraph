@@ -96,7 +96,11 @@ export function renderReport(report: UpgradeReport): string {
   const out: string[] = [];
   const short = (sha: string) => sha.slice(0, 10);
   out.push(`# Spring Boot ${report.from} → ${report.to}: upgrade report`, '');
-  out.push(`**${HEADLINE[report.status]}**`, '');
+  const untested = report.status === 'parity' && (report.baseline?.passed ?? 0) === 0;
+  out.push(
+    `**${untested ? '⚠️ It builds — but no tests ran before or after, so nothing about its behaviour was verified.' : HEADLINE[report.status]}**`,
+    '',
+  );
   out.push(
     `Branch \`${report.branch}\`, started from \`${report.startBranch}\` at \`${short(report.startSha)}\`. ` +
       `${report.builds} build(s), ${report.minutes} min` +
