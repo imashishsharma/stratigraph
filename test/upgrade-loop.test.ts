@@ -408,6 +408,45 @@ describe('upgrade run', () => {
     expect(report.baseline?.tests).toBe(1);
     expect(report.status).toBe('parity');
   });
+
+  it('does not work on a coverage gate while the tests it measures are red, and lets the decision set the status (petclinic-rest)', async () => {
+    const repo = repoWith({ 'pom.xml': POM('2.6.2') });
+    const calls: string[] = [];
+    const fixer: Fixer = {
+      name: 'fake',
+      attempt: async (request) => {
+        calls.push(request.target[0]!.category.id);
+        return { summary: '', costUsd: 0, error: null };
+      },
+    };
+    const maven: Maven = async (args, label) => {
+      const logPath = join(repo, '..', `${label}.log`);
+      if (args.some((arg) => arg.includes('rewrite-maven-plugin'))) {
+        writeFileSync(join(repo, 'pom.xml'), POM('3.5.6'));
+        return { exitCode: 0, timedOut: false, logPath, log: '[INFO] BUILD SUCCESS\n', seconds: 1 };
+      }
+      const upgraded = !read(repo).includes('2.6.2');
+      mkdirSync(join(repo, 'target', 'surefire-reports'), { recursive: true });
+      writeFileSync(
+        join(repo, 'target', 'surefire-reports', 'TEST-r.OwnerTest.xml'),
+        upgraded
+          ? '<testsuite><testcase name="list" classname="r.OwnerTest"><failure message="Status expected:&lt;200&gt; but was:&lt;404&gt;"/></testcase></testsuite>'
+          : '<testsuite><testcase name="list" classname="r.OwnerTest"/></testsuite>',
+      );
+      const log = upgraded
+        ? '[ERROR] Failed to execute goal org.jacoco:jacoco-maven-plugin:0.8.13:check (check) on project petclinic: Coverage checks have not been met. See log for details.\n[INFO] BUILD FAILURE\n'
+        : '[INFO] BUILD SUCCESS\n';
+      return { exitCode: upgraded ? 1 : 0, timedOut: false, logPath, log, seconds: 1 };
+    };
+    const report = await runUpgrade(options(repo, maven, fixer));
+    expect(calls).toEqual([]);
+    expect(report.status).toBe('needs-decision');
+    expect(report.remaining.map((handoff) => [handoff.category, handoff.consequence ?? false])).toEqual([
+      ['coverage-gate', true],
+      ['http-contract-change', false],
+    ]);
+    expect(readFileSync(join(repo, 'upgrade-report.md'), 'utf8')).toContain('## Expected to clear with the above');
+  });
 });
 
 function read(repo: string): string {

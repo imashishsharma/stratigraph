@@ -234,7 +234,12 @@ export async function runUpgrade(options: RunOptions): Promise<UpgradeReport> {
 
     // Then the AI fixer, for what is not a decision.
     if (fixer === null) break;
-    const groups = groupByCategory(state.failures.filter((failure) => failure.category.disposition !== 'decision'));
+    // Consequences wait while what causes them is still failing.
+    const causes = state.failures.filter((failure) => !failure.category.consequence);
+    const workable = (causes.length > 0 ? causes : state.failures).filter(
+      (failure) => failure.category.disposition !== 'decision' && !(causes.length > 0 && failure.category.consequence),
+    );
+    const groups = groupByCategory(workable);
     const group = groups.find(([id]) => (aiTries.get(id) ?? 0) < options.attemptsPerCategory);
     if (group === undefined) break;
     const [categoryId, targetFailures] = group;
@@ -306,9 +311,11 @@ export async function runUpgrade(options: RunOptions): Promise<UpgradeReport> {
   if (outOfBudget() && !isParity(state)) {
     report.notes.push(`Stopped at the budget (${report.builds} builds, ${Math.round((now() - started) / 60000)} min).`);
   }
+  // What decides the status is what causes the failures, not their consequences.
+  const deciding = state.failures.filter((failure) => !failure.category.consequence);
   const status = isParity(state)
     ? 'parity'
-    : state.failures.length > 0 && state.failures.every((failure) => failure.category.disposition === 'decision')
+    : deciding.length > 0 && deciding.every((failure) => failure.category.disposition === 'decision')
       ? 'needs-decision'
       : 'stuck';
   return finish(status);
@@ -442,6 +449,7 @@ function handoffs(failures: Classified[], attempts: Attempt[]): UpgradeReport['r
       category: id,
       title: category.title,
       disposition: category.disposition,
+      ...(category.consequence ? { consequence: true } : {}),
       evidence: group.slice(0, 10).map((failure) =>
         failure.test
           ? { test: failure.test.id, message: failure.test.message ?? '', file: null, line: null }

@@ -26,6 +26,11 @@ export interface Category {
   guidance: string;
   /** For decisions: the choices, as a reviewer would weigh them. */
   options?: string[];
+  /**
+   * A failure caused by other failures (a coverage gate after red tests): not
+   * worked on while those remain, and not what decides the run's status.
+   */
+  consequence?: boolean;
 }
 
 interface Rule extends Category {
@@ -36,6 +41,16 @@ const has = (pattern: RegExp) => (text: string) => pattern.test(text);
 
 /** First match wins, so narrower rules come before broader ones. */
 const RULES: Rule[] = [
+  {
+    id: 'coverage-gate',
+    title: 'A coverage or quality gate failed',
+    disposition: 'mechanical',
+    consequence: true,
+    match: has(/jacoco[\s\S]*Coverage checks have not been met|Coverage checks have not been met|Rule violated for/i),
+    guidance:
+      'The gate measures the tests. Red or skipped tests lower coverage, so fix those first; never lower the ' +
+      'threshold to get past it.',
+  },
   {
     id: 'tests-not-run',
     title: 'Tests that ran before the upgrade did not run after it',

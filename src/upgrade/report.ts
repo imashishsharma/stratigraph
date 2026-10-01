@@ -42,6 +42,8 @@ export interface Handoff {
   category: string;
   title: string;
   disposition: Disposition;
+  /** Caused by the other failures; expected to clear when they do. */
+  consequence?: boolean;
   evidence: Array<{ test: string | null; message: string; file: string | null; line: number | null }>;
   more: number;
   tried: Attempt[];
@@ -131,7 +133,8 @@ export function renderReport(report: UpgradeReport): string {
   }
 
   const decisions = report.remaining.filter((handoff) => handoff.disposition === 'decision');
-  const unresolved = report.remaining.filter((handoff) => handoff.disposition !== 'decision');
+  const unresolved = report.remaining.filter((handoff) => handoff.disposition !== 'decision' && !handoff.consequence);
+  const consequences = report.remaining.filter((handoff) => handoff.consequence && handoff.disposition !== 'decision');
   if (decisions.length > 0) {
     out.push('## Needs your decision', '');
     out.push('Each of these can be fixed several ways, and the ways differ in behaviour. Nothing was attempted; pick one.', '');
@@ -140,6 +143,11 @@ export function renderReport(report: UpgradeReport): string {
   if (unresolved.length > 0) {
     out.push('## Could not be fixed automatically', '');
     for (const handoff of unresolved) out.push(...renderHandoff(handoff), '');
+  }
+  if (consequences.length > 0) {
+    out.push('## Expected to clear with the above', '');
+    out.push('These fail because of the failures above (a coverage gate measures the tests); nothing was attempted on them.', '');
+    for (const handoff of consequences) out.push(...renderHandoff(handoff), '');
   }
 
   out.push('## What changed, layer by layer', '');
