@@ -30,7 +30,7 @@ import { KNOWN_FIXES, type Classified } from './known-fixes.js';
 import { VERIFY, type Maven, type MavenResult } from './maven.js';
 import { readPom } from './pom.js';
 import { REWRITE_PLUGIN_VERSION, REWRITE_SPRING_VERSION, needsUpgrade, type UpgradeTarget } from './targets.js';
-import { atParity, diffTests, readTestReports, type TestDiff, type TestResult } from './test-reports.js';
+import { atParity, clearTestReports, diffTests, readTestReports, type TestDiff, type TestResult } from './test-reports.js';
 import { writeReport, type Attempt, type UpgradeReport } from './report.js';
 
 export class UpgradeError extends Error {
@@ -138,6 +138,7 @@ export async function runUpgrade(options: RunOptions): Promise<UpgradeReport> {
 
   // 1. Baseline: the reference every later build is compared with.
   info('upgrade: baseline build (this is the reference: tests red here are not the upgrade\'s to fix)');
+  clearTestReports(repoPath);
   const baselineRun = await baselineMaven(VERIFY, 'baseline');
   const baselineLog = parseBuildLog(baselineRun.log, repoPath);
   const baselineTests = readTestReports(repoPath);
@@ -178,10 +179,11 @@ export async function runUpgrade(options: RunOptions): Promise<UpgradeReport> {
 
   // 3. The loop.
   const evaluate = async (label: string): Promise<BuildState> => {
+    clearTestReports(repoPath);
     const result = await maven(VERIFY, label);
     report.builds += 1;
     const log = parseBuildLog(result.log, repoPath);
-    const tests = log.success || hasReports(repoPath) ? readTestReports(repoPath) : new Map<string, TestResult>();
+    const tests = readTestReports(repoPath);
     const diff = diffTests(baselineTests, tests);
     return { label, result, log, tests, diff, failures: classify(log, diff) };
   };
@@ -375,10 +377,6 @@ function groupByCategory(failures: Classified[]): Array<[string, Classified[]]> 
   }
   // Build failures before test failures: nothing else can be seen until it compiles.
   return [...groups].sort(([, a], [, b]) => Number(b.some((f) => f.build)) - Number(a.some((f) => f.build)));
-}
-
-function hasReports(repoPath: string): boolean {
-  return readTestReports(repoPath).size > 0;
 }
 
 function describe(state: BuildState): string {

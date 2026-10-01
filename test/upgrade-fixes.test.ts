@@ -218,3 +218,25 @@ describe('known fixes (from the gap map)', () => {
     expect(read(repo)).toBe(POM);
   });
 });
+
+describe('Maven too old for the new plugins (kafdrop, found by the agent benchmark)', () => {
+  const error =
+    'org.apache.maven.plugins:maven-clean-plugin:clean: The plugin org.apache.maven.plugins:maven-clean-plugin:3.4.1 requires Maven version 3.6.3 -> [Help 1]';
+
+  it('is mechanical', () => {
+    expect(categoriseText(error)).toMatchObject({ id: 'maven-too-old', disposition: 'mechanical' });
+  });
+
+  it('points the wrapper at a current Maven, and leaves a machine without one alone', async () => {
+    const wrapper =
+      'distributionUrl=https://repo.maven.apache.org/maven2/org/apache/maven/apache-maven/3.6.1/apache-maven-3.6.1-bin.zip\nwrapperUrl=https://repo.maven.apache.org/maven2/io/takari/maven-wrapper/0.5.5/maven-wrapper-0.5.5.jar\n';
+    const repo = project({ 'pom.xml': POM, '.mvn/wrapper/maven-wrapper.properties': wrapper });
+    const result = await run('maven-wrapper-version', repo, failing(error));
+    expect(result?.description).toBe('run the build on Maven 3.9.11 (the wrapper pinned 3.6.1)');
+    expect(read(repo, '.mvn/wrapper/maven-wrapper.properties')).toContain('/apache-maven/3.9.11/apache-maven-3.9.11-bin.zip');
+    expect(read(repo, '.mvn/wrapper/maven-wrapper.properties')).toContain('maven-wrapper-0.5.5.jar');
+
+    const bare = project({ 'pom.xml': POM });
+    expect(await run('maven-wrapper-version', bare, failing(error))).toBeNull();
+  });
+});

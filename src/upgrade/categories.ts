@@ -131,6 +131,15 @@ const RULES: Rule[] = [
       '(maven.compiler.parameters=true, maven-compiler-plugin 3.6.2+).',
   },
   {
+    id: 'maven-too-old',
+    title: 'The new plugins need a newer Maven',
+    disposition: 'mechanical',
+    match: has(/requires Maven version \d/),
+    guidance:
+      'The plugin versions the new Spring Boot manages need a newer Maven than the one that ran. With a Maven ' +
+      'wrapper, point .mvn/wrapper/maven-wrapper.properties at a current Maven 3.9.x; without one, install it.',
+  },
+  {
     id: 'pom-missing-version',
     title: 'A dependency lost its managed version',
     disposition: 'mechanical',

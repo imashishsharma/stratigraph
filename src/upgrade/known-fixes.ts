@@ -360,7 +360,32 @@ const staleBomProperty: KnownFix = {
   },
 };
 
+/** The Maven the wrapper downloads; the newest 3.9 at the time of writing. */
+export const WRAPPER_MAVEN = '3.9.11';
+
+/**
+ * A Maven wrapper pinned below what the new plugins require: point it at a
+ * current 3.9. Without a wrapper the machine's Maven is old, which is not the
+ * repository's to fix, and nothing is changed.
+ */
+const mavenWrapper: KnownFix = {
+  id: 'maven-wrapper-version',
+  categories: ['maven-too-old'],
+  attempt: async (context) => {
+    if (failuresOf(context, 'maven-too-old').length === 0) return null;
+    const file = '.mvn/wrapper/maven-wrapper.properties';
+    const text = readText(context.repoPath, file);
+    if (text === null) return null;
+    const pattern = /(distributionUrl=\S*?\/apache-maven\/)(\d+\.\d+\.\d+)(\/apache-maven-)(\d+\.\d+\.\d+)(-bin\.zip)/;
+    const match = pattern.exec(text);
+    if (!match || !older(match[2] as string, WRAPPER_MAVEN)) return null;
+    writeFileSync(join(context.repoPath, file), text.replace(pattern, `$1${WRAPPER_MAVEN}$3${WRAPPER_MAVEN}$5`));
+    return { description: `run the build on Maven ${WRAPPER_MAVEN} (the wrapper pinned ${match[2]})`, changed: [file] };
+  },
+};
+
 export const KNOWN_FIXES: KnownFix[] = [
+  mavenWrapper,
   formatter,
   managedVersion,
   staleBomProperty,

@@ -317,4 +317,29 @@ describe('upgrade run', () => {
     expect(report.remaining.map((handoff) => handoff.category)).toEqual(['spring-security-config']);
     expect(report.remaining[0]?.evidence).toHaveLength(2);
   });
+
+  it('never reads the previous build\'s test reports as the current build\'s', async () => {
+    const repo = repoWith({ 'pom.xml': POM('2.7.1') });
+    // A Maven whose upgraded builds fail in `clean`, leaving target/ exactly as
+    // the baseline left it — the kafdrop case.
+    const maven: Maven = async (args, label) => {
+      const logPath = join(repo, '..', `${label}.log`);
+      if (args.some((arg) => arg.includes('rewrite-maven-plugin'))) {
+        writeFileSync(join(repo, 'pom.xml'), POM('3.5.6'));
+        return { exitCode: 0, timedOut: false, logPath, log: '[INFO] BUILD SUCCESS\n', seconds: 1 };
+      }
+      if (label === 'baseline') {
+        mkdirSync(join(repo, 'target', 'surefire-reports'), { recursive: true });
+        writeFileSync(join(repo, 'target', 'surefire-reports', 'TEST-demo.AppTest.xml'), '<testsuite><testcase name="boots" classname="demo.AppTest"/></testsuite>');
+        return { exitCode: 0, timedOut: false, logPath, log: '[INFO] BUILD SUCCESS\n', seconds: 1 };
+      }
+      const log = '[ERROR] Failed to execute goal org.apache.maven.plugins:maven-clean-plugin:3.4.1:clean (default-clean) on project demo: The plugin org.apache.maven.plugins:maven-clean-plugin:3.4.1 requires Maven version 3.6.3 -> [Help 1]\n[INFO] BUILD FAILURE\n';
+      return { exitCode: 1, timedOut: false, logPath, log, seconds: 1 };
+    };
+    const report = await runUpgrade(options(repo, maven));
+    expect(report.final?.built).toBe(false);
+    expect(report.final?.tests).toBe(0);
+    expect(report.final?.missing).toBe(1);
+    expect(report.remaining.map((handoff) => handoff.category)).toEqual(['maven-too-old']);
+  });
 });

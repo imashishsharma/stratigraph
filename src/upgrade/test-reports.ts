@@ -4,7 +4,7 @@
  * baseline fails now; this is where both sides of that comparison come from.
  */
 
-import { readdirSync, readFileSync } from 'node:fs';
+import { readdirSync, readFileSync, rmSync } from 'node:fs';
 import { join, relative } from 'node:path';
 
 export type TestOutcome = 'passed' | 'failed' | 'error' | 'skipped';
@@ -28,6 +28,30 @@ export interface TestResult {
 
 const REPORT_DIRS = new Set(['surefire-reports', 'failsafe-reports']);
 const SKIP_DIRS = new Set(['.git', 'node_modules', 'src', '.idea']);
+
+/**
+ * Remove every Surefire/Failsafe report directory. Done before each build
+ * rather than trusting `mvn clean`: a build whose clean step fails would
+ * otherwise leave the previous build's reports to be read as its own.
+ */
+export function clearTestReports(repoPath: string): void {
+  const walk = (dir: string, depth: number): void => {
+    if (depth > 8) return;
+    let entries;
+    try {
+      entries = readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      const path = join(dir, entry.name);
+      if (REPORT_DIRS.has(entry.name)) rmSync(path, { recursive: true, force: true });
+      else if (!SKIP_DIRS.has(entry.name)) walk(path, depth + 1);
+    }
+  };
+  walk(repoPath, 0);
+}
 
 /** Every test in every report under `repoPath`'s `target/` directories. */
 export function readTestReports(repoPath: string): Map<string, TestResult> {
