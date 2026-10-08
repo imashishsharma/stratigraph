@@ -161,3 +161,30 @@ product note, and the gap map covered only Maven.
   reaching parity, human decisions per repo, and wall-clock time.
 - Known fixes must stay exact. A fix that could change behaviour is not a
   known fix; it is a judgment for the AI or a decision for a person.
+
+## Amendment (2026-10-08): how "better" is judged, learned from the benchmark
+
+The first rule was "fewer failures and no newly red test." The agent benchmark
+(`bench/upgrade-gap/agent-bench.sh`, the gap map's 10 repos) rejected six
+correct fixes under it. Each was a fix that let the build get further and
+reveal errors that had always been there. A build is now compared in this
+order, the first difference deciding:
+
+1. **Stage.** The POM cannot be read or resolved, then it fails to compile or
+   a plugin fails, then it builds with red or missing tests, then parity
+   (blog-app: dropping a stale BOM override exposed compile errors).
+2. **How far through the lifecycle it got**, counted in plugin goals Maven
+   started (kafdrop: the wrapper fix let `clean` run, then `compile` failed).
+3. **Whether javac started at all.** An option error that names no file is
+   worse than source errors (kafdrop: `--add-exports` with `--release`).
+4. **Whether javac got past parsing.** Syntax errors are worse than
+   unresolved names, at any count; javac stops at 100 errors, so counts tie
+   (petclinic-reactjs: the generator's escaping bug).
+5. **Fewer build failures**, then **fewer red or missing tests**.
+
+A test is *newly red* only if it passed in the previous build, not merely at
+baseline: getting 39 skipped integration tests to run, 34 green and 5 red,
+is progress (WebGoat). A green build that runs fewer of the baseline's
+passing tests is itself a failure to work on. A failure caused by other
+failures (a coverage gate) waits for them and does not set the status.
+Parity with no tests is reported as unverified.
