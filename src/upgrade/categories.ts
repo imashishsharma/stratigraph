@@ -42,6 +42,14 @@ const has = (pattern: RegExp) => (text: string) => pattern.test(text);
 /** First match wins, so narrower rules come before broader ones. */
 const RULES: Rule[] = [
   {
+    id: 'network',
+    title: 'Maven could not download a dependency (network)',
+    disposition: 'decision',
+    match: has(/Could not transfer artifact[\s\S]{0,400}?(?:timed out|Connection reset|Connection refused|Remote host terminated|status code: 5\d\d)/),
+    guidance: 'The repository could not be reached; nothing in the code is wrong. Check the network or proxy and run again.',
+    options: ['Run again once the network or the repository manager (Nexus, Artifactory) is reachable.', 'Point Maven at a reachable mirror in settings.xml.'],
+  },
+  {
     id: 'context-failure-repeated',
     title: 'Tests skipped because their Spring context already failed to load',
     disposition: 'mechanical',

@@ -141,7 +141,7 @@ export async function runUpgrade(options: RunOptions): Promise<UpgradeReport> {
   // 1. Baseline: the reference every later build is compared with.
   info('upgrade: baseline build (this is the reference: tests red here are not the upgrade\'s to fix)');
   clearTestReports(repoPath);
-  const baselineRun = await baselineMaven(VERIFY, 'baseline');
+  const baselineRun = await withNetworkRetry(baselineMaven, VERIFY, 'baseline', () => clearTestReports(repoPath));
   const baselineLog = parseBuildLog(baselineRun.log, repoPath);
   const baselineTests = readTestReports(repoPath);
   report.builds += 1;
@@ -182,7 +182,7 @@ export async function runUpgrade(options: RunOptions): Promise<UpgradeReport> {
   // 3. The loop.
   const evaluate = async (label: string): Promise<BuildState> => {
     clearTestReports(repoPath);
-    const result = await maven(VERIFY, label);
+    const result = await withNetworkRetry(maven, VERIFY, label, () => clearTestReports(repoPath));
     report.builds += 1;
     const log = parseBuildLog(result.log, repoPath);
     const tests = readTestReports(repoPath);
@@ -347,6 +347,22 @@ function flagCodeChangedForTests(repoPath: string, sha: string, failures: Classi
   const main = changedFiles(repoPath, `${sha}~1`, sha).filter((path) => /(^|\/)src\/main\//.test(path));
   if (main.length === 0) return;
   report.codeChangedForTests.push({ sha, files: main, tests: failures.flatMap((failure) => (failure.test ? [failure.test.id] : [])).slice(0, 5) });
+}
+
+/** Maven could not download something because the network failed, not because it does not exist. */
+export const NETWORK_FAILURE = /Could not transfer artifact[\s\S]{0,400}?(?:timed out|Connection reset|Connection refused|Remote host terminated|status code: 5\d\d|Read timed out)/;
+
+/**
+ * Run a build, and once more if it failed only because a download did
+ * (found on the unseen corpus: a Maven Central timeout made a healthy
+ * project look baseline-broken).
+ */
+async function withNetworkRetry(maven: Maven, args: string[], label: string, beforeRetry: () => void): Promise<MavenResult> {
+  const first = await maven(args, label);
+  if (first.exitCode === 0 || !NETWORK_FAILURE.test(first.log)) return first;
+  warn(`upgrade: ${label} failed on a download (network); retrying once`);
+  beforeRetry();
+  return maven(args, `${label}-retry`);
 }
 
 function isParity(state: BuildState): boolean {

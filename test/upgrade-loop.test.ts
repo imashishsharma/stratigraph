@@ -667,6 +667,30 @@ describe('upgrade run', () => {
     const ai = report.commits.find((commit) => commit.layer === 'ai')!;
     expect(gitIn(repo, ['log', '-1', '--format=%B', ai.sha])).toContain('line-ending changes on lines it did not edit were reverted in: src/main/java/d/SampleData.java');
   });
+
+  it('retries a build once when it failed on a download, not on the project (unseen corpus: OnlineBankingRestAPI)', async () => {
+    const repo = repoWith({ 'pom.xml': POM('2.6.5') });
+    let baselineTries = 0;
+    const inner = fakeMaven(repo, () => ({ build: 'ok', tests: { boots: 'passed' } }), () => writeFileSync(join(repo, 'pom.xml'), POM('3.5.6')), []);
+    const maven: Maven = async (args, label) => {
+      if (label.startsWith('baseline')) {
+        baselineTries += 1;
+        if (baselineTries === 1) {
+          return {
+            exitCode: 1,
+            timedOut: false,
+            logPath: join(repo, '..', 'b.log'),
+            seconds: 1,
+            log: '[ERROR] Failed to execute goal org.springframework.boot:spring-boot-maven-plugin:2.6.5:repackage (repackage) on project x: Execution repackage failed: Plugin could not be resolved: Could not transfer artifact org.springframework.boot:spring-boot-buildpack-platform:pom:2.6.5 from/to central (https://repo.maven.apache.org/maven2): transfer failed: Operation timed out (Read failed) -> [Help 1]\n[INFO] BUILD FAILURE\n',
+          };
+        }
+      }
+      return inner(args, label);
+    };
+    const report = await runUpgrade(options(repo, maven));
+    expect(baselineTries).toBe(2);
+    expect(report.status).toBe('parity');
+  });
 });
 
 function read(repo: string): string {
