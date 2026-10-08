@@ -536,6 +536,31 @@ describe('upgrade run', () => {
     const report = await runUpgrade(options(repo, maven));
     expect(report.remaining.map((handoff) => handoff.category)).toEqual(['hibernate-6']);
   });
+
+  it('counts a compiler that starts as progress over one that refuses its options (kafdrop: --add-exports, then springfox)', async () => {
+    const pom = POM('2.7.5').replace(
+      '<dependencies>',
+      '<build><plugins><plugin><artifactId>maven-compiler-plugin</artifactId><configuration><compilerArgs>\n<arg>--add-exports</arg>\n<arg>jdk.management.agent/jdk.internal.agent=ALL-UNNAMED</arg>\n</compilerArgs></configuration></plugin></plugins></build>\n    <dependencies>',
+    );
+    const repo = repoWith({ 'pom.xml': pom, 'src/main/java/k/Swagger.java': 'class Swagger {}' });
+    const maven = fakeMaven(
+      repo,
+      (readFile) => {
+        const text = readFile('pom.xml');
+        if (text.includes('2.7.5')) return { build: 'ok', tests: {} };
+        if (text.includes('--add-exports')) return { build: 'error: exporting a package from system module jdk.management.agent is not allowed with --release', tests: {} };
+        return {
+          build: `${repo}/src/main/java/k/Swagger.java:[3,1] package springfox.documentation does not exist\n[ERROR] ${repo}/src/main/java/k/Swagger.java:[4,1] package springfox.documentation.spi does not exist`,
+          tests: {},
+        };
+      },
+      () => writeFileSync(join(repo, 'pom.xml'), read(repo).replace('2.7.5', '3.5.6')),
+      [],
+    );
+    const report = await runUpgrade(options(repo, maven));
+    expect(report.attempts[0]).toMatchObject({ id: 'drop-unused-add-exports', accepted: true });
+    expect(report.remaining.map((handoff) => handoff.category)).toEqual(['springfox']);
+  });
 });
 
 function read(repo: string): string {

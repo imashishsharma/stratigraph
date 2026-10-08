@@ -377,10 +377,20 @@ function classify(log: BuildLog, diff: TestDiff, repoPath: string | null = null)
  */
 function stage(state: BuildState): number {
   if (!state.log.success) {
-    const early = state.log.failures.some((failure) => failure.kind === 'pom' || failure.kind === 'dependency');
-    return early || state.log.failures.length === 0 ? 3 : 2;
+    const failures = state.log.failures;
+    return failures.length === 0 || failures.some((failure) => failure.kind === 'pom' || failure.kind === 'dependency') ? 3 : 2;
   }
   return state.diff.regressed.length + state.diff.missing.length > 0 ? 1 : 0;
+}
+
+/**
+ * javac refusing its own options (an error naming no file) compiles nothing;
+ * once it starts, the source errors it then reports were always there
+ * (kafdrop: --add-exports with --release, then springfox). Compared only
+ * between builds that got equally far.
+ */
+function compilerRefused(state: BuildState): number {
+  return state.log.failures.some((failure) => failure.kind === 'compile' && failure.file === null) ? 1 : 0;
 }
 
 function sourceLine(repoPath: string, file: string | null, line: number | null): string | null {
@@ -392,10 +402,10 @@ function sourceLine(repoPath: string, file: string | null, line: number | null):
   }
 }
 
-function score(state: BuildState): [number, number, number, number] {
+function score(state: BuildState): [number, number, number, number, number] {
   // Among failing builds, the one that got further through the lifecycle is better.
   const further = state.log.success ? 0 : -state.log.goals;
-  return [stage(state), further, state.log.failures.length, state.diff.regressed.length + state.diff.missing.length];
+  return [stage(state), further, compilerRefused(state), state.log.failures.length, state.diff.regressed.length + state.diff.missing.length];
 }
 
 /** null when `next` is better than `previous`; otherwise why it is not. */
