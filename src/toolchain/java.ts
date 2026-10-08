@@ -147,7 +147,9 @@ function explicitCandidates(options: FindJavaOptions): JavaRuntime[] {
     if (runtime) out.push(runtime);
   }
 
-  const onPath = probeVersion('java');
+  // The PATH of the environment we were given, not this process's: a caller
+  // that passes an environment without PATH has no `java` on it.
+  const onPath = env['PATH'] ? probeVersion('java', env) : null;
   if (onPath) {
     const major = parseMajor(onPath);
     out.push({
@@ -219,11 +221,11 @@ export function readReleaseVersion(home: string): string | null {
   }
 }
 
-function probeVersion(javaBin: string): string | null {
+function probeVersion(javaBin: string, env: NodeJS.ProcessEnv = process.env): string | null {
   // `java -version` writes to stderr on every JDK ever shipped, and exits 0:
   // read stderr whether or not it succeeded (a JDK 8 with no \`release\` file
   // was reported as no JDK at all).
-  const result = spawnSync(javaBin, ['-version'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+  const result = spawnSync(javaBin, ['-version'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], env });
   if (result.error) return null;
   return extractVersion(`${result.stderr ?? ''}\n${result.stdout ?? ''}`);
 }

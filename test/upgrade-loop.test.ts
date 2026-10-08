@@ -13,6 +13,16 @@ import { TARGETS } from '../src/upgrade/targets.js';
 
 setQuiet(true);
 
+// The upgrade commits with whatever identity git has; CI runners have none.
+for (const [key, value] of Object.entries({
+  GIT_AUTHOR_NAME: 'Upgrade Test',
+  GIT_AUTHOR_EMAIL: 'upgrade@example.invalid',
+  GIT_COMMITTER_NAME: 'Upgrade Test',
+  GIT_COMMITTER_EMAIL: 'upgrade@example.invalid',
+})) {
+  process.env[key] ??= value;
+}
+
 function gitIn(repo: string, args: string[]): string {
   return execFileSync('git', ['-c', 'user.name=T', '-c', 'user.email=t@example.invalid', '-c', 'commit.gpgsign=false', ...args], {
     cwd: repo,
