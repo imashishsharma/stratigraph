@@ -99,6 +99,10 @@ So the first release authenticates with a granular access token (created with
 no OTP to type) held as the `NPM_TOKEN` repository secret. **Once 1.0.0 exists,
 switch the workflow to trusted publishing and delete the secret.**
 
+> **Done for 2.1.0 (2026-10-08):** the release workflow publishes through trusted
+> publishing on Node 22 with npm upgraded on the runner; the token was revoked
+> and the `NPM_TOKEN` secret deleted.
+
 ## Alternatives considered
 
 **Bundle the jar in the npm tarball.** Rejected: tens of megabytes on every

@@ -1,4 +1,4 @@
-{"v":1,"type":"meta","extractor":"typescript","extractorVersion":"2.0.1","repoPath":"<repo>"}
+{"v":1,"type":"meta","extractor":"typescript","extractorVersion":"2.1.0","repoPath":"<repo>"}
 {"v":1,"type":"file","path":"projects/shop/src/app/admin/admin-page.component.ts","language":"typescript","loc":16}
 {"v":1,"type":"file","path":"projects/shop/src/app/admin/widgets/stats.component.ts","language":"typescript","loc":8}
 {"v":1,"type":"file","path":"projects/shop/src/app/app.component.ts","language":"typescript","loc":8}

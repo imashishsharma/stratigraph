@@ -1,4 +1,4 @@
-{"v":1,"type":"meta","extractor":"java","extractorVersion":"2.0.1","repoPath":"<repo>"}
+{"v":1,"type":"meta","extractor":"java","extractorVersion":"2.1.0","repoPath":"<repo>"}
 {"v":1,"type":"file","path":"src/main/java/com/example/shop/domain/Customer.java","language":"java","loc":26}
 {"v":1,"type":"file","path":"src/main/java/com/example/shop/domain/Order.java","language":"java","loc":64}
 {"v":1,"type":"file","path":"src/main/java/com/example/shop/domain/OrderLine.java","language":"java","loc":24}

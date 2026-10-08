@@ -1,4 +1,4 @@
-{"v":1,"type":"meta","extractor":"java","extractorVersion":"2.0.1","repoPath":"<repo>"}
+{"v":1,"type":"meta","extractor":"java","extractorVersion":"2.1.0","repoPath":"<repo>"}
 {"v":1,"type":"file","path":"core/src/main/java/com/example/split/util/Strings.java","language":"java","loc":10}
 {"v":1,"type":"file","path":"extra/src/main/java/com/example/split/report/Report.java","language":"java","loc":9}
 {"v":1,"type":"file","path":"extra/src/main/java/com/example/split/report/ReportApplication.java","language":"java","loc":8}

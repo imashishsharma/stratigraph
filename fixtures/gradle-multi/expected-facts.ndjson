@@ -1,4 +1,4 @@
-{"v":1,"type":"meta","extractor":"java","extractorVersion":"2.0.1","repoPath":"<repo>"}
+{"v":1,"type":"meta","extractor":"java","extractorVersion":"2.1.0","repoPath":"<repo>"}
 {"v":1,"type":"file","path":"app/src/main/java/com/example/gradle/app/GreetingApi.java","language":"java","loc":9}
 {"v":1,"type":"file","path":"app/src/main/java/com/example/gradle/app/GreetingApplication.java","language":"java","loc":8}
 {"v":1,"type":"file","path":"lib/src/main/java/com/example/gradle/lib/Text.java","language":"java","loc":10}

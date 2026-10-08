@@ -10,10 +10,35 @@ schema carries a `user_version` and is migrated forward, and every JSON
 document carries `format`, which moves only for a change a parser could trip
 over.
 
-## [Unreleased]
+## [2.1.0] — 2026-10-08
 
 ### Added
 
+- **`stratigraph upgrade plan|run`: a Spring Boot upgrade agent**
+  ([ADR-0047](docs/adr/0047-the-upgrade-agent.md)). It handles 2.7 → 3.5 and
+  3.x → 4.0 for Maven projects.
+  - `plan` reads the project with no build and no network. It lists the
+    versions and the JDKs it will use, and cites each file:line where the gap
+    map saw an upgrade break.
+  - `run` works on a new branch. It builds and tests the project as it is,
+    then runs the OpenRewrite recipe as one commit. It then loops: build,
+    classify each failure, apply a known fix, rebuild. With `--ai
+    claude-code`, the Claude Code CLI also attempts what the known fixes
+    cannot.
+  - A change is kept only if the build gets further and no passing test
+    turns red. A change that disables or deletes tests is rejected outright.
+  - Decisions are never attempted: an authorisation rule, or an HTTP
+    contract change such as how trailing slashes are matched.
+  - `upgrade-report.md` is committed on the branch. It shows every test
+    compared with its result before the upgrade, and the commits in three
+    layers: recipe, known fixes and AI fixes. For everything left it gives
+    the evidence, what was tried, and the options for each decision.
+  - On the 10 public apps of [`bench/upgrade-gap/`](bench/upgrade-gap/README.md),
+    OpenRewrite alone left 0/10 green. Three reached parity with no human
+    edits (spring-petclinic, jwt-spring-security-demo, jhipster-sample-app).
+    One stops with an HTTP-contract decision and its options
+    (spring-petclinic-rest). The rest come back with categorised, cited
+    reports.
 - **Incremental re-runs** ([ADR-0046](docs/adr/0046-incremental-runs-replay-unchanged-inputs.md)).
   `extract` replays an extractor's stored facts when every file it could read,
   and the extractor itself, are byte-identical to the last run. `history`
@@ -31,6 +56,14 @@ over.
   neighbours and MCP dependency rows no longer re-derive package ancestry once
   per row (nacos: 33 s → 4 s, with identical findings and citations).
 - The README's MCP section lists all thirteen tools.
+- Releases publish through npm trusted publishing (OIDC). No npm token is
+  stored anywhere.
+
+### Fixed
+
+- **A JDK with no `release` file was reported as absent** (e.g. Corretto 8).
+  `java -version` prints to stderr and exits 0, and only stdout was read.
+  This affected `doctor` and the JDK choice.
 
 ## [2.0.1] — 2026-09-29
 

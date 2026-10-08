@@ -4,9 +4,11 @@ on:
   push:
     tags: ['v*']
 
-# OIDC for npm provenance: no long-lived NPM_TOKEN with publish rights needed
-# beyond the granular automation token, and the package page gets a verified
-# provenance badge. See ADR-0004.
+# npm trusted publishing: the workflow proves who it is to npm over OIDC, so
+# there is no long-lived publish token to leak, rotate or revoke, and the
+# package page gets a verified provenance badge. Configured on npmjs.com
+# (package settings → Trusted Publisher: this repository, release.yml).
+# See ADR-0004.
 permissions:
   contents: write
   id-token: write
@@ -25,9 +27,12 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           registry-url: https://registry.npmjs.org
           cache: npm
+
+      # Trusted publishing needs npm 11.5.1 or newer.
+      - run: npm install -g npm@latest
 
       - uses: actions/setup-java@v4
         with:
@@ -64,8 +69,6 @@ jobs:
         run: npm pack --dry-run 2>&1 | grep -q extractor-checksum.json
 
       - run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       # After publish: a release with a jar nobody can fetch is recoverable by
       # re-uploading, where a published package pinning a digest for a jar that
