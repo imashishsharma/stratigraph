@@ -1,0 +1,10 @@
+# name	url	sha	base_jdk	target_jdk	recipe	mvn_args
+microservice-rbac-user-management	https://github.com/andreagiassi/microservice-rbac-user-management.git	04500e7ded03e48686c884a5a6710a3943873c41	8.0.432-amzn	17.0.13-amzn	org.openrewrite.java.spring.boot3.UpgradeSpringBoot_3_5	
+OnlineBankingRestAPI	https://github.com/cbarkinozer/OnlineBankingRestAPI.git	bd9d6fce91d0fe80a7abbbeac173f37d540344b0	11.0.25-amzn	17.0.13-amzn	org.openrewrite.java.spring.boot3.UpgradeSpringBoot_3_5	
+xiaoyuanxianyu	https://github.com/fanfpy/xiaoyuanxianyu.git	a5055700401fa7917c1ef42ea7f14d8d56555276	8.0.432-amzn	17.0.13-amzn	org.openrewrite.java.spring.boot3.UpgradeSpringBoot_3_5	
+springboot-file-uploader	https://github.com/hacker-and-painter/springboot-file-uploader.git	96a8ec385bf0c0ea73f50e0cde598e28db90b975	8.0.432-amzn	17.0.13-amzn	org.openrewrite.java.spring.boot3.UpgradeSpringBoot_3_5	
+sql-dog-backend	https://github.com/lhccong/sql-dog-backend.git	e0c062cb745966c302c4bc4e7e83113471ee205f	17.0.13-amzn	17.0.13-amzn	org.openrewrite.java.spring.boot4.UpgradeSpringBoot_4_0	
+Opentheso	https://github.com/MOM-CNRS/Opentheso.git	12704a57a9a84a6ddc972d8bb2ead7cde22677c7	17.0.13-amzn	17.0.13-amzn	org.openrewrite.java.spring.boot4.UpgradeSpringBoot_4_0	
+Refactoring-Bot	https://github.com/Refactoring-Bot/Refactoring-Bot.git	2496468cbf53a8474ea6f1a8edab6b6f8e02211f	8.0.432-amzn	17.0.13-amzn	org.openrewrite.java.spring.boot3.UpgradeSpringBoot_3_5	
+spring-boot-testing-reddit-clone	https://github.com/SaiUpadhyayula/spring-boot-testing-reddit-clone.git	3893cb52cd28121e32740a058469c2958da911af	8.0.432-amzn	17.0.13-amzn	org.openrewrite.java.spring.boot3.UpgradeSpringBoot_3_5	
+jtt808-demo	https://github.com/yezhihao/jtt808-demo.git	db1ce025c858629124c6a21b0c3a46b42f358144	8.0.432-amzn	17.0.13-amzn	org.openrewrite.java.spring.boot3.UpgradeSpringBoot_3_5	

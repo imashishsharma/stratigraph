@@ -9,6 +9,8 @@
 #   STRATIGRAPH  command to run (default: node <repo>/dist/cli.js)
 #   WORK         where fresh clones go (default: ~/.cache/stratigraph/upgrade-bench)
 #   GAPMAP       where the gap map's source mirrors are (default: ~/.cache/stratigraph/gapmap)
+#   CORPUS       the corpus to run (default: corpus.tsv next to this script)
+#   RESULTS      where reports and logs go (default: $WORK/results)
 #
 # Each repo is cloned fresh at its pinned SHA; the upgrade runs on its own branch;
 # upgrade-report.json is copied to $WORK/results/<name>.json and summarised.
@@ -22,7 +24,9 @@ JDKS=$HOME/.sdkman/candidates/java
 AI=()
 if [ "${1:-}" = "--ai" ]; then AI=(--ai claude-code --ai-budget 3); shift; fi
 ONLY=("$@")
-mkdir -p "$WORK/results"
+CORPUS=${CORPUS:-$HERE/corpus.tsv}
+RESULTS=${RESULTS:-$WORK/results}
+mkdir -p "$RESULTS"
 
 while IFS=$'\t' read -r name url sha base_jdk target_jdk recipe mvn_args; do
   [ -z "$name" ] || [ "${name:0:1}" = "#" ] && continue
@@ -35,11 +39,11 @@ while IFS=$'\t' read -r name url sha base_jdk target_jdk recipe mvn_args; do
   echo "[$(date -u +%H:%M:%S)] $name → $to"
   (cd "$dir" && $STRATIGRAPH upgrade run . --to "$to" \
       --baseline-java-home "$JDKS/$base_jdk" --target-java-home "$JDKS/$target_jdk" \
-      ${mvn_args:+--maven-args "$mvn_args"} "${AI[@]}" > "$WORK/results/$name.log" 2>&1)
-  cp "$dir/upgrade-report.json" "$WORK/results/$name.json" 2>/dev/null || echo "$name: no report (see $WORK/results/$name.log)"
-done < "$HERE/corpus.tsv"
+      ${mvn_args:+--maven-args "$mvn_args"} "${AI[@]}" > "$RESULTS/$name.log" 2>&1)
+  cp "$dir/upgrade-report.json" "$RESULTS/$name.json" 2>/dev/null || echo "$name: no report (see $RESULTS/$name.log)"
+done < "$CORPUS"
 
-python3 - "$WORK/results" <<'EOF'
+python3 - "$RESULTS" <<'EOF'
 import json, os, sys
 d = sys.argv[1]
 rows = []

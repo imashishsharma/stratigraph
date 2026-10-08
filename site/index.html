@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Stratigraph — architecture maps for Java, Spring Boot &amp; Angular codebases</title>
 <meta name="description" content="Stratigraph reads a Java, Spring Boot and Angular codebase plus its git history and produces C4 architecture diagrams, an ER data model from JPA and Liquibase/Flyway, the HTTP API, hotspots and cited findings — and states what it could not see. Open source, runs locally, with an MCP server for AI agents.">
-<meta name="keywords" content="codebase analysis, software architecture, C4 diagrams, Spring Boot, Java, Angular, legacy code, monolith, ER diagram, JPA, Liquibase, Flyway, hotspots, technical debt, code archaeology, MCP server, static analysis">
+<meta name="keywords" content="codebase analysis, software architecture, C4 diagrams, Spring Boot, Java, Angular, legacy code, monolith, ER diagram, JPA, Liquibase, Flyway, hotspots, technical debt, code archaeology, MCP server, static analysis, Spring Boot upgrade, Spring Boot 3 migration, Spring Boot 4, OpenRewrite, javax to jakarta">
 <link rel="canonical" href="https://imashishsharma.github.io/stratigraph/">
 <meta name="theme-color" content="#0f1c2e">
 <link rel="icon" href="assets/img/favicon.svg" type="image/svg+xml">
@@ -95,6 +95,7 @@
       <a href="#features">Features</a>
       <a href="#use-cases">Use cases</a>
       <a href="#how">How it works</a>
+      <a href="#upgrade">Upgrades</a>
       <a href="#proof">Benchmark</a>
       <a href="#faq">FAQ</a>
       <a class="btn btn-ghost" href="https://github.com/imashishsharma/stratigraph">GitHub</a>
@@ -289,6 +290,51 @@ main source files parsed (97%).</span></pre>
   </div>
 </section>
 
+<section class="section upgrade" id="upgrade">
+  <div class="wrap mcp-grid">
+    <div>
+      <p class="eyebrow">Upgrade agent</p>
+      <h2>Spring Boot upgrades that know when to stop.</h2>
+      <p><code>stratigraph upgrade run</code> takes a Maven project from Boot 2.7 to 3.5, or from 3.x to 4.0. It runs OpenRewrite's recipe, then works through what the recipe leaves broken, on its own branch. Every change is rebuilt and kept only if the build gets further and no passing test turns red.</p>
+      <ul class="ticks">
+        <li><strong>Baseline first:</strong> every test is compared with its own result before the upgrade, so "red" means <em>passed before, fails now</em></li>
+        <li><strong>Layered commits:</strong> the recipe, exact known fixes, and AI fixes from Claude Code (opt-in with <code>--ai claude-code</code>), each reviewable on its own</li>
+        <li><strong>Hands back what is yours:</strong> an authorisation rule or an HTTP contract is never chosen for you; it is handed off with the options</li>
+        <li><strong>Guardrails outside the model:</strong> a change that disables or deletes a test is rejected, and application code bent to pass a test is flagged for review</li>
+      </ul>
+      <div class="table-wrap compact">
+        <table>
+          <thead><tr><th>10 public Spring Boot apps</th><th>OpenRewrite alone</th><th>Stratigraph</th></tr></thead>
+          <tbody>
+            <tr><td>Every test that passed before still passes, no human edits</td><td>0 / 10</td><td class="ok">5 / 10</td></tr>
+            <tr><td>Stopped at a decision that is yours to make, with options</td><td>—</td><td>2 / 10</td></tr>
+            <tr><td>Time per app · AI cost per app</td><td>—</td><td>1–14 min · $0–2.54</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="fine"><a href="https://github.com/imashishsharma/stratigraph/blob/main/bench/upgrade-gap/README.md">The benchmark, per app, with what is left for each →</a></p>
+    </div>
+<pre class="term" aria-label="Abridged upgrade run and report, from the spring-petclinic-reactjs benchmark run"><span class="c">$ stratigraph upgrade run --to 4.0 --ai claude-code</span>
+upgrade: baseline 183/183 tests pass
+upgrade: running …boot4.UpgradeSpringBoot_4_0
+upgrade: known fix kept: generate Jakarta API code
+upgrade: AI attempt 2 on removed-spring-api (1 failure(s))
+upgrade: needs-decision — see upgrade-report.md
+
+<span class="c">## Needs your decision</span>
+### Two security filter chains match the same requests
+Evidence: 118 tests fail to start a context
+  (UnreachableFilterChainException)
+Options:
+1. Scope the API chain with securityMatcher("/api/**")
+2. Merge the chains into one, rules made explicit
+3. Keep one chain, if the other was dead config
+
+<span class="c">Recipe · 1 known fix · 3 AI fixes (authored by a model)
+Abridged from the spring-petclinic-reactjs run.</span></pre>
+  </div>
+</section>
+
 <section class="section proof" id="proof">
   <div class="wrap">
     <p class="eyebrow center">Measured, not asserted</p>
@@ -335,9 +381,10 @@ stratigraph mcp --repo path/to/repo</pre>
 <section class="section faq" id="faq">
   <div class="wrap narrow">
     <h2 class="center">Questions</h2>
-    <details><summary>Does Stratigraph send my code anywhere?</summary><p>No. Extraction and history mining run entirely on your machine with no network access. The optional interpretation layer sends structural metadata to a model API only if you configure a key, and never raw source unless you pass <code>--send-source</code>. Everything works with <code>--no-llm</code>.</p></details>
+    <details><summary>Does Stratigraph send my code anywhere?</summary><p>No. Extraction and history mining run entirely on your machine with no network access. The optional interpretation layer sends structural metadata to a model API only if you configure a key, and never raw source unless you pass <code>--send-source</code>. Everything works with <code>--no-llm</code>. The upgrade agent's AI fixer is opt-in (<code>--ai claude-code</code>): it runs the Claude Code CLI on your machine, under your own Claude account, and says so before it starts.</p></details>
     <details><summary>Which languages and frameworks does it understand?</summary><p>Java and Kotlin with Spring, Spring Boot, JPA/Hibernate, Spring Data and JAX-RS; Liquibase, Flyway and SQL DDL; TypeScript and Angular — NgModules, standalone components, routes and DI; OpenAPI specs; Koa and Express routes.</p></details>
-    <details><summary>Do I need a JDK or a working build?</summary><p>Only for the Java half, which needs a JDK 17+. Stratigraph never runs your build. If your Maven dependencies are already in the local cache it uses them offline for richer types; otherwise it reads source only — and says so in every view.</p></details>
+    <details><summary>Do I need a JDK or a working build?</summary><p>Only for the Java half, which needs a JDK 17+. Analysis never runs your build. If your Maven dependencies are already in the local cache it uses them offline for richer types; otherwise it reads source only — and says so in every view. <code>stratigraph upgrade</code> is the exception: upgrading means building, so it runs Maven (which downloads the new versions) on a branch of its own, and never pushes.</p></details>
+    <details><summary>How does the upgrade agent decide what to fix and what to hand back?</summary><p>It builds and tests the project before touching it, so every later failure is measured against that baseline. Each failure is sorted from its log: <em>mechanical</em> failures get an exact known fix; <em>judgment</em> calls can go to the AI fixer; <em>decisions</em> — an authorisation rule, an HTTP contract — are never attempted and come back with the options. A change is kept only if the build gets further and no passing test turns red.</p></details>
     <details><summary>How is this different from SonarQube or Structurizr?</summary><p>SonarQube reports rule violations file by file; Structurizr draws the architecture you describe. Stratigraph derives the architecture, data model and API from the code and its history, cites every element, and tells you how much of the code each view covers.</p></details>
     <details><summary>Is it free?</summary><p>Yes — open source under Apache 2.0, on <a href="https://www.npmjs.com/package/stratigraph">npm</a> and <a href="https://github.com/imashishsharma/stratigraph">GitHub</a>.</p></details>
   </div>
