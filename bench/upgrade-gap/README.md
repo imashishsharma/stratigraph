@@ -91,6 +91,8 @@ rejected, and, for a decision, the options.
   the static sample data's ids by reflection to fit Hibernate 7's merge
   semantics. The commit message explains why.
 
+**On apps it had never seen:** [`../upgrade-fresh/`](../upgrade-fresh/README.md) runs the same agent on 9 public apps chosen mechanically after development; 8 of 9 reach parity, the ninth builds but has no tests. Read its caveats, since several suites are thin.
+
 ### What the benchmark changed in the agent
 
 Every one of these was found by a run going wrong, fixed with a test written

@@ -10,6 +10,28 @@ schema carries a `user_version` and is migrated forward, and every JSON
 document carries `format`, which moves only for a change a parser could trip
 over.
 
+## [Unreleased]
+
+### Added
+
+- **Upgrade reports flag application code that was changed to make failing
+  tests pass**, first in the review list. AI edits no longer carry
+  whitespace or line-ending noise on lines they did not change, and the
+  commit says where it was reverted.
+
+### Fixed
+
+Found by running the upgrade agent on 9 apps it had never seen
+([`bench/upgrade-fresh/`](bench/upgrade-fresh/README.md); 8/9 reach parity):
+
+- A Maven wrapper committed without its executable bit is run through `sh`.
+- A Maven goal failure whose reason follows on later lines is read. A
+  failed build no rule recognises is reported with its error lines, not
+  judged worst.
+- A build that failed on a dependency download (timeout, reset) is retried
+  once. A repeated network failure is named as such.
+- AI-edit tidying respects `core.autocrlf`.
+
 ## [2.1.0] — 2026-10-08
 
 ### Added
