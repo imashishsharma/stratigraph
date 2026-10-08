@@ -8,7 +8,7 @@
     "node": ">=18.18"
   },
   "bin": {
-    "stratigraph": "./dist/cli.js"
+    "stratigraph": "dist/cli.js"
   },
   "author": "Ashish Sharma",
   "files": [

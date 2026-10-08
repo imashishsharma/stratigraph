@@ -1,6 +1,6 @@
 import { execFile, spawn, spawnSync } from 'node:child_process';
 import { promisify } from 'node:util';
-import { existsSync, mkdtempSync, readdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -225,3 +225,18 @@ function request(
     child.stdin?.write(`${JSON.stringify(message)}\n`);
   });
 }
+
+describe('package.json bin', () => {
+  it('names its command in the form npm 11 keeps on publish', () => {
+    // npm 11's publish silently drops a bin entry written "./dist/cli.js"
+    // ("script name ... was invalid and removed"): the package would ship
+    // with no `stratigraph` command. Caught on the 2.1.0 release run.
+    const pkg = JSON.parse(readFileSync(join(fileURLToPath(new URL('..', import.meta.url)), 'package.json'), 'utf8')) as {
+      bin: Record<string, string>;
+    };
+    for (const [name, path] of Object.entries(pkg.bin)) {
+      expect(path, name).not.toMatch(/^\.\//);
+      expect(existsSync(join(fileURLToPath(new URL('..', import.meta.url)), 'src', path.replace(/^dist\//, '').replace(/\.js$/, '.ts')))).toBe(true);
+    }
+  });
+});
