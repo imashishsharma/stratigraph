@@ -165,7 +165,7 @@ product note, and the gap map covered only Maven.
 ## Amendment (2026-10-08): how "better" is judged, learned from the benchmark
 
 The first rule was "fewer failures and no newly red test." The agent benchmark
-(`bench/upgrade-gap/agent-bench.sh`, the gap map's 10 repos) rejected six
+(`bench/upgrade-gap/agent-bench.sh`, the gap map's 10 repos) rejected seven
 correct fixes under it. Each was a fix that let the build get further and
 reveal errors that had always been there. A build is now compared in this
 order, the first difference deciding:
@@ -180,7 +180,10 @@ order, the first difference deciding:
 4. **Whether javac got past parsing.** Syntax errors are worse than
    unresolved names, at any count; javac stops at 100 errors, so counts tie
    (petclinic-reactjs: the generator's escaping bug).
-5. **Fewer build failures**, then **fewer red or missing tests**.
+5. **Whether its imports resolve.** A missing package stops javac before it
+   checks the code that uses it (petclinic-reactjs: the deleted
+   `orm.hibernate5` import, then a Jackson 3 builder method).
+6. **Fewer build failures**, then **fewer red or missing tests**.
 
 A test is *newly red* only if it passed in the previous build, not merely at
 baseline: getting 39 skipped integration tests to run, 34 green and 5 red,

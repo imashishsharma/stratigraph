@@ -596,6 +596,33 @@ describe('upgrade run', () => {
     const report = await runUpgrade(options(repo, maven, fixer));
     expect(report.attempts.find((attempt) => attempt.by === 'ai')).toMatchObject({ accepted: true });
   });
+
+  it('counts a resolved import as progress when the code behind it then fails once (petclinic-reactjs)', async () => {
+    const repo = repoWith({
+      'pom.xml': POM('3.2.1'),
+      'src/main/java/r/Repo.java': 'package r;\nimport org.springframework.orm.hibernate5.support.OpenSessionInViewFilter;\nclass Repo {}\n',
+    });
+    const fixer: Fixer = {
+      name: 'fake',
+      attempt: async (request) => {
+        writeFileSync(join(request.repoPath, 'src/main/java/r/Repo.java'), 'package r;\nimport org.springframework.orm.jpa.support.OpenEntityManagerInViewFilter;\nclass Repo {}\n');
+        return { summary: 'Pointed the import at the JPA filter.', costUsd: 0, error: null };
+      },
+    };
+    const maven = fakeMaven(
+      repo,
+      (readFile) => {
+        if (readFile('pom.xml').includes('3.2.1')) return { build: 'ok', tests: {} };
+        return readFile('src/main/java/r/Repo.java').includes('hibernate5')
+          ? { build: `${repo}/src/main/java/r/Repo.java:[2,50] package org.springframework.orm.hibernate5.support does not exist`, tests: {} }
+          : { build: `${repo}/src/main/java/r/Errors.java:[83,13] cannot find symbol\n  symbol:   method visibility(PropertyAccessor,Visibility)`, tests: {} };
+      },
+      () => writeFileSync(join(repo, 'pom.xml'), POM('4.0.8')),
+      [],
+    );
+    const report = await runUpgrade(options(repo, maven, fixer));
+    expect(report.attempts.find((attempt) => attempt.by === 'ai')).toMatchObject({ accepted: true });
+  });
 });
 
 function read(repo: string): string {

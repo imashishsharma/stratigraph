@@ -416,7 +416,23 @@ function syntaxErrors(state: BuildState): number {
   return state.log.failures.some((failure) => failure.kind === 'compile' && SYNTAX.test(failure.message)) ? 1 : 0;
 }
 
-function score(state: BuildState): [number, number, number, number, number, number] {
+/**
+ * javac resolves imports before the code that uses them, and a missing
+ * package stops it there: fixing the import lets it check the code, where
+ * the next error may wait, one for one (petclinic-reactjs: the deleted
+ * orm.hibernate5 import, then a Jackson 3 builder method).
+ */
+function importErrors(state: BuildState): number {
+  return state.failures.some(
+    (failure) =>
+      failure.build?.kind === 'compile' &&
+      (/^package [\w.]+ does not exist/.test(failure.build.message) || /\nsource: import /.test(failure.text)),
+  )
+    ? 1
+    : 0;
+}
+
+function score(state: BuildState): [number, number, number, number, number, number, number] {
   // Among failing builds, the one that got further through the lifecycle is better.
   const further = state.log.success ? 0 : -state.log.goals;
   return [
@@ -424,6 +440,7 @@ function score(state: BuildState): [number, number, number, number, number, numb
     further,
     compilerRefused(state),
     syntaxErrors(state),
+    importErrors(state),
     state.log.failures.length,
     state.diff.regressed.length + state.diff.missing.length,
   ];
