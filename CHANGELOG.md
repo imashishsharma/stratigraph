@@ -34,11 +34,13 @@ over.
     layers: recipe, known fixes and AI fixes. For everything left it gives
     the evidence, what was tried, and the options for each decision.
   - On the 10 public apps of [`bench/upgrade-gap/`](bench/upgrade-gap/README.md),
-    OpenRewrite alone left 0/10 green. Three reached parity with no human
-    edits (spring-petclinic, jwt-spring-security-demo, jhipster-sample-app).
-    One stops with an HTTP-contract decision and its options
-    (spring-petclinic-rest). The rest come back with categorised, cited
-    reports.
+    OpenRewrite alone left 0/10 green. **The agent reaches 5/10 at parity
+    with no human edits**: spring-petclinic, jwt-spring-security-demo,
+    jhipster-sample-app, dddsample-core and kafdrop.
+    - Two more stop on purpose at a decision, with options: an HTTP
+      contract, and two security filter chains.
+    - One builds but has no tests, and says so.
+    - Two end with cited reports of what is left.
 - **Incremental re-runs** ([ADR-0046](docs/adr/0046-incremental-runs-replay-unchanged-inputs.md)).
   `extract` replays an extractor's stored facts when every file it could read,
   and the extractor itself, are byte-identical to the last run. `history`
