@@ -42,6 +42,16 @@ const has = (pattern: RegExp) => (text: string) => pattern.test(text);
 /** First match wins, so narrower rules come before broader ones. */
 const RULES: Rule[] = [
   {
+    id: 'context-failure-repeated',
+    title: 'Tests skipped because their Spring context already failed to load',
+    disposition: 'mechanical',
+    consequence: true,
+    match: has(/ApplicationContext failure threshold \(\d+\) exceeded/),
+    guidance:
+      'Spring caches a context that failed to load and fails every later test that needs it without saying why. ' +
+      'The cause is the first failure of that context, reported separately; these clear when it does.',
+  },
+  {
     id: 'coverage-gate',
     title: 'A coverage or quality gate failed',
     disposition: 'mechanical',

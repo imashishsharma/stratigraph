@@ -225,3 +225,12 @@ org.h2.jdbc.JdbcSQLSyntaxErrorException: Syntax error in SQL statement "drop tab
     expect(categoriseTest(test!).id).toBe('http-contract-change');
   });
 });
+
+describe('consequences', () => {
+  it('reads Spring\'s cached context failure as a consequence of the first one (petclinic-reactjs)', () => {
+    const category = categoriseText(
+      'java.lang.IllegalStateException: ApplicationContext failure threshold (1) exceeded: skipping repeated attempt to load context for [WebMergedContextConfiguration@127c0ebd testClass = r.OwnerRestControllerTests]',
+    );
+    expect(category).toMatchObject({ id: 'context-failure-repeated', consequence: true });
+  });
+});
