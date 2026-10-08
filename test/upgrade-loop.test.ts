@@ -654,9 +654,11 @@ describe('upgrade run', () => {
     );
     const report = await runUpgrade(options(repo, maven, fixer));
     expect(report.status).toBe('parity');
-    expect(readFileSync(join(repo, 'src/main/java/d/SampleData.java'), 'utf8')).toBe(
-      'package d;\r\nimport a.B;\r\nclass SampleData {\r\n    void store() { resetIds(); }\r\n}\r\n',
-    );
+    // The file as checkout writes it, whatever core.autocrlf says (Windows CI
+    // stores LF and checks out CRLF): line endings match the original's on disk.
+    const onDisk = readFileSync(join(repo, 'src/main/java/d/SampleData.java'), 'utf8');
+    expect(onDisk.replace(/\r\n/g, '\n')).toBe('package d;\nimport a.B;\nclass SampleData {\n    void store() { resetIds(); }\n}\n');
+    expect(/\r\n/.test(onDisk)).toBe(/\r\n/.test(gitIn(repo, ['cat-file', '--filters', `${report.startSha}:src/main/java/d/SampleData.java`])));
     expect(report.codeChangedForTests).toEqual([
       expect.objectContaining({ files: ['src/main/java/d/SampleData.java'], tests: ['demo.AppTest#stores'] }),
     ]);

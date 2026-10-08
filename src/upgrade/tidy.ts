@@ -31,7 +31,10 @@ export function tidyEdit(repoPath: string, files: string[]): TidyResult {
   for (const file of files) {
     let before: string;
     try {
-      before = git(repoPath, ['show', `HEAD:${file}`]);
+      // As checkout writes it to disk (line-ending filters applied), which is
+      // what the fixer saw and changed; with core.autocrlf the stored blob
+      // has LF while the file on disk has CRLF.
+      before = git(repoPath, ['cat-file', '--filters', `HEAD:${file}`]);
     } catch {
       continue; // a new file: nothing to compare with
     }
