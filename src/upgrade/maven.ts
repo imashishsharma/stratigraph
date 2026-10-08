@@ -8,7 +8,7 @@
  */
 
 import { spawn } from 'node:child_process';
-import { createWriteStream, existsSync, readFileSync } from 'node:fs';
+import { accessSync, constants, createWriteStream, existsSync, readFileSync } from 'node:fs';
 import { delimiter, join } from 'node:path';
 
 import type { JavaRuntime } from '../toolchain/java.js';
@@ -36,7 +36,13 @@ export type Maven = (args: string[], label: string) => Promise<MavenResult>;
 export function createMaven(options: MavenOptions): Maven {
   const wrapper = join(options.repoPath, process.platform === 'win32' ? 'mvnw.cmd' : 'mvnw');
   const hasWrapper = existsSync(wrapper) && existsSync(join(options.repoPath, '.mvn', 'wrapper'));
-  const command = hasWrapper ? wrapper : 'mvn';
+  // A wrapper committed without its executable bit (common from Windows) is
+  // still a shell script: run it through sh rather than fail with EACCES.
+  const [command, prefix] = !hasWrapper
+    ? ['mvn', [] as string[]]
+    : process.platform !== 'win32' && !isExecutable(wrapper)
+      ? ['sh', [wrapper]]
+      : [wrapper, [] as string[]];
   const env = {
     ...(options.env ?? process.env),
     JAVA_HOME: options.javaHome,
@@ -48,7 +54,7 @@ export function createMaven(options: MavenOptions): Maven {
       const logPath = join(options.logDir, `${label}.log`);
       const out = createWriteStream(logPath);
       const started = Date.now();
-      const child = spawn(command, ['-B', '-e', ...args, ...options.extraArgs], {
+      const child = spawn(command, [...prefix, '-B', '-e', ...args, ...options.extraArgs], {
         cwd: options.repoPath,
         env,
         stdio: ['ignore', 'pipe', 'pipe'],
@@ -70,7 +76,7 @@ export function createMaven(options: MavenOptions): Maven {
       child.on('error', (err) => {
         clearTimeout(timer);
         out.end();
-        rejectPromise(err);
+        rejectPromise(new Error(`could not run ${command === 'sh' ? `sh ${wrapper}` : command}: ${err.message}`));
       });
       child.on('close', (code) => {
         clearTimeout(timer);
@@ -85,6 +91,15 @@ export function createMaven(options: MavenOptions): Maven {
         });
       });
     });
+}
+
+function isExecutable(path: string): boolean {
+  try {
+    accessSync(path, constants.X_OK);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /** `clean verify`, carrying on past failing tests so every test's outcome is reported. */
