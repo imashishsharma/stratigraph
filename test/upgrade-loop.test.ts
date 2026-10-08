@@ -571,6 +571,31 @@ describe('upgrade run', () => {
     expect(report.attempts[0]).toMatchObject({ id: 'drop-unused-add-exports', accepted: true });
     expect(report.remaining.map((handoff) => handoff.category)).toEqual(['springfox']);
   });
+
+  it('counts parsing as progress over syntax errors, even at javac\'s error cap (petclinic-reactjs)', async () => {
+    const repo = repoWith({ 'pom.xml': POM('3.2.1'), 'src/main/resources/openapi.yml': 'example: "allowed: [\\"string\\"]"\n' });
+    const fixer: Fixer = {
+      name: 'fake',
+      attempt: async (request) => {
+        writeFileSync(join(request.repoPath, 'src/main/resources/openapi.yml'), "example: \"allowed: ['string']\"\n");
+        return { summary: 'Avoided the generator escaping bug in one example.', costUsd: 0, error: null };
+      },
+    };
+    const errors = (make: (i: number) => string) => Array.from({ length: 100 }, (_, i) => make(i)).join('\n[ERROR] ');
+    const maven = fakeMaven(
+      repo,
+      (readFile) => {
+        if (readFile('pom.xml').includes('3.2.1')) return { build: 'ok', tests: {} };
+        return readFile('src/main/resources/openapi.yml').includes('\\"')
+          ? { build: errors((i) => `${repo}/target/generated-sources/openapi/Api${i}.java:[83,304] ';' expected`), tests: {} }
+          : { build: errors((i) => `${repo}/target/generated-sources/openapi/Api${i}.java:[29,24] package javax.validation does not exist`), tests: {} };
+      },
+      () => writeFileSync(join(repo, 'pom.xml'), POM('4.0.8')),
+      [],
+    );
+    const report = await runUpgrade(options(repo, maven, fixer));
+    expect(report.attempts.find((attempt) => attempt.by === 'ai')).toMatchObject({ accepted: true });
+  });
 });
 
 function read(repo: string): string {

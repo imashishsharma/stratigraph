@@ -402,10 +402,31 @@ function sourceLine(repoPath: string, file: string | null, line: number | null):
   }
 }
 
-function score(state: BuildState): [number, number, number, number, number] {
+/** javac's syntax errors: it parses every file before it resolves any name. */
+const SYNTAX = /^(?:'[^']+' expected|illegal character|not a statement|unclosed |class, interface, enum,? or record expected|illegal start of|reached end of file while parsing)/;
+
+/**
+ * javac reports nothing but syntax errors until every file parses; only then
+ * does it resolve names. A build down to "package x does not exist" has got
+ * further than one with "';' expected", even at the same error count — and
+ * javac stops at 100 errors, so the counts often tie (petclinic-reactjs: the
+ * generator's escaping bug fixed, then the javax left in generated code).
+ */
+function syntaxErrors(state: BuildState): number {
+  return state.log.failures.some((failure) => failure.kind === 'compile' && SYNTAX.test(failure.message)) ? 1 : 0;
+}
+
+function score(state: BuildState): [number, number, number, number, number, number] {
   // Among failing builds, the one that got further through the lifecycle is better.
   const further = state.log.success ? 0 : -state.log.goals;
-  return [stage(state), further, compilerRefused(state), state.log.failures.length, state.diff.regressed.length + state.diff.missing.length];
+  return [
+    stage(state),
+    further,
+    compilerRefused(state),
+    syntaxErrors(state),
+    state.log.failures.length,
+    state.diff.regressed.length + state.diff.missing.length,
+  ];
 }
 
 /** null when `next` is better than `previous`; otherwise why it is not. */
