@@ -623,6 +623,48 @@ describe('upgrade run', () => {
     const report = await runUpgrade(options(repo, maven, fixer));
     expect(report.attempts.find((attempt) => attempt.by === 'ai')).toMatchObject({ accepted: true });
   });
+
+  it('reverts line-ending noise in an AI edit, and flags application code changed for failing tests (dddsample)', async () => {
+    const original = 'package d;\r\nimport a.B;\r\nclass SampleData {\r\n    void store() {}\r\n}\r\n';
+    const repo = repoWith({ 'pom.xml': POM('3.3.10'), 'src/main/java/d/SampleData.java': original });
+    const fixer: Fixer = {
+      name: 'fake',
+      attempt: async (request) => {
+        // A real change in the middle, and every line ending rewritten to LF.
+        writeFileSync(
+          join(request.repoPath, 'src/main/java/d/SampleData.java'),
+          'package d;\nimport a.B;\nclass SampleData {\n    void store() { resetIds(); }\n}\n',
+        );
+        return { summary: 'Reset the sample ids before storing them.', costUsd: 0, error: null };
+      },
+    };
+    const maven = fakeMaven(
+      repo,
+      (readFile) => ({
+        build: 'ok',
+        tests: {
+          stores:
+            readFile('pom.xml').includes('3.3.10') || readFile('src/main/java/d/SampleData.java').includes('resetIds')
+              ? 'passed'
+              : 'org.hibernate.StaleObjectStateException: Row was already updated or deleted',
+        },
+      }),
+      () => writeFileSync(join(repo, 'pom.xml'), POM('4.0.8')),
+      [],
+    );
+    const report = await runUpgrade(options(repo, maven, fixer));
+    expect(report.status).toBe('parity');
+    expect(readFileSync(join(repo, 'src/main/java/d/SampleData.java'), 'utf8')).toBe(
+      'package d;\r\nimport a.B;\r\nclass SampleData {\r\n    void store() { resetIds(); }\r\n}\r\n',
+    );
+    expect(report.codeChangedForTests).toEqual([
+      expect.objectContaining({ files: ['src/main/java/d/SampleData.java'], tests: ['demo.AppTest#stores'] }),
+    ]);
+    const md = readFileSync(join(repo, 'upgrade-report.md'), 'utf8');
+    expect(md).toContain('Application code changed to make failing tests pass');
+    const ai = report.commits.find((commit) => commit.layer === 'ai')!;
+    expect(gitIn(repo, ['log', '-1', '--format=%B', ai.sha])).toContain('line-ending changes on lines it did not edit were reverted in: src/main/java/d/SampleData.java');
+  });
 });
 
 function read(repo: string): string {

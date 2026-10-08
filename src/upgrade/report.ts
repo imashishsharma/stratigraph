@@ -68,6 +68,8 @@ export interface UpgradeReport {
   attempts: Attempt[];
   remaining: Handoff[];
   testFilesChanged: string[];
+  /** Application code a fix changed to make failing tests pass: review first. */
+  codeChangedForTests: Array<{ sha: string; files: string[]; tests: string[] }>;
   builds: number;
   minutes: number;
   costUsd: number;
@@ -165,6 +167,13 @@ export function renderReport(report: UpgradeReport): string {
     const commits = report.commits.filter((commit) => commit.layer === layer);
     out.push(`**${title}:** ${commits.length === 0 ? 'none' : ''}`);
     for (const commit of commits) out.push(`- \`${short(commit.sha)}\` ${commit.subject}`);
+    out.push('');
+  }
+  if (report.codeChangedForTests.length > 0) {
+    out.push('**Application code changed to make failing tests pass (review these first: the code may have bent to the tests):**');
+    for (const change of report.codeChangedForTests) {
+      out.push(`- \`${short(change.sha)}\` ${change.files.map((file) => `\`${file}\``).join(', ')}${change.tests.length > 0 ? ` — for ${change.tests.map((test) => `\`${test}\``).join(', ')}` : ''}`);
+    }
     out.push('');
   }
   if (report.testFilesChanged.length > 0) {

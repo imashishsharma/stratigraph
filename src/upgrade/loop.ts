@@ -27,6 +27,7 @@ import {
   untracked,
 } from './git.js';
 import { KNOWN_FIXES, type Classified } from './known-fixes.js';
+import { tidyEdit } from './tidy.js';
 import { VERIFY, type Maven, type MavenResult } from './maven.js';
 import { readPom } from './pom.js';
 import { REWRITE_PLUGIN_VERSION, REWRITE_SPRING_VERSION, needsUpgrade, type UpgradeTarget } from './targets.js';
@@ -123,6 +124,7 @@ export async function runUpgrade(options: RunOptions): Promise<UpgradeReport> {
     attempts,
     remaining: [],
     testFilesChanged: [],
+    codeChangedForTests: [],
     builds: 0,
     minutes: 0,
     costUsd: 0,
@@ -219,6 +221,7 @@ export async function runUpgrade(options: RunOptions): Promise<UpgradeReport> {
         if (sha) {
           report.commits.push({ sha, layer: 'known-fix', subject: result.description });
           lastGood = sha;
+          flagCodeChangedForTests(repoPath, sha, relevant, report);
         }
         attempts.push({ by: 'known-fix', id: fix.id, category: relevant[0]!.category.id, accepted: true, reason: 'fewer failures, no new red test', sha, description: result.description });
         info(`upgrade: known fix kept: ${result.description}`);
@@ -258,6 +261,9 @@ export async function runUpgrade(options: RunOptions): Promise<UpgradeReport> {
       mavenArgs: options.mavenArgs,
     });
     report.costUsd += fixed.costUsd ?? 0;
+    // Line endings and trailing whitespace the fixer changed on lines it did
+    // not really edit go back as they were, before anything judges the edit.
+    const tidy = tidyEdit(repoPath, dirtyFiles(repoPath, preexisting).filter((path) => trackedChanges(repoPath).includes(path)));
     const touched = dirtyFiles(repoPath, preexisting);
     if (fixed.unavailable) {
       // Not a failed fix: the fixer never ran. Say so once and stop asking it.
@@ -289,11 +295,16 @@ export async function runUpgrade(options: RunOptions): Promise<UpgradeReport> {
     const verdict = judge(state, next);
     if (verdict === null) {
       const subject = `upgrade(ai): ${targetFailures[0]!.category.title}`;
-      const body = `Written by an AI fixer (${fixer.name}); kept because the build had fewer failures and no newly red test.\n\n${fixed.summary}`;
+      const tidied = [...tidy.restored, ...tidy.tidied];
+      const body =
+        `Written by an AI fixer (${fixer.name}); kept because the build got further and no passing test turned red.` +
+        (tidied.length > 0 ? `\nWhitespace and line-ending changes on lines it did not edit were reverted in: ${tidied.join(', ')}.` : '') +
+        `\n\n${fixed.summary}`;
       const sha = commitChanges(repoPath, `${subject}\n\n${body}`, preexisting);
       if (sha) {
         report.commits.push({ sha, layer: 'ai', subject });
         lastGood = sha;
+        flagCodeChangedForTests(repoPath, sha, targetFailures, report);
       }
       attempts.push({ by: 'ai', id: `ai-${number}`, category: categoryId, accepted: true, reason: 'fewer failures, no new red test', sha, description: fixed.summary });
       state = next;
@@ -324,6 +335,18 @@ export async function runUpgrade(options: RunOptions): Promise<UpgradeReport> {
       ? 'needs-decision'
       : 'stuck';
   return finish(status);
+}
+
+/**
+ * A fix aimed only at failing tests that changed application code is the
+ * change most worth a reviewer's eye: the tests may now pass because the code
+ * bent to them (dddsample: sample-data ids reset by reflection for Hibernate 7).
+ */
+function flagCodeChangedForTests(repoPath: string, sha: string, failures: Classified[], report: UpgradeReport): void {
+  if (failures.length === 0 || failures.some((failure) => failure.build !== undefined)) return;
+  const main = changedFiles(repoPath, `${sha}~1`, sha).filter((path) => /(^|\/)src\/main\//.test(path));
+  if (main.length === 0) return;
+  report.codeChangedForTests.push({ sha, files: main, tests: failures.flatMap((failure) => (failure.test ? [failure.test.id] : [])).slice(0, 5) });
 }
 
 function isParity(state: BuildState): boolean {
