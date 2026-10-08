@@ -11,6 +11,11 @@ export default defineConfig({
     // vitest can now time it out, so the limit has to clear the slowest runner
     // rather than the fastest.
     hookTimeout: 300_000,
+    // Fewer parallel workers on Windows: its CI runners have two cores, the
+    // upgrade tests run many git processes, and with a worker per file
+    // vitest's own main process starves and misses its RPC heartbeat
+    // ("Timeout calling onTaskUpdate") though every test passes.
+    ...(process.platform === 'win32' ? { maxWorkers: 2, minWorkers: 1 } : {}),
     coverage: {
       provider: 'v8',
       include: ['src/**/*.ts'],
