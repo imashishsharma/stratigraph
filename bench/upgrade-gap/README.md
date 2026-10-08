@@ -43,6 +43,75 @@ This is the validation experiment from the Upgrade Agent note ("Validation plan"
 | [spring-petclinic-reactjs](logs/spring-petclinic-reactjs.txt) | 3.2.1 → 4.0 | 21 files, +157/−170 | green, 183/0/0/0 | compile fail: openapi-generator 7.16 output does not compile | 4 (2) | **red**: 183/0/182/0 (`UnreachableFilterChainException`), after 4 iterations |
 | [dddsample-core](logs/dddsample-core.txt) | 3.3.10 → 4.0 | 18 files, +62/−56 | green, 131/0/0/3 | **compiles, 131/0/20/2** | 3 (3) | **red**: 131/0/19/2 (Hibernate `StaleObjectStateException`), after 2 iterations |
 
+## The upgrade agent on the same 10 repos (2026-10-08)
+
+`stratigraph upgrade run --ai claude-code`
+([ADR-0047](../../docs/adr/0047-the-upgrade-agent.md)) ran on the same pinned
+commits with the same JDKs and Maven flags. Each repo was cloned fresh, and
+there were no human edits. To reproduce: `bench/upgrade-gap/agent-bench.sh
+--ai`. The AI cost is what Claude Code reported per run.
+
+| Repo | Path | OpenRewrite alone | Agent | Tests after (baseline) | Known fixes | AI fixes | Min | AI $ |
+|---|---|---|---|---|---|---|---|---|
+| spring-petclinic | 3.5 → 4.0 | red | ✅ parity | 54/56 (54/56) | 1 | 0 | 1 | 0 |
+| jwt-spring-security-demo | 2.1 → 3.5 | red | ✅ parity | 16/16 (16/16) | 0 | 2 | 2 | 0.52 |
+| jhipster-sample-app | 3.5 → 4.0 | red | ✅ parity | 211/211 (211/211) | 2 | 5 | 9 | 1.90 |
+| dddsample-core | 3.3 → 4.0 | red (20 tests) | ✅ parity | 128/131 (128/131) | 0 | 1 | 8 | 1.81 |
+| kafdrop | 2.7 → 3.5 | red | ✅ parity | 1/5 (1/5; 4 need Docker) | 2 | 1 | 2 | 0.30 |
+| mall-tiny | 2.7 → 3.5 | red | builds; **unverified** (no tests run) | 0/0 | 0 | 2 | 3 | 0.58 |
+| spring-petclinic-rest | 2.6 → 3.5 | red | 🟡 needs a decision | 151/172 (172/172) | 1 | 1 | 3 | 0.66 |
+| WebGoat | 2.7 → 3.5 | red | stuck | 267/274 (272/274) | 3 | 6 | 14 | 2.54 |
+| spring-boot-blog-app | 2.7 → 3.5 | red | stuck | 49/53 (50/53) | 1 | 4 | 9 | 1.64 |
+| spring-petclinic-reactjs | 3.2 → 4.0 | red | 🟡 needs a decision | 1/183 (183/183) | 1 | 3 | 2 | 0.52 |
+
+**5/10 reach parity with no human edits, and 2 more stop at a decision only a person should make**: every test that passed before
+the upgrade passes after it. OpenRewrite alone reached 0/10. One more builds
+but runs no tests, and the report says so instead of calling it green.
+Every non-parity run ends with a committed `upgrade-report.md` that gives,
+for each remaining failure, the evidence, what was tried and why it was
+rejected, and, for a decision, the options.
+
+- **spring-petclinic-reactjs** also stops on purpose. The generator,
+  Jakarta, Spring 7 and Jackson 3 breakages were all fixed, and it compiles.
+  Then two `SecurityFilterChain`s both match every request, and Spring
+  Security refuses to start. Which chain owns which paths is an
+  authorisation decision; it is handed off with three options. 64 tests that
+  fail only because Spring cached that context failure are reported as
+  consequences, not separate problems.
+- **spring-petclinic-rest** stops on purpose. 21 tests fail because Spring 6
+  no longer matches a trailing slash, and keeping or dropping that is an API
+  contract the agent will not choose. Its coverage gate is reported as
+  *expected to clear* rather than as work.
+- **WebGoat** ends with 5 baseline tests red against the gap map's 9. Its 39
+  integration tests had silently stopped running under the upgrade; the
+  agent noticed and got them running again. One HTTP-contract decision is
+  handed off.
+- **dddsample-core** stayed red under the gap map's time-boxed manual
+  fixing. The agent fixed it, and its diff needs a careful review: it resets
+  the static sample data's ids by reflection to fit Hibernate 7's merge
+  semantics. The commit message explains why.
+
+### What the benchmark changed in the agent
+
+Every one of these was found by a run going wrong, fixed with a test written
+from that run, and checked by re-running the repo:
+
+| Found on | What went wrong | Fix |
+|---|---|---|
+| jwt-demo | The fixer billed a low-credit `ANTHROPIC_API_KEY` from the shell instead of the user's Claude login | The key is dropped unless `--ai-use-api-key`. A fixer that cannot run is reported once and not retried. |
+| petclinic-rest, mall-tiny | A JDK 8 with no `release` file was invisible | `java -version` is read from stderr |
+| kafdrop | `./mvnw` pinned Maven 3.6.1, too old for Boot 3.5's plugins; the AI could not edit `.mvn/` | Known fix: move the wrapper to Maven 3.9 |
+| kafdrop | A failed `clean` left the previous build's test reports to be read as new | Report files are deleted before every build |
+| WebGoat | The `-parameters` property never reached javac on a pinned compiler plugin | An explicit `<arg>-parameters</arg>`, as the AI found |
+| WebGoat | 39 integration tests silently stopped running in a green build | A test that passed and no longer runs is a failure |
+| WebGoat | Getting those tests running was rejected for "turning 5 red" | Newly red means passing in the *previous* build |
+| blog-app, jhipster | Reports in `target/test-results/` were not found (baseline of 0) | Any `TEST-*.xml` under `target/` |
+| blog-app, kafdrop, reactjs (×3) | Fixes that let the build get further were rejected for revealing errors that were always there | Progress is judged by stage, lifecycle goals reached, javac phase (options, parsing, imports), then counts |
+| blog-app | The recipe's invalid `@Type(uuid-char.class)` was "uncategorised" | Compile errors are categorised by the source line they point at |
+| petclinic-rest | A coverage gate after red tests was worked on as a task | Consequences wait for their causes and do not set the status |
+| reactjs | 64 tests failing on Spring's cached context failure were "unrecognised" | A consequence of the context's first failure |
+| mall-tiny | "Parity" with no tests looked green | Reported as unverified |
+
 ## Categories across all 10 repos
 
 "Repos affected" counts distinct repos. "Minutes" is the sum of the per-item estimates.
