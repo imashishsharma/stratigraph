@@ -31,8 +31,6 @@ jobs:
           registry-url: https://registry.npmjs.org
           cache: npm
 
-      # Trusted publishing needs npm 11.5.1 or newer.
-      - run: npm install -g npm@latest
 
       - uses: actions/setup-java@v4
         with:
@@ -68,6 +66,11 @@ jobs:
       - name: Verify the package would ship it
         run: npm pack --dry-run 2>&1 | grep -q extractor-checksum.json
 
+      # Trusted publishing needs npm 11.5.1+. Upgraded only here, after
+      # `npm ci`: newer npm majors stop running dependencies' install scripts
+      # by default, and better-sqlite3's native build is one (2.1.0's first
+      # attempt failed every database test for it).
+      - run: npm install -g npm@11
       - run: npm publish --provenance --access public
 
       # After publish: a release with a jar nobody can fetch is recoverable by
