@@ -1,4 +1,4 @@
-{"v":1,"type":"meta","extractor":"java","extractorVersion":"2.1.0","repoPath":"<repo>"}
+{"v":1,"type":"meta","extractor":"java","extractorVersion":"2.1.1","repoPath":"<repo>"}
 {"v":1,"type":"file","path":"src/main/java/com/example/war/HelloPage.java","language":"java","loc":7}
 {"v":1,"type":"node","kind":"module","fqn":"com.example:war-app","name":"war-app","attrs":{"root":".","buildFile":"pom.xml","packaging":"war","deployable":"war","deployableFile":"pom.xml","deployableLine":9,"deployableRule":"maven:packaging=war"}}
 {"v":1,"type":"node","kind":"package","fqn":"com.example.war","name":"war","parent":{"kind":"module","fqn":"com.example:war-app"}}

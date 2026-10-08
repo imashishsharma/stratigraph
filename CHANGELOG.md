@@ -10,7 +10,7 @@ schema carries a `user_version` and is migrated forward, and every JSON
 document carries `format`, which moves only for a change a parser could trip
 over.
 
-## [Unreleased]
+## [2.1.1] — 2026-10-08
 
 ### Added
 
