@@ -234,3 +234,31 @@ describe('consequences', () => {
     expect(category).toMatchObject({ id: 'context-failure-repeated', consequence: true });
   });
 });
+
+describe('a goal failure whose reason is on the following lines (unseen corpus: Refactoring-Bot)', () => {
+  it('is read, with the reason, rather than missed', () => {
+    const log = `[INFO] BUILD FAILURE
+[ERROR] Failed to execute goal org.apache.maven.plugins:maven-surefire-plugin:3.5.6:test (unit-tests) on project RefactoringBot: 
+[ERROR] 
+[ERROR] See /repo/target/surefire-reports for the individual test results.
+[ERROR] See dump files (if any exist) [date].dump, [date]-jvmRun[N].dump and [date].dumpstream.
+[ERROR] There was an error in the forked process
+[ERROR] org/apache/maven/surefire/report/RunModeSetter
+[ERROR] java.lang.NoClassDefFoundError: org/apache/maven/surefire/report/RunModeSetter
+`;
+    const parsed = parseBuildLog(log, '/repo');
+    expect(parsed.failures).toHaveLength(1);
+    expect(parsed.failures[0]).toMatchObject({ kind: 'plugin' });
+    expect(parsed.failures[0]?.message).toBe('org.apache.maven.plugins:maven-surefire-plugin:test: There was an error in the forked process');
+  });
+});
+
+describe('an unrecognised build failure', () => {
+  it('becomes a failure with its error lines, not an empty list', () => {
+    const parsed = parseBuildLog('[INFO] Scanning\n[ERROR] Something nobody parses yet\n[INFO] BUILD FAILURE\n', '/repo');
+    expect(parsed.success).toBe(false);
+    expect(parsed.failures).toEqual([
+      expect.objectContaining({ kind: 'plugin', message: 'the build failed: Something nobody parses yet' }),
+    ]);
+  });
+});

@@ -118,9 +118,18 @@ export function parseBuildLog(text: string, repoPath: string): BuildLog {
       continue;
     }
 
-    const goal = /^Failed to execute goal ([\w.-]+:[\w.-]+):[\w.-]+:([\w-]+)(?: \([^)]*\))? on project [\w.-]+: (.+)$/.exec(body);
+    const goal = /^Failed to execute goal ([\w.-]+:[\w.-]+):[\w.-]+:([\w-]+)(?: \([^)]*\))? on project [\w.-]+:?\s*(.*)$/.exec(body);
     if (goal) {
-      const [, plugin, goalName, rest] = goal as unknown as [string, string, string, string];
+      const [, plugin, goalName, inline] = goal as unknown as [string, string, string, string];
+      // Some plugins put the reason on the lines after the colon (Surefire's
+      // "There was an error in the forked process"), not after it.
+      let rest = inline.trim();
+      if (rest === '') {
+        for (let j = i + 1; j < Math.min(lines.length, i + 8) && rest === ''; j += 1) {
+          const next = (ERROR.exec(lines[j] as string)?.[1] ?? '').trim();
+          if (next !== '' && !/^See |^-> \[Help/.test(next)) rest = next;
+        }
+      }
       // The compiler plugin's summary repeats the errors already read above.
       if (plugin.endsWith('maven-compiler-plugin') && /Compilation failure/.test(rest)) continue;
       if (/There are test failures|There were test failures/.test(rest)) continue;
@@ -142,7 +151,21 @@ export function parseBuildLog(text: string, repoPath: string): BuildLog {
   }
 
   const goals = (text.match(/^\[INFO\] --- [\w.-]+:[\w.-]+:[\w.-]+/gm) ?? []).length;
-  return { success: /^\[INFO\] BUILD SUCCESS\s*$/m.test(text), failures, goals };
+  const success = /^\[INFO\] BUILD SUCCESS\s*$/m.test(text);
+  // A failed build with no error read above is not "nothing wrong": it is a
+  // failure this parser does not know, shown with the log's last errors.
+  if (!success && failures.length === 0) {
+    const errors = lines.filter((line) => /^\[ERROR\] \S/.test(line) && !/-> \[Help|^\[ERROR\] (?:Re-run|To see|For more)/.test(line));
+    failures.push({
+      kind: 'plugin',
+      message: errors.length > 0 ? `the build failed: ${errors[0]!.replace(/^\[ERROR\] /, '').slice(0, 300)}` : 'the build failed without an [ERROR] line',
+      file: null,
+      line: null,
+      symbol: null,
+      excerpt: errors.slice(0, 15),
+    });
+  }
+  return { success, failures, goals };
 }
 
 function pomLine(message: string): number | null {
