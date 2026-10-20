@@ -57,3 +57,29 @@ offline.
   classpath and coverage says "typed"; on a clean machine the same run is
   source-only and says that instead.
 - `extract` may take longer on a Maven repository (bounded by the timeout).
+
+## Amendment (2026-10-20): Gradle, offline
+
+Gradle builds were source-only. On a real 935-file Gradle JHipster app,
+source-only extraction recorded imported enums as classes (see the writer fix
+of the same day), left 850 unresolved-type diagnostics, and missed about a
+quarter of the call and injection edges.
+
+Gradle is now resolved the same way Maven is, and under the same rules:
+
+- **Offline only.** An init script adds a `stratigraphClasspath` task to
+  every project and writes its resolvable `compileClasspath` and
+  `testCompileClasspath`, leniently, to a file. The build runs with
+  `--offline`, so only what the local Gradle cache holds is used.
+- **The wrapper only when its distribution is cached.** That means a `.ok`
+  marker under `~/.gradle/wrapper/dists/<distribution>/`, because running the
+  wrapper otherwise downloads Gradle. Without a cached wrapper an installed
+  `gradle` is used, and with neither the run stays source-only and says why.
+- **A JDK the project's Gradle can run on.** It is chosen from the installed
+  JDKs by Gradle's compatibility matrix, e.g. Gradle 6.0 runs on JDK 8–13.
+  It is not the extractor's JDK.
+- **`--no-daemon`**, so nothing is left running, and no reused daemon
+  answers with an earlier build's environment.
+
+On that app this gave 501 jars in 7.5 s, unresolved-type diagnostics fell
+from 850 to 78, and edges rose from 43,804 to 59,428.
