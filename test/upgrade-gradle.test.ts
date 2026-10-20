@@ -210,4 +210,13 @@ Caused by: java.net.SocketTimeoutException: connect timed out
     const log = "* What went wrong:\nExecution failed for task ':rewriteRun'.\n> java.lang.IllegalStateException: Failed to download https://downloads.gradle.org/distributions/gradle-7.6.6-bin.zip to artifact cache\n\n* Try:\n> Run with --stacktrace.\n\nBUILD FAILED in 1m 21s";
     expect(categoriseBuildFailure(parseGradleLog(log, '/repo').failures[0]!).id).toBe('network');
   });
+
+  it('reads a supertype that changed its abstract methods as a judgment, not unrecognised', () => {
+    const log = `/repo/src/main/java/a/Handler.java:25: error: Handler is not abstract and does not override abstract method handleException(DataFetcherExceptionHandlerParameters) in DataFetcherExceptionHandler
+public class Handler implements DataFetcherExceptionHandler {
+       ^
+BUILD FAILED in 3s`;
+    const [failure] = parseGradleLog(log, '/repo').failures;
+    expect(categoriseBuildFailure(failure!)).toMatchObject({ id: 'supertype-api-change', disposition: 'judgment' });
+  });
 });

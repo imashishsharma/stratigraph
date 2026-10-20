@@ -299,6 +299,16 @@ const RULES: Rule[] = [
       'or ArgumentCaptor.forClass. Spock needs 2.4+ for Spring 6. Never weaken an assertion.',
   },
   {
+    id: 'supertype-api-change',
+    title: 'An interface or superclass the code extends changed its methods',
+    disposition: 'judgment',
+    match: has(/is not abstract and does not override abstract method/),
+    guidance:
+      'A type this class implements or extends (Spring, or a library the upgrade moved, such as graphql-java under ' +
+      'DGS) renamed, removed or changed the signature of a method. Read the new supertype, move the override to the ' +
+      'method that replaced it, and keep the behaviour.',
+  },
+  {
     id: 'third-party-library',
     title: 'A library has no version compatible with the new stack',
     disposition: 'judgment',
