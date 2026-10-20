@@ -177,6 +177,10 @@ export async function runUpgrade(options: RunOptions): Promise<UpgradeReport> {
     return finish('baseline-broken');
   }
   info(`upgrade: baseline ${report.baseline.passed}/${report.baseline.tests} tests pass`);
+  // What the baseline build created (a package-lock.json from an npm task, a
+  // generated source) is build output, not part of the upgrade: never commit it
+  // (jhipster-sample-app-gradle: a 39,000-line lockfile in an AI commit).
+  for (const path of untracked(repoPath)) preexisting.add(path);
 
   // 2. The recipe, as one commit. On Gradle it runs on the baseline's JDK:
   // the recipe is what moves the wrapper to a Gradle the target JDK runs on.

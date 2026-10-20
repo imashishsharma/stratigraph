@@ -767,6 +767,29 @@ describe('upgrade run', () => {
     expect(report.remaining[0]).toMatchObject({ category: 'build-timeout', disposition: 'decision' });
     expect(report.remaining[0]?.evidence[0]?.message).toContain('stopped by the build timeout after 30 min');
   });
+
+  it('never commits what the baseline build created', async () => {
+    const repo = repoWith({
+      'build.gradle': "plugins {\n    id 'org.springframework.boot' version '3.4.1'\n}\n",
+      'src/main/java/demo/App.java': 'class App {}',
+    });
+    const maven: Maven = async (args, label) => {
+      const logPath = join(repo, '..', `${label}.log`);
+      if (args.includes('rewriteRun')) {
+        writeFileSync(join(repo, 'build.gradle'), readFileSync(join(repo, 'build.gradle'), 'utf8').replace('3.4.1', '3.5.6'));
+        return { exitCode: 0, timedOut: false, logPath, log: 'BUILD SUCCESSFUL\n', seconds: 1 };
+      }
+      writeFileSync(join(repo, 'package-lock.json'), `{"lockfileVersion": 3, "build": "${label}"}`);
+      mkdirSync(join(repo, 'build', 'test-results', 'test'), { recursive: true });
+      writeFileSync(join(repo, 'build', 'test-results', 'test', 'TEST-demo.AppTest.xml'), '<testsuite><testcase name="boots" classname="demo.AppTest"/></testsuite>');
+      return { exitCode: 0, timedOut: false, logPath, log: '> Task :test\nBUILD SUCCESSFUL\n', seconds: 1 };
+    };
+    const report = await runUpgrade(options(repo, maven));
+    expect(report.status).toBe('parity');
+    const committed = execFileSync('git', ['-C', repo, 'log', '--name-only', '--format=', 'HEAD'], { encoding: 'utf8' });
+    expect(committed).toContain('build.gradle');
+    expect(committed).not.toContain('package-lock.json');
+  });
 });
 
 function read(repo: string): string {
