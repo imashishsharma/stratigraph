@@ -185,6 +185,13 @@ const RULES: Rule[] = [
     guidance: 'Run the formatter the build uses (spring-javaformat:apply or spotless:apply). Change nothing else.',
   },
   {
+    id: 'static-check',
+    title: 'A static-analysis check rejects the code',
+    disposition: 'judgment',
+    match: has(/Checkstyle rule violations|\[ant:checkstyle\]|You have \d+ Checkstyle violations?|PMD Failure|PMD rule violations|CPD Failure|SpotBugs ended with|Total bugs: \d+|BugInstance/i),
+    guidance: 'Checkstyle, PMD or SpotBugs flags code. Fix the flagged lines the upgrade introduced; do not weaken or disable the rules.',
+  },
+  {
     id: 'compiler-release-conflict',
     title: 'The compiler --release setting conflicts with --add-exports',
     disposition: 'mechanical',

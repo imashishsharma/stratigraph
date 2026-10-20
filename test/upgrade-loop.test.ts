@@ -741,7 +741,7 @@ describe('upgrade run', () => {
       if (args.includes('rewriteRun')) return { exitCode: 0, timedOut: false, logPath, log: 'BUILD SUCCESSFUL\n', seconds: 1 };
       mkdirSync(join(repo, 'build', 'test-results', 'test'), { recursive: true });
       writeFileSync(join(repo, 'build', 'test-results', 'test', 'TEST-demo.AppTest.xml'), '<testsuite><testcase name="boots" classname="demo.AppTest"/></testsuite>');
-      if (!args.includes('spotlessCheck')) {
+      if (!args.includes(':spotlessJavaCheck')) {
         const log = "> Task :spotlessJavaCheck FAILED\n> Task :test\n\n* What went wrong:\nExecution failed for task ':spotlessJavaCheck'.\n> The following files had format violations:\n      src/test/java/demo/AppTest.java\n\n* Try:\n> Run with --stacktrace.\n\nBUILD FAILED in 9s\n";
         return { exitCode: 1, timedOut: false, logPath, log, seconds: 1 };
       }
@@ -749,8 +749,8 @@ describe('upgrade run', () => {
     };
     const report = await runUpgrade(options(repo, maven));
     expect(report.status).toBe('parity');
-    expect(report.notes.join('\n')).toContain('formatting check already fails before the upgrade');
-    expect(seen.filter((args) => !args.includes('rewriteRun')).slice(1).every((args) => args.includes('spotlessCheck'))).toBe(true);
+    expect(report.notes.join('\n')).toContain('check already fails before the upgrade');
+    expect(seen.filter((args) => !args.includes('rewriteRun')).slice(1).every((args) => args.includes(':spotlessJavaCheck'))).toBe(true);
   });
 
   it('says the build timed out, rather than blame the last thing it printed', async () => {
@@ -789,6 +789,30 @@ describe('upgrade run', () => {
     const committed = execFileSync('git', ['-C', repo, 'log', '--name-only', '--format=', 'HEAD'], { encoding: 'utf8' });
     expect(committed).toContain('build.gradle');
     expect(committed).not.toContain('package-lock.json');
+  });
+
+  it('skips a Checkstyle task that already fails at baseline, and only that task', async () => {
+    const repo = repoWith({
+      'build.gradle': "plugins {\n    id 'org.springframework.boot' version '3.4.1'\n    id 'checkstyle'\n}\n",
+      'src/main/java/demo/App.java': 'class App {}',
+    });
+    const seen: string[][] = [];
+    const maven: Maven = async (args, label) => {
+      seen.push(args);
+      const logPath = join(repo, '..', `${label}.log`);
+      if (args.includes('rewriteRun')) return { exitCode: 0, timedOut: false, logPath, log: 'BUILD SUCCESSFUL\n', seconds: 1 };
+      mkdirSync(join(repo, 'build', 'test-results', 'test'), { recursive: true });
+      writeFileSync(join(repo, 'build', 'test-results', 'test', 'TEST-demo.AppTest.xml'), '<testsuite><testcase name="boots" classname="demo.AppTest"/></testsuite>');
+      if (!args.includes(':checkstyleMain')) {
+        const log = "> Task :checkstyleMain FAILED\n[ant:checkstyle] [ERROR] /r/src/main/java/demo/App.java:4:35: http:// URLs are not allowed. [NoHttp]\n> Task :test\n\n* What went wrong:\nExecution failed for task ':checkstyleMain'.\n> Checkstyle rule violations were found. See the report at: file:///r/build/reports/checkstyle/main.html\n\n* Try:\n> Run with --stacktrace.\n\nBUILD FAILED in 9s\n";
+        return { exitCode: 1, timedOut: false, logPath, log, seconds: 1 };
+      }
+      return { exitCode: 0, timedOut: false, logPath, log: '> Task :test\nBUILD SUCCESSFUL in 9s\n', seconds: 1 };
+    };
+    const report = await runUpgrade(options(repo, maven));
+    expect(report.status).toBe('parity');
+    expect(report.notes.join('\n')).toContain('-x :checkstyleMain');
+    expect(seen.at(-1)).not.toContain('spotlessCheck');
   });
 });
 

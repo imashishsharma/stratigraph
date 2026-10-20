@@ -8,7 +8,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { parseBuildLog, type BuildLog } from './build-log.js';
+import { parseBuildLog, type BuildFailure, type BuildLog } from './build-log.js';
 import { git } from './git.js';
 import { isGradleProject, parseGradleLog, readGradleFacts, rewriteInitScript } from './gradle.js';
 import { VERIFY } from './maven.js';
@@ -41,8 +41,12 @@ export interface BuildTool {
   /** Build and test, carrying on past failing tests. */
   verify: string[];
   parse: (log: string, repoPath: string) => BuildLog;
-  /** Arguments that skip the build's formatting check; empty when it has none we know. */
-  formatCheckSkip: string[];
+  /**
+   * Arguments that skip exactly these failed checks (formatting, Checkstyle,
+   * PMD, SpotBugs), or null when one of them is not a check this tool knows
+   * how to skip.
+   */
+  checkSkip: (failures: BuildFailure[]) => string[] | null;
   /** How to run the recipe, in the order to try them. */
   recipeRuns: (target: UpgradeTarget, versions: { plugin?: string | undefined; spring?: string | undefined }, logDir: string) => RecipeRun[];
 }
@@ -64,10 +68,16 @@ export function detectBuildTool(repoPath: string): BuildTool | null {
       },
       verify: VERIFY,
       parse: parseBuildLog,
-      formatCheckSkip: [
-        ...(pom.plugins.has('spotless-maven-plugin') ? ['-Dspotless.check.skip=true'] : []),
-        ...(pom.plugins.has('spring-javaformat-maven-plugin') ? ['-Dspring-javaformat.skip=true'] : []),
-      ],
+      checkSkip: (failures) => {
+        const args = new Set<string>();
+        for (const failure of failures) {
+          const text = [failure.message, ...failure.excerpt].join('\n');
+          const matched = MAVEN_CHECK_SKIPS.filter(([pattern]) => pattern.test(text));
+          if (matched.length === 0) return null;
+          for (const [, skip] of matched) for (const arg of skip) args.add(arg);
+        }
+        return [...args];
+      },
       recipeRuns: (target, versions) => {
         const exclusions = gradleWrapperFiles(repoPath);
         const args = (goal: string) => [
@@ -102,10 +112,16 @@ export function detectBuildTool(repoPath: string): BuildTool | null {
       },
       verify: ['clean', 'check', '--continue', '--console=plain'],
       parse: parseGradleLog,
-      formatCheckSkip: [
-        ...(gradle.plugins.has('com.diffplug.spotless') ? ['-x', 'spotlessCheck'] : []),
-        ...(gradle.plugins.has('io.spring.javaformat') ? ['-x', 'checkFormat'] : []),
-      ],
+      // The task that failed is named in the build's own output.
+      checkSkip: (failures) => {
+        const tasks = new Set<string>();
+        for (const failure of failures) {
+          const task = /^(:[\w:-]+): /.exec(failure.message)?.[1];
+          if (!task) return null;
+          tasks.add(task);
+        }
+        return [...tasks].flatMap((task) => ['-x', task]);
+      },
       recipeRuns: (target, versions, logDir) => {
         // The plugin is applied by an init script, so the build files are not
         // edited to add it (the Maven run invokes it by coordinates for the
@@ -127,6 +143,15 @@ export function detectBuildTool(repoPath: string): BuildTool | null {
   }
   return null;
 }
+
+/** Maven check plugins, recognised in the failure, and the property each one documents for skipping. */
+const MAVEN_CHECK_SKIPS: Array<[RegExp, string[]]> = [
+  [/spotless/i, ['-Dspotless.check.skip=true']],
+  [/spring-javaformat/i, ['-Dspring-javaformat.skip=true']],
+  [/checkstyle/i, ['-Dcheckstyle.skip=true']],
+  [/\bpmd\b|\bcpd\b/i, ['-Dpmd.skip=true', '-Dcpd.skip=true']],
+  [/spotbugs/i, ['-Dspotbugs.skip=true']],
+];
 
 /** A Maven project that also carries a Gradle wrapper makes the recipe try to download Gradle (gap map). */
 function gradleWrapperFiles(repoPath: string): string | null {

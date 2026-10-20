@@ -152,21 +152,24 @@ export async function runUpgrade(options: RunOptions): Promise<UpgradeReport> {
   let baselineRun = await withNetworkRetry(baselineMaven, verify, 'baseline', () => clearTestReports(repoPath));
   let baselineLog = readRun(tool, baselineRun, repoPath);
   report.builds += 1;
-  // A formatting gate that already fails before the upgrade is the project's,
-  // not the upgrade's (realworld-example-app: master fails spotlessJavaCheck).
-  // Skip that check for every build, and say so, rather than refuse to start.
+  // A formatting or static-analysis gate that already fails before the
+  // upgrade is the project's, not the upgrade's (realworld-example-app fails
+  // spotlessJavaCheck on master; a JHipster app fails Checkstyle's NoHttp).
+  // Skip exactly that check for every build, and say so, rather than refuse
+  // to start.
   const baselineFailures = baselineLog.success ? [] : classify(baselineLog, diffTests(new Map(), new Map()));
-  const skip = tool.formatCheckSkip;
-  if (baselineFailures.length > 0 && skip.length > 0 && baselineFailures.every((failure) => failure.category.id === 'formatting-check')) {
-    warn('upgrade: the baseline fails only its formatting check; rebuilding with that check skipped, for every build');
+  const onlyChecks = baselineFailures.length > 0 && baselineFailures.every((failure) => CHECK_CATEGORIES.has(failure.category.id) && failure.build);
+  const skip = onlyChecks ? tool.checkSkip(baselineFailures.map((failure) => failure.build!)) : null;
+  if (skip && skip.length > 0) {
+    warn(`upgrade: the baseline fails only its own checks; rebuilding with them skipped (${skip.join(' ')}), for every build`);
     verify = [...verify, ...skip];
     clearTestReports(repoPath);
-    baselineRun = await withNetworkRetry(baselineMaven, verify, 'baseline-format-skipped', () => clearTestReports(repoPath));
+    baselineRun = await withNetworkRetry(baselineMaven, verify, 'baseline-checks-skipped', () => clearTestReports(repoPath));
     baselineLog = readRun(tool, baselineRun, repoPath);
     report.builds += 1;
     report.notes.push(
-      `The formatting check already fails before the upgrade, so every build skipped it (${skip.join(' ')}). ` +
-        'Run the formatter on the branch before merging.',
+      `A formatting or static-analysis check already fails before the upgrade, so every build skipped it (${skip.join(' ')}). ` +
+        'Fix or run it on the branch before merging.',
     );
   }
   const baselineTests = readTestReports(repoPath);
@@ -379,6 +382,9 @@ function flagCodeChangedForTests(repoPath: string, sha: string, failures: Classi
 }
 
 /** Maven could not download something because the network failed, not because it does not exist. */
+
+/** Checks a project can fail before the upgrade without the upgrade being blocked. */
+const CHECK_CATEGORIES = new Set(['formatting-check', 'static-check']);
 
 /**
  * A build's output, read — and, when the timeout stopped it, a failure that

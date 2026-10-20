@@ -268,3 +268,12 @@ describe('the Boot BOM, read from the local cache', () => {
     expect(next).toContain("'org.flywaydb:flyway-core:9.0.0'");
   });
 });
+
+describe('static checks', () => {
+  it('reads a Checkstyle failure as a static check, not a broken project', () => {
+    const log = "> Task :checkstyleMain FAILED\n\n* What went wrong:\nExecution failed for task ':checkstyleMain'.\n> Checkstyle rule violations were found. See the report at: file:///r/build/reports/checkstyle/main.html\n\nBUILD FAILED in 9s";
+    const [failure] = parseGradleLog(log, '/r').failures;
+    expect(failure?.message).toMatch(/^:checkstyleMain: /);
+    expect(categoriseBuildFailure(failure!).id).toBe('static-check');
+  });
+});
