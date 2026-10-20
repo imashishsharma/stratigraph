@@ -161,12 +161,20 @@ export async function runUpgrade(options: RunOptions): Promise<UpgradeReport> {
   const onlyChecks = baselineFailures.length > 0 && baselineFailures.every((failure) => CHECK_CATEGORIES.has(failure.category.id) && failure.build);
   const skip = onlyChecks ? tool.checkSkip(baselineFailures.map((failure) => failure.build!)) : null;
   if (skip && skip.length > 0) {
-    warn(`upgrade: the baseline fails only its own checks; rebuilding with them skipped (${skip.join(' ')}), for every build`);
     verify = [...verify, ...skip];
-    clearTestReports(repoPath);
-    baselineRun = await withNetworkRetry(baselineMaven, verify, 'baseline-checks-skipped', () => clearTestReports(repoPath));
-    baselineLog = readRun(tool, baselineRun, repoPath);
-    report.builds += 1;
+    // Gradle with --continue ran the tests despite the failed check, so the
+    // build need not be repeated (on a large project it is half an hour).
+    // Maven stops at the failed plugin, before the tests, so it is rebuilt.
+    if (tool.kind === 'gradle' && readTestReports(repoPath).size > 0) {
+      warn(`upgrade: the baseline fails only its own checks; its tests ran regardless, and every later build skips them (${skip.join(' ')})`);
+      baselineLog = { ...baselineLog, success: true, failures: [] };
+    } else {
+      warn(`upgrade: the baseline fails only its own checks; rebuilding with them skipped (${skip.join(' ')}), for every build`);
+      clearTestReports(repoPath);
+      baselineRun = await withNetworkRetry(baselineMaven, verify, 'baseline-checks-skipped', () => clearTestReports(repoPath));
+      baselineLog = readRun(tool, baselineRun, repoPath);
+      report.builds += 1;
+    }
     report.notes.push(
       `A formatting or static-analysis check already fails before the upgrade, so every build skipped it (${skip.join(' ')}). ` +
         'Fix or run it on the branch before merging.',
