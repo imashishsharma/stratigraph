@@ -1,0 +1,27 @@
+diff --git a/pom.xml b/pom.xml
+index 38d1a0f..b247996 100644
+--- a/pom.xml
++++ b/pom.xml
+@@ -6,7 +6,7 @@
+     <parent>
+         <groupId>org.springframework.boot</groupId>
+         <artifactId>spring-boot-starter-parent</artifactId>
+-        <version>3.5.8</version>
++        <version>4.0.8</version>
+         <relativePath/>
+     </parent>
+     <groupId>com.example</groupId>
+diff --git a/src/main/java/com/example/JacksonConfiguration.java b/src/main/java/com/example/JacksonConfiguration.java
+index 48b26ee..a5beeae 100644
+--- a/src/main/java/com/example/JacksonConfiguration.java
++++ b/src/main/java/com/example/JacksonConfiguration.java
+@@ -1,7 +1,7 @@
+ package com.example;
+ 
+-import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
+-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
++import tools.jackson.databind.ext.jdk8.Jdk8Module;
++import tools.jackson.databind.ext.javatime.JavaTimeModule;
+ import org.springframework.context.annotation.Bean;
+ import org.springframework.context.annotation.Configuration;
+ 

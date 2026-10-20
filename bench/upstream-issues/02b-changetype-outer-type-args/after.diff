@@ -1,0 +1,24 @@
+diff --git a/src/main/java/com/example/SecurityConfig.java b/src/main/java/com/example/SecurityConfig.java
+index 6b2a673..212e599 100644
+--- a/src/main/java/com/example/SecurityConfig.java
++++ b/src/main/java/com/example/SecurityConfig.java
+@@ -3,7 +3,7 @@ package com.example;
+ import org.springframework.context.annotation.Bean;
+ import org.springframework.context.annotation.Configuration;
+ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+-import org.springframework.security.config.annotation.web.configurers.ExpressionUrlAuthorizationConfigurer;
++import org.springframework.security.config.annotation.web.configurers.AuthorizeHttpRequestsConfigurer.AuthorizationManagerRequestMatcherRegistry;
+ import org.springframework.security.web.SecurityFilterChain;
+ 
+ @Configuration
+@@ -11,8 +11,8 @@ public class SecurityConfig {
+ 
+     @Bean
+     SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+-        ExpressionUrlAuthorizationConfigurer<HttpSecurity>.ExpressionInterceptUrlRegistry registry =
+-                http.authorizeRequests();
++        AuthorizationManagerRequestMatcherRegistry registry =
++                http.authorizeHttpRequests();
+         registry.antMatchers("/public/**").permitAll();
+         registry.anyRequest().authenticated();
+         return http.build();

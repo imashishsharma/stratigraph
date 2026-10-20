@@ -1,0 +1,6 @@
+type: specs.openrewrite.org/v1beta/recipe
+name: com.example.Wrapper
+recipeList:
+  - org.openrewrite.gradle.UpdateGradleWrapper:
+      version: ^8.14
+      addIfMissing: false

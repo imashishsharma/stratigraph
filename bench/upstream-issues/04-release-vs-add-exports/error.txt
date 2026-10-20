@@ -1,0 +1,4 @@
+[ERROR] COMPILATION ERROR : 
+[INFO] -------------------------------------------------------------
+[ERROR] exporting a package from system module jdk.management.agent is not allowed with --release
+[INFO] 1 error

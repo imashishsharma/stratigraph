@@ -1,0 +1,4 @@
+<settings><profiles><profile><id>snap</id>
+<repositories><repository><id>cs</id><url>https://central.sonatype.com/repository/maven-snapshots/</url><releases><enabled>false</enabled></releases><snapshots><enabled>true</enabled></snapshots></repository></repositories>
+<pluginRepositories><pluginRepository><id>cs</id><url>https://central.sonatype.com/repository/maven-snapshots/</url><releases><enabled>false</enabled></releases><snapshots><enabled>true</enabled></snapshots></pluginRepository></pluginRepositories>
+</profile></profiles><activeProfiles><activeProfile>snap</activeProfile></activeProfiles></settings>

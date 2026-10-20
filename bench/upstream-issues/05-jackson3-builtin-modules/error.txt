@@ -1,0 +1,21 @@
+[ERROR] COMPILATION ERROR : 
+[INFO] -------------------------------------------------------------
+[ERROR] src/main/java/com/example/JacksonConfiguration.java:[3,39] cannot find symbol
+  symbol:   class Jdk8Module
+  location: package tools.jackson.databind.ext.jdk8
+[ERROR] src/main/java/com/example/JacksonConfiguration.java:[4,43] cannot find symbol
+  symbol:   class JavaTimeModule
+  location: package tools.jackson.databind.ext.javatime
+[ERROR] src/main/java/com/example/JacksonConfiguration.java:[12,12] cannot find symbol
+  symbol:   class JavaTimeModule
+  location: class com.example.JacksonConfiguration
+[ERROR] src/main/java/com/example/JacksonConfiguration.java:[17,12] cannot find symbol
+  symbol:   class Jdk8Module
+  location: class com.example.JacksonConfiguration
+[ERROR] src/main/java/com/example/JacksonConfiguration.java:[13,20] cannot find symbol
+  symbol:   class JavaTimeModule
+  location: class com.example.JacksonConfiguration
+[ERROR] src/main/java/com/example/JacksonConfiguration.java:[18,20] cannot find symbol
+  symbol:   class Jdk8Module
+  location: class com.example.JacksonConfiguration
+[INFO] 6 errors 

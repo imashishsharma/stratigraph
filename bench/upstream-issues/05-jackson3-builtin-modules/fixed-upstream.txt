@@ -1,0 +1,12 @@
+Reproduced with rewrite-spring 6.37.1 (bundles rewrite-jackson 1.29.0), the latest on Maven Central:
+the Jackson 2->3 package migration retargets the @Bean factories to
+tools.jackson.databind.ext.jdk8.Jdk8Module / tools.jackson.databind.ext.javatime.JavaTimeModule,
+which do not exist in any Jackson 3 final release (checked jackson-databind 3.0.0, 3.1.7, 3.2.4 jars:
+the ext/jdk8 and ext/javatime packages contain serializers/initializers only, no *Module class;
+tools.jackson.datatype:jackson-datatype-jsr310 exists only as 3.0.0-rc1/rc2).
+
+Already fixed upstream: https://github.com/openrewrite/rewrite-jackson/pull/172
+"Remove @Bean factories for the modules Jackson 3 builds in" (merged 2026-10-03), adds
+RemoveBuiltInModuleBeans to jackson-2-3.yml; first released in rewrite-jackson v1.31.0
+(not in v1.30.1). The PR's own example is this exact JHipster JacksonConfiguration shape.
+Could not run 1.31.0 (Code Genome only). No issue to file.

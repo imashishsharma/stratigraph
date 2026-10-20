@@ -1,0 +1,35 @@
+diff --git a/pom.xml b/pom.xml
+index de0473a..41694b2 100644
+--- a/pom.xml
++++ b/pom.xml
+@@ -6,7 +6,7 @@
+     <parent>
+         <groupId>org.springframework.boot</groupId>
+         <artifactId>spring-boot-starter-parent</artifactId>
+-        <version>2.7.18</version>
++        <version>3.5.16</version>
+         <relativePath/>
+     </parent>
+     <groupId>com.example</groupId>
+diff --git a/src/main/java/com/example/ReceivedFile.java b/src/main/java/com/example/ReceivedFile.java
+index 296a6c2..7224643 100644
+--- a/src/main/java/com/example/ReceivedFile.java
++++ b/src/main/java/com/example/ReceivedFile.java
+@@ -2,14 +2,14 @@ package com.example;
+ 
+ import org.hibernate.annotations.Type;
+ 
+-import javax.persistence.Entity;
+-import javax.persistence.Id;
++import jakarta.persistence.Entity;
++import jakarta.persistence.Id;
+ import java.util.UUID;
+ 
+ @Entity
+ public class ReceivedFile {
+ 
+     @Id
+-    @Type(type = "uuid-char")
++    @Type(uuid-char.class)
+     UUID id;
+ }

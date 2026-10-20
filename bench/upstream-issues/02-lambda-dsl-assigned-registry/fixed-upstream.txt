@@ -1,0 +1,6 @@
+Reproduced with rewrite-spring 6.37.1 (latest on Maven Central) via HttpSecurityLambdaDsl alone.
+Already fixed on rewrite-spring main, not yet released (as of 2026-10-20):
+  https://github.com/openrewrite/rewrite-spring/pull/1184  "Only convert to the Spring Security lambda DSL
+  when the result of the call is unused" (merged 2026-10-15, commit 9a149fbd3, 5 commits after v6.41.0).
+  Its tests cover "a returned or assigned HttpSecurity configurer". No issue to file.
+The raw-type follow-on error seen with the full UpgradeSpringBoot_3_5 run is a separate bug: see ../02b-changetype-outer-type-args.

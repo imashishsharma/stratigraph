@@ -1,0 +1,11 @@
+[ERROR] com.example.AppTest.pageTitle -- Time elapsed: 0.404 s <<< ERROR!
+java.lang.NoClassDefFoundError: org/htmlunit/WebConnection
+	at com.example.AppTest.pageTitle(AppTest.java:20)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:569)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1511)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1511)
+Caused by: java.lang.ClassNotFoundException: org.htmlunit.WebConnection
+	at java.base/jdk.internal.loader.BuiltinClassLoader.loadClass(BuiltinClassLoader.java:641)
+	at java.base/jdk.internal.loader.ClassLoaders$AppClassLoader.loadClass(ClassLoaders.java:188)
+	at java.base/java.lang.ClassLoader.loadClass(ClassLoader.java:525)
+	... 4 more

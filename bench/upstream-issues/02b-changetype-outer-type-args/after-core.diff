@@ -1,0 +1,23 @@
+diff --git a/src/main/java/com/example/OldOuter.java b/src/main/java/com/example/OldOuter.java
+index f65578c..c9634a0 100644
+--- a/src/main/java/com/example/OldOuter.java
++++ b/src/main/java/com/example/OldOuter.java
+@@ -1,2 +1,2 @@
+ package com.example;
+-public class OldOuter<T> { public class Registry { public T get() { return null; } } }
++public class OldOuter<T> { public class Registry2 { public T get() { return null; } } }
+diff --git a/src/main/java/com/example/Use.java b/src/main/java/com/example/Use.java
+index 166b74f..e633157 100644
+--- a/src/main/java/com/example/Use.java
++++ b/src/main/java/com/example/Use.java
+@@ -1,6 +1,9 @@
+ package com.example;
++
++import com.example.NewOuter.Registry2;
++
+ class Use {
+-    String m(OldOuter<String>.Registry r) {
++    String m(Registry2 r) {
+         return r.get().trim();
+     }
+ }

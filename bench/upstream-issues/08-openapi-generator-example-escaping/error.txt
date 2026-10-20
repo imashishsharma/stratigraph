@@ -1,0 +1,6 @@
+[ERROR] COMPILATION ERROR : 
+[INFO] -------------------------------------------------------------
+[ERROR] target/generated-sources/openapi/src/main/java/com/example/api/OopsApi.java:[70,76] ';' expected
+[ERROR] target/generated-sources/openapi/src/main/java/com/example/api/OopsApi.java:[70,82] illegal character: '\'
+[ERROR] target/generated-sources/openapi/src/main/java/com/example/api/OopsApi.java:[70,83] illegal character: '\'
+[INFO] 3 errors 

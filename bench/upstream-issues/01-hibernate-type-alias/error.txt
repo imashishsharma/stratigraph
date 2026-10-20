@@ -1,0 +1,6 @@
+[ERROR] COMPILATION ERROR : 
+[INFO] -------------------------------------------------------------
+[ERROR] src/main/java/com/example/ReceivedFile.java:[13,11] cannot find symbol
+  symbol:   variable uuid
+  location: class com.example.ReceivedFile
+[INFO] 1 error

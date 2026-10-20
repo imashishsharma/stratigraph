@@ -1,0 +1,5 @@
+[ERROR] COMPILATION ERROR : 
+[INFO] -------------------------------------------------------------
+[ERROR] src/main/java/com/example/SecurityConfig2.java:[15,47] incompatible types: org.springframework.security.config.annotation.web.builders.HttpSecurity cannot be converted to org.springframework.security.config.annotation.web.configurers.ExpressionUrlAuthorizationConfigurer<org.springframework.security.config.annotation.web.builders.HttpSecurity>.ExpressionInterceptUrlRegistry
+[ERROR] src/main/java/com/example/SecurityConfig.java:[17,47] incompatible types: org.springframework.security.config.annotation.web.builders.HttpSecurity cannot be converted to org.springframework.security.config.annotation.web.configurers.ExpressionUrlAuthorizationConfigurer<org.springframework.security.config.annotation.web.builders.HttpSecurity>.ExpressionInterceptUrlRegistry
+[INFO] 2 errors 

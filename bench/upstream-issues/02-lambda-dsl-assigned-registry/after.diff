@@ -1,0 +1,40 @@
+diff --git a/src/main/java/com/example/SecurityConfig.java b/src/main/java/com/example/SecurityConfig.java
+index 6b2a673..ce3b4eb 100644
+--- a/src/main/java/com/example/SecurityConfig.java
++++ b/src/main/java/com/example/SecurityConfig.java
+@@ -6,13 +6,15 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+ import org.springframework.security.config.annotation.web.configurers.ExpressionUrlAuthorizationConfigurer;
+ import org.springframework.security.web.SecurityFilterChain;
+ 
++import static org.springframework.security.config.Customizer.withDefaults;
++
+ @Configuration
+ public class SecurityConfig {
+ 
+     @Bean
+     SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+         ExpressionUrlAuthorizationConfigurer<HttpSecurity>.ExpressionInterceptUrlRegistry registry =
+-                http.authorizeRequests();
++                        http.authorizeRequests(withDefaults());
+         registry.antMatchers("/public/**").permitAll();
+         registry.anyRequest().authenticated();
+         return http.build();
+diff --git a/src/main/java/com/example/SecurityConfig2.java b/src/main/java/com/example/SecurityConfig2.java
+index 2990796..e873675 100644
+--- a/src/main/java/com/example/SecurityConfig2.java
++++ b/src/main/java/com/example/SecurityConfig2.java
+@@ -12,10 +12,10 @@ public class SecurityConfig2 {
+     @Bean
+     SecurityFilterChain filterChain2(HttpSecurity http) throws Exception {
+         ExpressionUrlAuthorizationConfigurer<HttpSecurity>.ExpressionInterceptUrlRegistry registry =
+-                http.authorizeRequests()
+-                        .antMatchers("/public/**").permitAll()
+-                        .anyRequest().authenticated();
+-        registry.and().csrf().disable();
++                        http.authorizeRequests(requests -> requests
++                                        .antMatchers("/public/**").permitAll()
++                                        .anyRequest().authenticated());
++        registry.and().csrf(csrf -> csrf.disable());
+         return http.build();
+     }
+ }

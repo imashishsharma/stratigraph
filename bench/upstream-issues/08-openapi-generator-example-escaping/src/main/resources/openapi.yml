@@ -1,0 +1,23 @@
+openapi: 3.0.1
+info:
+  title: Repro
+  version: 1.0.0
+paths:
+  /oops:
+    get:
+      operationId: oops
+      responses:
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+components:
+  schemas:
+    Error:
+      type: object
+      properties:
+        message:
+          type: string
+          example: "allowed: [\"string\"]"

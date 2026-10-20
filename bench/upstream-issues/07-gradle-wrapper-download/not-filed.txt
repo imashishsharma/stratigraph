@@ -1,0 +1,27 @@
+Candidate 7 (spring-petclinic, Boot 4): "recipe run aborts downloading a Gradle distribution".
+Status: NOT REPRODUCED DETERMINISTICALLY -> no issue drafted.
+
+What the recipe does: UpgradeSpringBoot_4_0 includes org.openrewrite.gradle.UpdateGradleWrapper
+(version ^8.14, addIfMissing false). petclinic ships a Gradle wrapper next to pom.xml, so the
+wrapper is updated even in a Maven run. That is by design.
+
+What failed: printing the new gradle-wrapper.jar (a RemoteArchive) downloads the distribution;
+on failure the whole `rewrite:run` aborts with
+  IllegalStateException: Failed to download https://downloads.gradle.org/distributions/gradle-8.14.x-bin.zip to artifact cache
+(see error.txt). The bench hit this twice on 2026-09-29 (8.14.5); this repro hit it twice on
+2026-10-20 (8.14.6, rewrite-failed-*.log, both ~13 s), then succeeded 7 times in a row
+(~25 s each, rewrite-ok.log), with and without a warm ~/.rewrite/remote cache.
+downloads.gradle.org now answers 307 -> github.com 302 -> release-assets.githubusercontent.com;
+the JDK follows that chain fine (checked). One plain-JDK request in the same window also failed
+with "connect timed out" on the redirect target, so the failures look like transient network
+trouble, not a deterministic bug.
+
+Possible (unfiled) improvement, verified from source only: the root cause is discarded.
+Remote#printer falls back to `new InMemoryExecutionContext()` (no-op onError) because
+AbstractRewriteBaseRunMojo prints with `new PrintOutputCapture<>(0, markerPrinter)` (no ctx),
+and RemoteArchive passes the download exception to ctx.getOnError() before throwing a message
+with no cause. The large-file HttpUrlConnectionSender also uses a 1 s connect timeout.
+Still the same on rewrite main / rewrite-maven-plugin v6.50.0. No duplicate found
+(searched openrewrite org for "artifact cache", "RemoteArchive", "UpdateGradleWrapper download";
+rewrite#5046 is the related-but-different credentials case). Without a captured cause this would
+be a speculative report, so it is left for the reviewer to decide.

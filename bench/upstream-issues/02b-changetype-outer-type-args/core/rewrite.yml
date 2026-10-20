@@ -1,0 +1,6 @@
+type: specs.openrewrite.org/v1beta/recipe
+name: com.example.CT
+recipeList:
+  - org.openrewrite.java.ChangeType:
+      oldFullyQualifiedTypeName: com.example.OldOuter.Registry
+      newFullyQualifiedTypeName: com.example.NewOuter.Registry2

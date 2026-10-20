@@ -1,0 +1,16 @@
+Candidate 8 (spring-petclinic-reactjs): openapi-generator emits uncompilable Java for a string example with escaped quotes.
+Target would have been OpenAPITools/openapi-generator (not an OpenRewrite bug; the recipe only bumped 6.3.0 -> 7.16.0).
+
+Reproduced (run.sh, spring generator, interfaceOnly=true, Boot 3.5.16, JDK 17) with 7.16.0 and 7.26.0 (latest release, 2026-10-06):
+  String exampleString = "{ \"message\" : \"allowed: [\\"string\\"]\" }";   -> ';' expected / illegal character: '\'
+Bisect: the escaping bug itself is old (6.3.0 and 7.0.0 fail the same way when the example is on a 200 response).
+petclinic only hit it after the bump because 7.3.0 started generating example bodies for its 4xx responses
+(7.0.0-7.2.0 compile the 400-response spec, 7.3.0+ do not).
+
+Already fixed upstream, unreleased:
+  https://github.com/OpenAPITools/openapi-generator/pull/25108 "[Java][Spring] Escape backslashes in example strings"
+  merged 2026-10-06T17:10Z (after v7.26.0 was published 09:33Z the same day), fixes
+  https://github.com/OpenAPITools/openapi-generator/issues/9976 (closed). Related open: #19063.
+Verified: 7.27.0-SNAPSHOT (20261020.073845, Central snapshots) generates
+  "{ \"message\" : \"allowed: [\\\"string\\\"]\" }" and compiles (compile-7.27.0-SNAPSHOT.log).
+No issue to file.

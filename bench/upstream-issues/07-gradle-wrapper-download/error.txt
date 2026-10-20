@@ -1,0 +1,10 @@
+Caused by: java.lang.IllegalStateException: Failed to download https://downloads.gradle.org/distributions/gradle-8.14.6-bin.zip to artifact cache
+    at org.openrewrite.remote.RemoteArchive.getInputStream (RemoteArchive.java:146)
+    at org.openrewrite.remote.Remote$1.visit (Remote.java:111)
+    at org.openrewrite.remote.Remote$1.visit (Remote.java:105)
+    at org.openrewrite.TreeVisitor.visit (TreeVisitor.java:154)
+    at org.openrewrite.Tree.print (Tree.java:86)
+    at org.openrewrite.SourceFile.printAll (SourceFile.java:123)
+    at org.openrewrite.maven.AbstractRewriteBaseRunMojo$ResultsContainer.<init> (AbstractRewriteBaseRunMojo.java:354)
+    at org.openrewrite.maven.AbstractRewriteBaseRunMojo.listResults (AbstractRewriteBaseRunMojo.java:162)
+    at org.openrewrite.maven.AbstractRewriteRunMojo.execute (AbstractRewriteRunMojo.java:66)

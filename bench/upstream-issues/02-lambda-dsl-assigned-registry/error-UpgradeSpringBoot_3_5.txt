@@ -1,0 +1,14 @@
+[ERROR] COMPILATION ERROR : 
+[INFO] -------------------------------------------------------------
+[ERROR] src/main/java/com/example/SecurityConfig.java:[17,51] incompatible types: org.springframework.security.config.annotation.web.builders.HttpSecurity cannot be converted to org.springframework.security.config.annotation.web.configurers.AuthorizeHttpRequestsConfigurer.AuthorizationManagerRequestMatcherRegistry
+[ERROR] src/main/java/com/example/SecurityConfig.java:[18,47] cannot find symbol
+  symbol:   method permitAll()
+  location: class java.lang.Object
+[ERROR] src/main/java/com/example/SecurityConfig.java:[19,30] cannot find symbol
+  symbol:   method authenticated()
+  location: class java.lang.Object
+[ERROR] src/main/java/com/example/SecurityConfig2.java:[15,51] incompatible types: org.springframework.security.config.annotation.web.builders.HttpSecurity cannot be converted to org.springframework.security.config.annotation.web.configurers.AuthorizeHttpRequestsConfigurer.AuthorizationManagerRequestMatcherRegistry
+[ERROR] src/main/java/com/example/SecurityConfig2.java:[18,23] cannot find symbol
+  symbol:   method csrf((csrf)->cs[...]ble())
+  location: interface org.springframework.security.config.annotation.web.HttpSecurityBuilder
+[INFO] 5 errors 

@@ -1,0 +1,18 @@
+## Spring case (AuthorizeHttpRequests, Boot 2.7.18)
+[ERROR] COMPILATION ERROR : 
+[INFO] -------------------------------------------------------------
+[ERROR] src/main/java/com/example/SecurityConfig.java:[16,43] cannot find symbol
+  symbol:   method permitAll()
+  location: class java.lang.Object
+[ERROR] src/main/java/com/example/SecurityConfig.java:[17,30] cannot find symbol
+  symbol:   method authenticated()
+  location: class java.lang.Object
+[INFO] 2 errors 
+
+## Core case (ChangeType only)
+[ERROR] COMPILATION ERROR : 
+[INFO] -------------------------------------------------------------
+[ERROR] src/main/java/com/example/Use.java:[7,23] cannot find symbol
+  symbol:   method trim()
+  location: class java.lang.Object
+[INFO] 1 error

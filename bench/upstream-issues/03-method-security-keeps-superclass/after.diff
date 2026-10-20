@@ -1,0 +1,31 @@
+diff --git a/pom.xml b/pom.xml
+index 0754f16..08120a9 100644
+--- a/pom.xml
++++ b/pom.xml
+@@ -6,7 +6,7 @@
+     <parent>
+         <groupId>org.springframework.boot</groupId>
+         <artifactId>spring-boot-starter-parent</artifactId>
+-        <version>2.7.18</version>
++        <version>3.5.16</version>
+         <relativePath/>
+     </parent>
+     <groupId>com.example</groupId>
+diff --git a/src/main/java/com/example/MethodSecurityConfig.java b/src/main/java/com/example/MethodSecurityConfig.java
+index 9409a97..bdd73b8 100644
+--- a/src/main/java/com/example/MethodSecurityConfig.java
++++ b/src/main/java/com/example/MethodSecurityConfig.java
+@@ -3,11 +3,11 @@ package com.example;
+ import org.springframework.context.annotation.Configuration;
+ import org.springframework.security.access.expression.method.DefaultMethodSecurityExpressionHandler;
+ import org.springframework.security.access.expression.method.MethodSecurityExpressionHandler;
+-import org.springframework.security.config.annotation.method.configuration.EnableGlobalMethodSecurity;
++import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
+ import org.springframework.security.config.annotation.method.configuration.GlobalMethodSecurityConfiguration;
+ 
+ @Configuration
+-@EnableGlobalMethodSecurity(prePostEnabled = true)
++@EnableMethodSecurity
+ public class MethodSecurityConfig extends GlobalMethodSecurityConfiguration {
+ 
+     @Override
