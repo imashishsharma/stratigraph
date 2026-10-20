@@ -451,3 +451,23 @@ export function rewriteRemovedDsl(script: string): { script: string; changes: st
   });
   return changes.size === 0 ? null : { script: next, changes: [...changes] };
 }
+
+/**
+ * Raise every Java level a Gradle script writes below `minimum` to it:
+ * `sourceCompatibility`/`targetCompatibility`, `JavaVersion.VERSION_x`, and an
+ * Ant `javac(source: 1.8, target: 1.8)` call, which the recipe's Java-version
+ * step does not know about (JHipster 6 profile scripts compile with one).
+ */
+export function raiseJavaLevel(script: string, minimum: number): { script: string; raised: number } | null {
+  let raised = 0;
+  const level = (value: string): number => Number.parseInt(value.replace(/^1\./, ''), 10);
+  const bump = (whole: string, lead: string, value: string, tail = '') => {
+    if (!(level(value) < minimum)) return whole;
+    raised += 1;
+    return `${lead}${minimum}${tail}`;
+  };
+  let next = script.replace(/(\b(?:source|target)Compatibility\s*=\s*['"]?)(1\.\d+|\d+)(['"]?)/g, (w, a: string, b: string, c: string) => bump(w, a, b, c));
+  next = next.replace(/(JavaVersion\.VERSION_)(1_\d+|\d+)\b/g, (w, a: string, b: string) => bump(w, a, b.replace('_', '.')));
+  next = next.replace(/(\b(?:source|target)\s*:\s*['"]?)(1\.\d+|\d+)(['"]?)(?=[\s,)])/g, (w, a: string, b: string, c: string) => bump(w, a, b, c));
+  return raised === 0 ? null : { script: next, raised };
+}

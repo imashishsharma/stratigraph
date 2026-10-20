@@ -64,6 +64,16 @@ const RULES: Rule[] = [
       'mainClassName → mainClass, classifier → archiveClassifier, baseName → archiveBaseName.',
   },
   {
+    id: 'java-level-too-low',
+    title: 'Code the upgrade rewrote is compiled at an older Java level',
+    disposition: 'mechanical',
+    match: has(/is not supported in -source (?:[1-9]|1[0-6])\b|not supported in -source (?:[1-9]|1[0-6])\b|invalid (?:source|target) release: (?:1\.)?[1-8]\b/),
+    guidance:
+      'The recipe moved the code to the target Java (text blocks, pattern matching) but a compile step still ' +
+      'declares an older level: a sourceCompatibility, a JavaVersion, or an Ant javac(source:, target:) in a ' +
+      'Gradle script. Raise it to the target.',
+  },
+  {
     id: 'build-timeout',
     title: 'The build did not finish in time',
     disposition: 'decision',

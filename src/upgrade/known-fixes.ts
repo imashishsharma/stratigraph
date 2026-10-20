@@ -14,7 +14,7 @@ import { join, relative } from 'node:path';
 import type { BuildFailure } from './build-log.js';
 import type { BuildToolKind, ProjectFacts } from './build-tool.js';
 import { git } from './git.js';
-import { addCompilerParametersArg, addGradleDependency, dropManagedPins, readBootManaged, readGradleFacts, rewriteRemovedDsl, setWrapperVersion } from './gradle.js';
+import { addCompilerParametersArg, addGradleDependency, dropManagedPins, readBootManaged, readGradleFacts, raiseJavaLevel, rewriteRemovedDsl, setWrapperVersion } from './gradle.js';
 import { GRADLE_WRAPPER_TARGET } from './targets.js';
 import type { Category } from './categories.js';
 import {
@@ -39,6 +39,8 @@ export interface FixContext {
   repoPath: string;
   /** The build tool and what it declares; known fixes are per tool. */
   tool?: ProjectFacts | undefined;
+  /** The Java level the target Boot line needs. */
+  minJava?: number | undefined;
   failures: Classified[];
   /** Runs Maven in the repository with the target JDK; resolves to the exit code. */
   maven: (args: string[]) => Promise<number>;
@@ -529,9 +531,30 @@ const gradleRemovedDsl: KnownFix = {
   },
 };
 
+const gradleJavaLevel: KnownFix = {
+  id: 'gradle-java-level',
+  categories: ['java-level-too-low'],
+  tools: ['gradle'],
+  attempt: async (context) => {
+    if (failuresOf(context, 'java-level-too-low').length === 0) return null;
+    const minimum = context.minJava ?? 17;
+    const changed: string[] = [];
+    for (const file of gradleScripts(context.repoPath)) {
+      const text = readText(context.repoPath, file);
+      const result = text === null ? null : raiseJavaLevel(text, minimum);
+      if (result === null) continue;
+      writeFileSync(join(context.repoPath, file), result.script);
+      changed.push(file);
+    }
+    if (changed.length === 0) return null;
+    return { description: `compile at Java ${minimum} everywhere the build scripts set a level (${changed.join(', ')})`, changed };
+  },
+};
+
 export const KNOWN_FIXES: KnownFix[] = [
   gradleWrapper,
   gradleRemovedDsl,
+  gradleJavaLevel,
   gradleManagedPins,
   gradleFormatter,
   gradleParameters,

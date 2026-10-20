@@ -11,6 +11,7 @@ import {
   dropManagedPins,
   parseGradleLog,
   readBootManaged,
+  raiseJavaLevel,
   rewriteRemovedDsl,
   readGradleFacts,
   rewriteInitScript,
@@ -325,5 +326,32 @@ describe('build-script errors', () => {
     expect(result.script).toContain("    archiveClassifier = 'plain'");
     expect(result.script).toContain('def compileFlags = []');
     expect(rewriteRemovedDsl("dependencies { implementation 'a:b' }")).toBeNull();
+  });
+});
+
+describe('the Java level', () => {
+  it('raises every level a script writes below the target, Ant javac included', () => {
+    const script = [
+      'sourceCompatibility = 1.8',
+      "targetCompatibility = '11'",
+      'java { sourceCompatibility = JavaVersion.VERSION_1_8 }',
+      'ant.javac(destdir: classesDir, source: 1.8, target: 1.8, debug: true)',
+      'sourceCompatibility = 21',
+    ].join('\n');
+    const result = raiseJavaLevel(script, 17)!;
+    expect(result.raised).toBe(5);
+    expect(result.script).toBe([
+      'sourceCompatibility = 17',
+      "targetCompatibility = '17'",
+      'java { sourceCompatibility = JavaVersion.VERSION_17 }',
+      'ant.javac(destdir: classesDir, source: 17, target: 17, debug: true)',
+      'sourceCompatibility = 21',
+    ].join('\n'));
+    expect(raiseJavaLevel('sourceCompatibility = 17', 17)).toBeNull();
+  });
+
+  it('reads "not supported in -source 8" as a Java level the build still declares', () => {
+    const failure = { kind: 'compile' as const, message: 'text blocks are not supported in -source 8', file: 'src/main/java/A.java', line: 3, symbol: null, excerpt: [] };
+    expect(categoriseBuildFailure(failure).id).toBe('java-level-too-low');
   });
 });

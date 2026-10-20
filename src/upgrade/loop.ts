@@ -237,6 +237,7 @@ export async function runUpgrade(options: RunOptions): Promise<UpgradeReport> {
       const result = await fix.attempt({
         repoPath,
         tool: tool.facts,
+        minJava: target.minJava,
         failures: state.failures,
         maven: async (args) => (await maven(args, `fix-${fix.id}`)).exitCode,
       });
