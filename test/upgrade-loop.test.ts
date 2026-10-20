@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest';
 
 import { setQuiet } from '../src/log.js';
 import type { Fixer } from '../src/upgrade/fixer.js';
-import { judge, runUpgrade, UpgradeError } from '../src/upgrade/loop.js';
+import { judge, revealedNotCaused, runUpgrade, UpgradeError } from '../src/upgrade/loop.js';
 import type { Maven } from '../src/upgrade/maven.js';
 import { TARGETS } from '../src/upgrade/targets.js';
 
@@ -826,6 +826,40 @@ describe('upgrade run', () => {
     });
     expect(judge(state(3.00004) as never, state(370) as never)).toBeNull();
     expect(judge(state(370) as never, state(12) as never)).toBe('more failures than before');
+  });
+
+  it('keeps a fix that lets javac reach code it never checked, but not one that breaks a caller', () => {
+    const fail = (file: string, message: string, symbol: string | null = null) => ({ kind: 'compile' as const, message, file, line: 1, symbol, excerpt: [] });
+    const security = { id: 'spring-security-config' } as never;
+    const other = { id: 'uncategorised' } as never;
+    const build = (failures: ReturnType<typeof fail>[], categories: unknown[]) => ({
+      label: 'b',
+      result: { exitCode: 1, timedOut: false, logPath: '', log: '', seconds: 1 },
+      log: { success: false, goals: 3, failures },
+      tests: new Map(),
+      diff: { regressed: [], missing: [], fixed: [], stillFailing: [] },
+      failures: failures.map((build, i) => ({ category: categories[i], build, text: build.message })),
+    });
+    const before = build(
+      [fail('src/a/SecurityConfig.java', 'cannot find symbol', 'class WebSecurityConfigurerAdapter'), fail('src/a/Other.java', 'cannot find symbol')],
+      [security, other],
+    );
+    const targeted = before.failures.slice(0, 1) as never;
+    const revealed = build(
+      [fail('src/a/Other.java', 'cannot find symbol'), fail('src/b/Billing.java', 'invalid method reference'), fail('src/b/Report.java', 'incompatible types')],
+      [other, other, other],
+    );
+    expect(judge(before as never, revealed as never)).not.toBeNull();
+    expect(revealedNotCaused(before as never, revealed as never, 'spring-security-config', targeted, ['src/a/SecurityConfig.java'])).toMatch(/fixed every failure it targeted/);
+
+    const brokeACaller = build(
+      [fail('src/a/Other.java', 'cannot find symbol'), fail('src/b/Billing.java', 'cannot find symbol', 'method filterChain(SecurityConfig)')],
+      [other, other],
+    );
+    expect(revealedNotCaused(before as never, brokeACaller as never, 'spring-security-config', targeted, ['src/a/SecurityConfig.java'])).toBeNull();
+
+    const notFixed = build([fail('src/a/SecurityConfig.java', 'cannot find symbol', 'class WebSecurityConfigurerAdapter'), fail('src/b/X.java', 'y')], [security, other]);
+    expect(revealedNotCaused(before as never, notFixed as never, 'spring-security-config', targeted, ['src/a/SecurityConfig.java'])).toBeNull();
   });
 });
 

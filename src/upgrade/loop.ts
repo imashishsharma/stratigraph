@@ -325,12 +325,15 @@ export async function runUpgrade(options: RunOptions): Promise<UpgradeReport> {
       continue;
     }
     const next = await evaluate(`build-${report.builds + 1}`);
-    const verdict = judge(state, next);
+    const judged = judge(state, next);
+    const revealed = judged === null ? null : revealedNotCaused(state, next, categoryId, targetFailures, touched);
+    const verdict = revealed === null ? judged : null;
     if (verdict === null) {
       const subject = `upgrade(ai): ${targetFailures[0]!.category.title}`;
       const tidied = [...tidy.restored, ...tidy.tidied];
+      const why = revealed ?? 'the build got further and no passing test turned red';
       const body =
-        `Written by an AI fixer (${fixer.name}); kept because the build got further and no passing test turned red.` +
+        `Written by an AI fixer (${fixer.name}); kept because ${why}.` +
         (tidied.length > 0 ? `\nWhitespace and line-ending changes on lines it did not edit were reverted in: ${tidied.join(', ')}.` : '') +
         `\n\n${fixed.summary}`;
       const sha = commitChanges(repoPath, `${subject}\n\n${body}`, preexisting);
@@ -339,7 +342,7 @@ export async function runUpgrade(options: RunOptions): Promise<UpgradeReport> {
         lastGood = sha;
         flagCodeChangedForTests(repoPath, sha, targetFailures, report);
       }
-      attempts.push({ by: 'ai', id: `ai-${number}`, category: categoryId, accepted: true, reason: 'fewer failures, no new red test', sha, description: fixed.summary });
+      attempts.push({ by: 'ai', id: `ai-${number}`, category: categoryId, accepted: true, reason: revealed ?? 'fewer failures, no new red test', sha, description: fixed.summary });
       state = next;
     } else {
       resetTo(repoPath, lastGood, preexisting);
@@ -548,6 +551,42 @@ function score(state: BuildState): [number, number, number, number, number, numb
     state.log.failures.length,
     state.diff.regressed.length + state.diff.missing.length,
   ];
+}
+
+/**
+ * A compile fix that javac answers with *more* errors can still be progress.
+ * Fixing a class header (a supertype that no longer exists) lets javac go on
+ * to check method bodies it never reached, and it reports what it finds there.
+ * One project went from 87 errors to "100 of 690". The judge reads that as
+ * worse. It is accepted when every failure the fixer targeted is gone, and
+ * every new failure is in a file the fixer did not touch and names nothing it
+ * touched. A changed signature that breaks a caller names the class it
+ * changed, so it is still rejected. Returns why it was kept, or null.
+ */
+export function revealedNotCaused(
+  previous: BuildState,
+  next: BuildState,
+  categoryId: string,
+  targeted: Classified[],
+  touched: string[],
+): string | null {
+  if (stage(previous) !== 2 || stage(next) !== 2 || compilerRefused(next) > compilerRefused(previous)) return null;
+  if (!next.log.failures.every((failure) => failure.kind === 'compile')) return null;
+  const targetedFiles = new Set(targeted.map((failure) => failure.build?.file).filter((file): file is string => !!file));
+  if (targetedFiles.size === 0) return null;
+  if (next.failures.some((failure) => failure.category.id === categoryId && targetedFiles.has(failure.build?.file ?? ''))) return null;
+  const touchedSet = new Set(touched);
+  const touchedNames = touched
+    .filter((path) => /\.(java|kt)$/.test(path))
+    .map((path) => path.split('/').pop()!.replace(/\.(java|kt)$/, ''));
+  const before = new Set(previous.log.failures.map((failure) => `${failure.file}\0${failure.message}`));
+  const fresh = next.log.failures.filter((failure) => !before.has(`${failure.file}\0${failure.message}`));
+  for (const failure of fresh) {
+    if (failure.file && touchedSet.has(failure.file)) return null;
+    const text = [failure.message, failure.symbol ?? '', ...failure.excerpt].join('\n');
+    if (touchedNames.some((name) => new RegExp(`\\b${name}\\b`).test(text))) return null;
+  }
+  return `it fixed every failure it targeted in ${[...targetedFiles].join(', ')}, and the ${fresh.length} new compile error(s) are in code javac had not reached before, none in or naming a file it changed`;
 }
 
 /** null when `next` is better than `previous`; otherwise why it is not. */
