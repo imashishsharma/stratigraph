@@ -104,6 +104,10 @@ export function claudeCodeFixer(options: ClaudeCodeOptions): Fixer {
             ...withoutApiKey(process.env, options.useApiKey === true),
             JAVA_HOME: request.javaHome,
             PATH: `${join(request.javaHome, 'bin')}${delimiter}${process.env['PATH'] ?? ''}`,
+            // The fixer's own ./gradlew runs leave no daemon behind: three idle
+            // ones, each holding a multi-gigabyte JVM, pushed a 16 GB machine
+            // into swap and a 2-minute recipe run past its 30-minute limit.
+            GRADLE_OPTS: [process.env['GRADLE_OPTS'], '-Dorg.gradle.daemon=false'].filter(Boolean).join(' '),
           },
           stdio: ['ignore', 'pipe', 'pipe'],
         });
