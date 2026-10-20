@@ -317,3 +317,73 @@ describe('lastSegment', () => {
     expect(lastSegment(fqn)).toBe(expected);
   });
 });
+
+describe('a type referenced with the wrong kind (source-only extraction)', () => {
+  // Without a classpath the Java extractor cannot tell an imported enum or
+  // interface from a class, and refers to it as `class`. Found on a real
+  // Gradle JHipster app: 17 imports of three enums landed on parentless
+  // `class` stubs beside the declared `enum` nodes, the package graph lost
+  // them, and an analysis reported the enums' package as connected to nothing.
+  const pkg = { v: 1, type: 'node', kind: 'package', fqn: 'pay.enumeration', name: 'enumeration' };
+  const user = { v: 1, type: 'node', kind: 'class', fqn: 'core.Hospital', name: 'Hospital' };
+  const declared = {
+    v: 1,
+    type: 'node',
+    kind: 'enum',
+    fqn: 'pay.enumeration.Status',
+    name: 'Status',
+    parent: { kind: 'package', fqn: 'pay.enumeration' },
+  };
+  const importAsClass = {
+    v: 1,
+    type: 'edge',
+    kind: 'imports',
+    src: { kind: 'class', fqn: 'core.Hospital' },
+    dst: { kind: 'class', fqn: 'pay.enumeration.Status' },
+    file: 'src/core/Hospital.java',
+    line: 3,
+  };
+
+  function importTargets() {
+    return db
+      .prepare(
+        `SELECT d.kind, d.is_stub AS isStub, p.fqn AS parent FROM edge e
+           JOIN node d ON d.id = e.dst_id LEFT JOIN node p ON p.id = d.parent_id
+          WHERE e.run_id = ? AND e.kind = 'imports'`,
+      )
+      .all(runId);
+  }
+
+  function typeNodes() {
+    return db
+      .prepare(`SELECT kind, is_stub AS isStub FROM node WHERE run_id = ? AND fqn = 'pay.enumeration.Status' ORDER BY kind`)
+      .all(runId);
+  }
+
+  it('lands on the declared enum when the declaration came first', () => {
+    const stats = ingest([meta, pkg, user, declared, importAsClass]);
+    expect(importTargets()).toEqual([{ kind: 'enum', isStub: 0, parent: 'pay.enumeration' }]);
+    expect(typeNodes()).toEqual([{ kind: 'enum', isStub: 0 }]);
+    expect(stats.stubs).toBe(0);
+  });
+
+  it('moves the edges from the stub to the declaration when the reference came first', () => {
+    const stats = ingest([meta, user, importAsClass, pkg, declared]);
+    expect(importTargets()).toEqual([{ kind: 'enum', isStub: 0, parent: 'pay.enumeration' }]);
+    expect(typeNodes()).toEqual([{ kind: 'enum', isStub: 0 }]);
+    expect(stats.stubs).toBe(0);
+    // The cache follows the merge: a later reference reaches the same node.
+    ingest([meta, { ...importAsClass, line: 9 }]);
+    expect(typeNodes()).toEqual([{ kind: 'enum', isStub: 0 }]);
+  });
+
+  it('keeps distinct kinds apart when neither is a type (a table is not a class)', () => {
+    ingest([
+      meta,
+      { v: 1, type: 'node', kind: 'table', fqn: 'orders', name: 'orders' },
+      { v: 1, type: 'edge', kind: 'reads_table', src: { kind: 'class', fqn: 'core.Hospital' }, dst: { kind: 'class', fqn: 'orders' } },
+    ]);
+    const kinds = db.prepare(`SELECT kind FROM node WHERE run_id = ? AND fqn = 'orders' ORDER BY kind`).pluck().all(runId);
+    expect(kinds).toEqual(['class', 'table']);
+  });
+});

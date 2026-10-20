@@ -32,6 +32,14 @@ export interface FactWriter {
 
 const BATCH_SIZE = 5_000;
 
+/**
+ * Kinds that name a Java/Kotlin type. Without a classpath an extractor cannot
+ * always tell which one a reference is (an imported enum reads as a class), so
+ * within these kinds a type is identified by its fqn alone: a reference of one
+ * kind and a declaration of another are the same node.
+ */
+const TYPE_KINDS: ReadonlySet<string> = new Set(['class', 'interface', 'enum', 'annotation']);
+
 export class SqliteFactWriter implements FactWriter {
   readonly stats: FactWriterStats = {
     files: 0,
@@ -179,6 +187,27 @@ export class SqliteFactWriter implements FactWriter {
       isStub: 0,
       attrs: fact.attrs ? JSON.stringify(fact.attrs) : null,
     };
+    // A stub of another type kind with this fqn was a reference that guessed
+    // the kind wrong: it becomes this declaration instead of a second node.
+    if (TYPE_KINDS.has(fact.kind)) {
+      const stub = this.db
+        .prepare(
+          `SELECT id FROM node WHERE run_id = ? AND fqn = ? AND is_stub = 1 AND kind <> ?
+             AND kind IN ('class', 'interface', 'enum', 'annotation') LIMIT 1`,
+        )
+        .get(this.runId, fact.fqn, fact.kind) as { id: number } | undefined;
+      if (stub !== undefined && this.typeNode(fact.fqn, fact.kind) === undefined) {
+        this.db.prepare('UPDATE node SET kind = @kind WHERE id = @id').run({ kind: fact.kind, id: stub.id });
+        for (const [cacheKey, cachedId] of this.nodeIds) {
+          if (cachedId === stub.id) this.nodeIds.delete(cacheKey);
+        }
+        this.nodeIds.set(key(fact.kind, fact.fqn), stub.id);
+        this.stmts.upgradeNode.run({ ...params, id: stub.id });
+        this.stats.stubs -= 1;
+        this.stats.nodes += 1;
+        return;
+      }
+    }
     const info = this.stmts.insertNode.run(params);
     if (info.changes > 0) {
       this.nodeIds.set(key(fact.kind, fact.fqn), Number(info.lastInsertRowid));
@@ -242,6 +271,15 @@ export class SqliteFactWriter implements FactWriter {
       this.nodeIds.set(cacheKey, found.id);
       return found.id;
     }
+    // A type referenced as one kind and declared as another (or already
+    // stubbed as another) is one type.
+    if (TYPE_KINDS.has(kind)) {
+      const other = this.typeNode(fqn);
+      if (other !== undefined) {
+        this.nodeIds.set(cacheKey, other);
+        return other;
+      }
+    }
 
     const info = this.stmts.insertNode.run({
       runId: this.runId,
@@ -260,6 +298,18 @@ export class SqliteFactWriter implements FactWriter {
     this.nodeIds.set(cacheKey, id);
     this.stats.stubs += 1;
     return id;
+  }
+
+  /** A node of any type kind with this fqn, declared ones first; optionally of `onlyKind`. */
+  private typeNode(fqn: string, onlyKind?: string): number | undefined {
+    const row = this.db
+      .prepare(
+        `SELECT id FROM node WHERE run_id = ? AND fqn = ?
+           AND kind IN ('class', 'interface', 'enum', 'annotation') AND (? IS NULL OR kind = ?)
+         ORDER BY is_stub, id LIMIT 1`,
+      )
+      .get(this.runId, fqn, onlyKind ?? null, onlyKind ?? null) as { id: number } | undefined;
+    return row?.id;
   }
 
   private fileId(path: string): number {
