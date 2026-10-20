@@ -84,6 +84,28 @@ jobs:
             extractor-checksum.json
           fail_on_unmatched_files: true
 
+  # The MCP Registry lists the server so MCP clients can find and install it.
+  # Metadata only: it points at the npm package just published, which carries
+  # the matching `mcpName`. GitHub OIDC, so no token is stored.
+  mcp-registry:
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set the version in server.json from the tag
+        run: |
+          v="${GITHUB_REF_NAME#v}"
+          jq --arg v "$v" '.version = $v | .packages[0].version = $v' server.json > server.tmp && mv server.tmp server.json
+          cat server.json
+      - name: Install mcp-publisher (v1.8.1)
+        run: |
+          curl -fsSL "https://github.com/modelcontextprotocol/registry/releases/download/v1.8.1/mcp-publisher_linux_amd64.tar.gz" | tar xz mcp-publisher
+      - run: ./mcp-publisher login github-oidc
+      - run: ./mcp-publisher publish
+
   # Last, and in its own job: the image is the third artefact and the only one
   # that can be rebuilt and re-pushed without consequence. CI builds this same
   # Dockerfile on every push, so it is not the first attempt.

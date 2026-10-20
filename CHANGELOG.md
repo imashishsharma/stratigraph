@@ -10,6 +10,15 @@ schema carries a `user_version` and is migrated forward, and every JSON
 document carries `format`, which moves only for a change a parser could trip
 over.
 
+## [2.1.2] — 2026-10-20
+
+### Added
+
+- **Listed in the official MCP Registry** as `io.github.imashishsharma/stratigraph`. The
+  npm package carries `mcpName`, `server.json` describes the server
+  (`npx stratigraph mcp`, stdio), and every release now publishes it through
+  GitHub OIDC with no stored token.
+
 ## [2.1.1] — 2026-10-08
 
 ### Added

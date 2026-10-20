@@ -1,0 +1,30 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.imashishsharma/stratigraph",
+  "title": "Stratigraph",
+  "description": "Cited structure of Java/Spring/Angular codebases: dependencies, tables, endpoints, hotspots.",
+  "repository": {
+    "url": "https://github.com/imashishsharma/stratigraph",
+    "source": "github"
+  },
+  "websiteUrl": "https://imashishsharma.github.io/stratigraph/",
+  "version": "2.1.2",
+  "packages": [
+    {
+      "registryType": "npm",
+      "registryBaseUrl": "https://registry.npmjs.org",
+      "identifier": "stratigraph",
+      "version": "2.1.2",
+      "runtimeHint": "npx",
+      "transport": {
+        "type": "stdio"
+      },
+      "packageArguments": [
+        {
+          "type": "positional",
+          "value": "mcp"
+        }
+      ]
+    }
+  ]
+}
