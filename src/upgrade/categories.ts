@@ -312,7 +312,7 @@ const RULES: Rule[] = [
     id: 'third-party-library',
     title: 'A library has no version compatible with the new stack',
     disposition: 'judgment',
-    match: has(/NoClassDefFoundError|ClassNotFoundException|ServiceConfigurationError|cannot access/),
+    match: has(/NoClassDefFoundError|ClassNotFoundException|NoSuchMethodError|NoSuchFieldError|AbstractMethodError|IncompatibleClassChangeError|ServiceConfigurationError|cannot access/),
     guidance:
       'A dependency was built against the old stack. Find its release for the new one (often a renamed artifact, ' +
       'e.g. jackson-datatype-hibernate6 → hibernate7, htmlunit-driver → htmlunit3-driver). Remove version pins the ' +

@@ -4,7 +4,7 @@ import { dirname, join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { NETWORK_FAILURE, categoriseBuildFailure } from '../src/upgrade/categories.js';
+import { NETWORK_FAILURE, categoriseBuildFailure, categoriseTest } from '../src/upgrade/categories.js';
 import {
   addCompilerParametersArg,
   addGradleDependency,
@@ -218,5 +218,10 @@ public class Handler implements DataFetcherExceptionHandler {
 BUILD FAILED in 3s`;
     const [failure] = parseGradleLog(log, '/repo').failures;
     expect(categoriseBuildFailure(failure!)).toMatchObject({ id: 'supertype-api-change', disposition: 'judgment' });
+  });
+
+  it('reads a NoSuchMethodError in a test as mismatched library versions', () => {
+    const test = { id: 'a.ApiTest#works()', status: 'error' as const, message: "java.lang.NoSuchMethodError: 'io.restassured.config.ParamConfig$UpdateStrategy io.restassured.config.ParamConfig.pathParamsUpdateStrategy()'", cause: null };
+    expect(categoriseTest(test as never).id).toBe('third-party-library');
   });
 });
