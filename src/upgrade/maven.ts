@@ -23,7 +23,10 @@ export interface MavenResult {
 
 export interface MavenOptions {
   repoPath: string;
-  javaHome: string;
+  /** Fixed, or chosen per build (Gradle: the recipe moves the wrapper, and the JDK must follow it). */
+  javaHome: string | (() => string);
+  /** Default maven. */
+  tool?: 'maven' | 'gradle' | undefined;
   logDir: string;
   /** Appended to every invocation, e.g. -Dskip.npm. */
   extraArgs: string[];
@@ -34,29 +37,33 @@ export interface MavenOptions {
 export type Maven = (args: string[], label: string) => Promise<MavenResult>;
 
 export function createMaven(options: MavenOptions): Maven {
-  const wrapper = join(options.repoPath, process.platform === 'win32' ? 'mvnw.cmd' : 'mvnw');
-  const hasWrapper = existsSync(wrapper) && existsSync(join(options.repoPath, '.mvn', 'wrapper'));
+  const gradle = options.tool === 'gradle';
+  const wrapper = join(options.repoPath, gradle ? (process.platform === 'win32' ? 'gradlew.bat' : 'gradlew') : process.platform === 'win32' ? 'mvnw.cmd' : 'mvnw');
+  const hasWrapper = existsSync(wrapper) && existsSync(join(options.repoPath, gradle ? join('gradle', 'wrapper') : join('.mvn', 'wrapper')));
   // A wrapper committed without its executable bit (common from Windows) is
   // still a shell script: run it through sh rather than fail with EACCES.
   const [command, prefix] = !hasWrapper
-    ? ['mvn', [] as string[]]
+    ? [gradle ? 'gradle' : 'mvn', [] as string[]]
     : process.platform !== 'win32' && !isExecutable(wrapper)
       ? ['sh', [wrapper]]
       : [wrapper, [] as string[]];
-  const env = {
+  const envFor = (javaHome: string) => ({
     ...(options.env ?? process.env),
-    JAVA_HOME: options.javaHome,
-    PATH: `${join(options.javaHome, 'bin')}${delimiter}${(options.env ?? process.env)['PATH'] ?? ''}`,
-  };
+    JAVA_HOME: javaHome,
+    PATH: `${join(javaHome, 'bin')}${delimiter}${(options.env ?? process.env)['PATH'] ?? ''}`,
+  });
+  // Maven's batch flags; Gradle takes --console=plain from the tool's own args.
+  const toolFlags = gradle ? ['--no-daemon'] : ['-B', '-e'];
 
   return (args, label) =>
     new Promise((resolvePromise, rejectPromise) => {
       const logPath = join(options.logDir, `${label}.log`);
       const out = createWriteStream(logPath);
       const started = Date.now();
-      const child = spawn(command, [...prefix, '-B', '-e', ...args, ...options.extraArgs], {
+      const javaHome = typeof options.javaHome === 'function' ? options.javaHome() : options.javaHome;
+      const child = spawn(command, [...prefix, ...toolFlags, ...args, ...options.extraArgs], {
         cwd: options.repoPath,
-        env,
+        env: envFor(javaHome),
         stdio: ['ignore', 'pipe', 'pipe'],
         shell: process.platform === 'win32',
         detached: process.platform !== 'win32',
@@ -117,13 +124,30 @@ export interface JdkChoice {
  * one. The target JDK: the lowest installed at or above both the declared
  * level and the target Boot line's minimum (17 for Boot 3 and 4).
  */
-export function chooseJdks(declared: number | null, targetMinimum: number, runtimes: JavaRuntime[]): JdkChoice {
+export function chooseJdks(
+  declared: number | null,
+  targetMinimum: number,
+  runtimes: JavaRuntime[],
+  /** Gradle only: the JDKs the wrapper's Gradle version runs on, for the baseline. */
+  gradleRange: { min: number; max: number } | null = null,
+): JdkChoice {
   const ascending = [...runtimes].sort((a, b) => a.major - b.major);
   const notes: string[] = [];
   const want = declared ?? targetMinimum;
-  const baseline = ascending.find((jdk) => jdk.major === want) ?? ascending.find((jdk) => jdk.major > want) ?? null;
-  if (baseline === null) notes.push(`no JDK ${want}+ is installed for the baseline build`);
-  else if (baseline.major !== want) notes.push(`baseline builds on JDK ${baseline.major}: no JDK ${want} is installed`);
+  const runs = (jdk: JavaRuntime) => gradleRange === null || (jdk.major >= gradleRange.min && jdk.major <= gradleRange.max);
+  const baseline =
+    ascending.find((jdk) => jdk.major === want && runs(jdk)) ??
+    ascending.find((jdk) => jdk.major > want && runs(jdk)) ??
+    (gradleRange !== null ? [...ascending].reverse().find(runs) ?? null : null);
+  if (baseline === null) {
+    notes.push(
+      gradleRange !== null
+        ? `no installed JDK runs this project's Gradle (it needs JDK ${gradleRange.min}–${gradleRange.max}) for the baseline build`
+        : `no JDK ${want}+ is installed for the baseline build`,
+    );
+  } else if (baseline.major !== want) {
+    notes.push(`baseline builds on JDK ${baseline.major}: no JDK ${want}${gradleRange !== null ? " that this project's Gradle runs on" : ''} is installed`);
+  }
   const floor = Math.max(targetMinimum, declared ?? 0);
   const target = ascending.find((jdk) => jdk.major >= floor) ?? null;
   if (target === null) notes.push(`no JDK ${floor}+ is installed; the upgraded build needs one`);

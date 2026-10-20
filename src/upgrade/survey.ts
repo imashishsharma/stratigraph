@@ -13,7 +13,9 @@ import { join, relative } from 'node:path';
 import { discoverJavaRuntimes, type JavaRuntime } from '../toolchain/java.js';
 import { categoriseText, type Category } from './categories.js';
 import { chooseJdks, type JdkChoice } from './maven.js';
-import { javaMajor, readPom, type PomFacts } from './pom.js';
+import { detectBuildTool, type ProjectFacts } from './build-tool.js';
+import { javaMajor, readPom } from './pom.js';
+import { gradleJdkRange } from '../toolchain/classpath.js';
 import { needsUpgrade, type UpgradeTarget } from './targets.js';
 
 interface Pattern {
@@ -27,17 +29,18 @@ interface Pattern {
 
 const PATTERNS: Pattern[] = [
   { category: 'spring-security-config', pattern: /extends\s+WebSecurityConfigurerAdapter|GlobalMethodSecurityConfiguration|@EnableGlobalMethodSecurity|\.antMatchers\(/, files: /\.(java|kt)$/, why: 'the recipe converts the DSL but often leaves the adapter class (4 of 10 gap-map repos)' },
-  { category: 'springfox', pattern: /springfox/, files: /(\.(java|kt)|pom\.xml)$/, why: 'springfox has no Boot 3 release; the recipe leaves a TODO or a half-migrated class' },
-  { category: 'openapi-generator-javax', pattern: /openapi-generator-maven-plugin/, files: /pom\.xml$/, why: 'generated code keeps javax unless the generator is told otherwise; a generator bump can emit uncompilable code' },
+  { category: 'springfox', pattern: /springfox/, files: /(\.(java|kt)|pom\.xml|build\.gradle(\.kts)?)$/, why: 'springfox has no Boot 3 release; the recipe leaves a TODO or a half-migrated class' },
+  { category: 'openapi-generator-javax', pattern: /openapi-generator-maven-plugin/, files: /(pom\.xml|build\.gradle(\.kts)?|libs\.versions\.toml)$/, why: 'generated code keeps javax unless the generator is told otherwise; a generator bump can emit uncompilable code' },
   { category: 'hibernate-6', pattern: /@Type\(\s*type\s*=|getColumnIterator|getPropertyIterator|hibernate_sequence/i, files: /\.(java|kt|sql|xml|yml|yaml|properties)$/, why: 'Hibernate 6 changed @Type, metadata iterators and sequence naming' },
-  { category: 'javax-leftover', pattern: /io\.jsonwebtoken[\s\S]{0,200}<version>0\.9|javax\.xml\.bind|springsecurity5/, files: /(\.(java|kt|html)|pom\.xml)$/, why: 'libraries without a Jakarta release, or renamed artifacts, survive the recipe' },
-  { category: 'compiler-release-conflict', pattern: /--add-exports/, files: /pom\.xml$/, why: 'the recipe sets <release>, which javac refuses alongside --add-exports of system modules' },
-  { category: 'compiler-parameters', pattern: /<maven-compiler-plugin\.version>3\.[0-9]\.|<artifactId>maven-compiler-plugin<\/artifactId>\s*<version>3\.[0-9]\./, files: /pom\.xml$/, why: 'an old compiler plugin can drop -parameters, which Spring 6.1 needs' },
-  { category: 'formatting-check', pattern: /spring-javaformat-maven-plugin|spotless-maven-plugin/, files: /pom\.xml$/, why: 'the recipe output fails the formatting check' },
+  { category: 'javax-leftover', pattern: /io\.jsonwebtoken[\s\S]{0,200}<version>0\.9|javax\.xml\.bind|springsecurity5/, files: /(\.(java|kt|html)|pom\.xml|build\.gradle(\.kts)?)$/, why: 'libraries without a Jakarta release, or renamed artifacts, survive the recipe' },
+  { category: 'gradle-too-old', pattern: /distributionUrl=\S*gradle-(?:[2-6]\.|7\.[0-5]\b)/, files: /gradle-wrapper\.properties$/, why: 'Spring Boot 3 needs Gradle 7.5+ and JDK 17; the recipe moves the wrapper, and an old one fails before it can' },
+  { category: 'compiler-release-conflict', pattern: /--add-exports/, files: /(pom\.xml|build\.gradle(\.kts)?|libs\.versions\.toml)$/, why: 'the recipe sets <release>, which javac refuses alongside --add-exports of system modules' },
+  { category: 'compiler-parameters', pattern: /<maven-compiler-plugin\.version>3\.[0-9]\.|<artifactId>maven-compiler-plugin<\/artifactId>\s*<version>3\.[0-9]\./, files: /(pom\.xml|build\.gradle(\.kts)?|libs\.versions\.toml)$/, why: 'an old compiler plugin can drop -parameters, which Spring 6.1 needs' },
+  { category: 'formatting-check', pattern: /spring-javaformat-maven-plugin|spotless-maven-plugin|com\.diffplug\.spotless|io\.spring\.javaformat/, files: /(pom\.xml|build\.gradle(\.kts)?|libs\.versions\.toml)$/, why: 'the recipe output fails the formatting check' },
   { category: 'h2-reserved-word', pattern: /create\s+table\s+(?:if\s+not\s+exists\s+)?["`]?user["`]?\s*\(|@Table\(\s*name\s*=\s*"user"/i, files: /\.(sql|java|kt)$/, why: 'H2 2.x reserves USER' },
-  { category: 'test-framework', pattern: /@Captor|spock-spring/, files: /(\.(java|kt|groovy)|pom\.xml)$/, why: 'Boot 4 no longer initialises @Captor fields; Spock needs 2.4 for Spring 6' },
+  { category: 'test-framework', pattern: /@Captor|spock-spring/, files: /(\.(java|kt|groovy)|pom\.xml|build\.gradle(\.kts)?)$/, why: 'Boot 4 no longer initialises @Captor fields; Spock needs 2.4 for Spring 6' },
   { category: 'removed-boot-api', pattern: /actuate\.trace\.http|autoconfigure\.h2\.|web\.servlet\.server\.ConfigurableServletWebServerFactory/, files: /\.(java|kt)$/, why: 'classes that moved or were renamed' },
-  { category: 'flyway-database-module', pattern: /<artifactId>flyway-core<\/artifactId>[\s\S]*<artifactId>(?:hsqldb|postgresql|mysql-connector|mssql-jdbc|ojdbc\w*)<\/artifactId>|<artifactId>(?:hsqldb|postgresql|mysql-connector|mssql-jdbc|ojdbc\w*)<\/artifactId>[\s\S]*<artifactId>flyway-core<\/artifactId>/, files: /pom\.xml$/, why: 'Flyway 10 moved most databases into their own modules' },
+  { category: 'flyway-database-module', pattern: /<artifactId>flyway-core<\/artifactId>[\s\S]*<artifactId>(?:hsqldb|postgresql|mysql-connector|mssql-jdbc|ojdbc\w*)<\/artifactId>|<artifactId>(?:hsqldb|postgresql|mysql-connector|mssql-jdbc|ojdbc\w*)<\/artifactId>[\s\S]*<artifactId>flyway-core<\/artifactId>/, files: /(pom\.xml|build\.gradle(\.kts)?|libs\.versions\.toml)$/, why: 'Flyway 10 moved most databases into their own modules' },
   { category: 'security-filter-chain-conflict', pattern: /SecurityFilterChain\s+\w+\s*\(/, files: /\.(java|kt)$/, why: 'two filter chains that both match every request stop Boot 3.2+ at startup' },
 ];
 
@@ -56,7 +59,7 @@ export interface PlanCategory {
 
 export interface Plan {
   repoPath: string;
-  pom: PomFacts | null;
+  pom: ProjectFacts | null;
   target: UpgradeTarget;
   upgradeNeeded: boolean;
   jdks: JdkChoice;
@@ -69,18 +72,32 @@ export interface Plan {
 }
 
 export function planUpgrade(repoPath: string, target: UpgradeTarget, runtimes = discoverJavaRuntimes()): Plan {
-  const pom = readPom(repoPath);
+  const tool = detectBuildTool(repoPath);
+  const pom = tool?.facts ?? null;
   const blockers: string[] = [];
-  if (pom === null) blockers.push('no pom.xml: the upgrade supports Maven projects');
-  else if (pom.bootVersion === null) blockers.push('the Spring Boot version is not declared in pom.xml (parent, BOM import or spring-boot.version)');
+  if (tool === null) blockers.push('no pom.xml or build.gradle: the upgrade supports Maven and Gradle projects');
+  else if (pom?.bootVersion === null) {
+    blockers.push(
+      tool.kind === 'maven'
+        ? 'the Spring Boot version is not declared in pom.xml (parent, BOM import or spring-boot.version)'
+        : `the Spring Boot version is not declared where it can be read (${pom.buildFile} plugins block, gradle.properties, ext, or a version catalog)`,
+    );
+  }
   const limits: string[] = [];
-  if (pom !== null && pom.modules.length > 0) {
-    limits.push(`multi-module build (${pom.modules.length} modules): every module is built and tested, but known fixes edit only the root pom.xml`);
+  const modules = tool?.kind === 'maven' ? readPom(repoPath)?.modules ?? [] : [];
+  if (modules.length > 0) {
+    limits.push(`multi-module build (${modules.length} modules): every module is built and tested, but known fixes edit only the root pom.xml`);
+  }
+  if (tool?.kind === 'gradle') {
+    limits.push(
+      `Gradle${pom?.gradleVersion ? ` ${pom.gradleVersion}` : ''}: the recipe runs through OpenRewrite's Gradle plugin and moves the wrapper; known fixes edit only the root ${pom?.buildFile}`,
+    );
   }
   const upgradeNeeded = pom?.bootVersion ? needsUpgrade(pom.bootVersion, target) : false;
   if (pom?.bootVersion && !upgradeNeeded) blockers.push(`already on Spring Boot ${pom.bootVersion}`);
 
-  const jdks = chooseJdks(javaMajor(pom?.javaVersion ?? null), target.minJava, runtimes);
+  const gradleRange = tool?.kind === 'gradle' && pom?.gradleVersion ? gradleJdkRange(pom.gradleVersion) : null;
+  const jdks = chooseJdks(javaMajor(pom?.javaVersion ?? null), target.minJava, runtimes, gradleRange);
   if (jdks.target === null) blockers.push(`no JDK ${target.minJava}+ installed`);
 
   const files = listFiles(repoPath);
@@ -123,7 +140,7 @@ export function planUpgrade(repoPath: string, target: UpgradeTarget, runtimes = 
     upgradeNeeded,
     jdks,
     installed: runtimes,
-    hasWrapper: files.includes('mvnw'),
+    hasWrapper: files.includes('mvnw') || files.includes('gradlew'),
     expected,
     blockers,
     limits,
@@ -146,6 +163,7 @@ function categoryById(id: string): Category {
     'removed-boot-api': 'package org.springframework.boot.x does not exist',
     'security-filter-chain-conflict': 'UnreachableFilterChainException',
     'flyway-database-module': 'FlywayException: Unsupported Database: x',
+    'gradle-too-old': 'requires Gradle 7.6',
   };
   return categoriseText(probe[id] ?? id);
 }
@@ -182,12 +200,13 @@ export function renderPlan(plan: Plan): string {
   const out: string[] = [];
   const pom = plan.pom;
   out.push(`Upgrade plan: Spring Boot ${pom?.bootVersion ?? '?'} → ${plan.target.boot}`, '');
-  out.push(`  Boot version   ${pom?.bootVersion ?? 'not declared'}${pom?.bootVersionFrom ? `  (pom.xml, ${pom.bootVersionFrom})` : ''}`);
+  out.push(`  Build          ${pom ? `${pom.tool}${pom.gradleVersion ? ` ${pom.gradleVersion}` : ''} (${pom.buildFile})` : 'none found'}`);
+  out.push(`  Boot version   ${pom?.bootVersion ?? 'not declared'}${pom?.bootVersionFrom ? `  (${pom.bootVersionFrom})` : ''}`);
   out.push(`  Java declared  ${pom?.javaVersion ?? 'not declared'}`);
   out.push(`  Recipe         ${plan.target.recipe}`);
   out.push(`  Baseline JDK   ${plan.jdks.baseline ? `${plan.jdks.baseline.version} (${plan.jdks.baseline.home})` : 'none found'}`);
   out.push(`  Target JDK     ${plan.jdks.target ? `${plan.jdks.target.version} (${plan.jdks.target.home})` : 'none found'}`);
-  out.push(`  Maven          ${plan.hasWrapper ? './mvnw (the project\'s wrapper)' : 'mvn on PATH'}`);
+  out.push(`  Runs with      ${plan.hasWrapper ? `the project's wrapper (${pom?.tool === 'gradle' ? './gradlew' : './mvnw'})` : pom?.tool === 'gradle' ? 'gradle on PATH' : 'mvn on PATH'}`);
   for (const note of plan.jdks.notes) out.push(`  note: ${note}`);
   out.push('');
   if (plan.blockers.length > 0) {

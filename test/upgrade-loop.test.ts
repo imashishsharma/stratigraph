@@ -691,6 +691,67 @@ describe('upgrade run', () => {
     expect(baselineTries).toBe(2);
     expect(report.status).toBe('parity');
   });
+
+  it('upgrades a Gradle project: recipe through the init script, then the wrapper the new Boot plugin needs', async () => {
+    const wrapper = (version: string) => `distributionUrl=https\\://services.gradle.org/distributions/gradle-${version}-all.zip\n`;
+    const repo = repoWith({
+      'build.gradle': "plugins {\n    id 'java'\n    id 'org.springframework.boot' version '2.7.18'\n}\n",
+      'gradle/wrapper/gradle-wrapper.properties': wrapper('6.9.4'),
+      'src/main/java/demo/App.java': 'class App {}',
+    });
+    const readFile = (path: string) => readFileSync(join(repo, path), 'utf8');
+    const labels: string[] = [];
+    const maven: Maven = async (args, label) => {
+      labels.push(label);
+      const logPath = join(repo, '..', `${label}.log`);
+      if (args.includes('rewriteRun')) {
+        expect(args[args.indexOf('--init-script') + 1]).toMatch(/rewrite-init\.gradle$/);
+        writeFileSync(join(repo, 'build.gradle'), readFile('build.gradle').replace('2.7.18', '3.5.6'));
+        return { exitCode: 0, timedOut: false, logPath, log: 'BUILD SUCCESSFUL in 20s\n', seconds: 1 };
+      }
+      if (readFile('build.gradle').includes('3.5.6') && readFile('gradle/wrapper/gradle-wrapper.properties').includes('6.9.4')) {
+        const log = "* What went wrong:\nAn exception occurred applying plugin request [id: 'org.springframework.boot', version: '3.5.6']\n> Failed to apply plugin 'org.springframework.boot'.\n   > Spring Boot plugin requires Gradle 7.6.4 or later. The current version is Gradle 6.9.4\n\n* Try:\n> Run with --stacktrace.\n\nBUILD FAILED in 1s\n";
+        return { exitCode: 1, timedOut: false, logPath, log, seconds: 1 };
+      }
+      mkdirSync(join(repo, 'build', 'test-results', 'test'), { recursive: true });
+      writeFileSync(join(repo, 'build', 'test-results', 'test', 'TEST-demo.AppTest.xml'), '<testsuite><testcase name="boots" classname="demo.AppTest"/></testsuite>');
+      return { exitCode: 0, timedOut: false, logPath, log: '> Task :compileJava\n> Task :test\nBUILD SUCCESSFUL in 9s\n', seconds: 1 };
+    };
+    const report = await runUpgrade(options(repo, maven));
+    expect(report.status).toBe('parity');
+    expect(report.baseline?.tests).toBe(1);
+    expect(report.commits.map((commit) => [commit.layer, commit.subject])).toEqual([
+      ['recipe', 'org.openrewrite.java.spring.boot3.UpgradeSpringBoot_3_5'],
+      ['known-fix', 'run the build on Gradle 8.14.3 (the wrapper pinned 6.9.4)'],
+      ['report', 'upgrade: report'],
+    ]);
+    expect(readFile('gradle/wrapper/gradle-wrapper.properties')).toContain('gradle-8.14.3-all.zip');
+    expect(labels[0]).toBe('baseline');
+  });
+
+  it('skips a formatting check that already fails at baseline, for every build, and says so', async () => {
+    const repo = repoWith({
+      'build.gradle': "plugins {\n    id 'org.springframework.boot' version '3.4.1'\n    id 'com.diffplug.spotless' version '6.25.0'\n}\n",
+      'src/main/java/demo/App.java': 'class App {}',
+    });
+    const seen: string[][] = [];
+    const maven: Maven = async (args, label) => {
+      seen.push(args);
+      const logPath = join(repo, '..', `${label}.log`);
+      if (args.includes('rewriteRun')) return { exitCode: 0, timedOut: false, logPath, log: 'BUILD SUCCESSFUL\n', seconds: 1 };
+      mkdirSync(join(repo, 'build', 'test-results', 'test'), { recursive: true });
+      writeFileSync(join(repo, 'build', 'test-results', 'test', 'TEST-demo.AppTest.xml'), '<testsuite><testcase name="boots" classname="demo.AppTest"/></testsuite>');
+      if (!args.includes('spotlessCheck')) {
+        const log = "> Task :spotlessJavaCheck FAILED\n> Task :test\n\n* What went wrong:\nExecution failed for task ':spotlessJavaCheck'.\n> The following files had format violations:\n      src/test/java/demo/AppTest.java\n\n* Try:\n> Run with --stacktrace.\n\nBUILD FAILED in 9s\n";
+        return { exitCode: 1, timedOut: false, logPath, log, seconds: 1 };
+      }
+      return { exitCode: 0, timedOut: false, logPath, log: '> Task :test\nBUILD SUCCESSFUL in 9s\n', seconds: 1 };
+    };
+    const report = await runUpgrade(options(repo, maven));
+    expect(report.status).toBe('parity');
+    expect(report.notes.join('\n')).toContain('formatting check already fails before the upgrade');
+    expect(seen.filter((args) => !args.includes('rewriteRun')).slice(1).every((args) => args.includes('spotlessCheck'))).toBe(true);
+  });
 });
 
 function read(repo: string): string {

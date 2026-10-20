@@ -9,7 +9,10 @@ import { discoverJavaRuntimes, inspectJavaHome, type JavaRuntime } from '../tool
 import { claudeCodeFixer } from '../upgrade/fixer.js';
 import { runUpgrade, UpgradeError } from '../upgrade/loop.js';
 import { createMaven } from '../upgrade/maven.js';
-import { javaMajor, readPom } from '../upgrade/pom.js';
+import { detectBuildTool } from '../upgrade/build-tool.js';
+import { wrapperGradleVersion } from '../upgrade/gradle.js';
+import { javaMajor } from '../upgrade/pom.js';
+import { gradleJdkRange } from '../toolchain/classpath.js';
 import { REPORT_MD, type UpgradeReport } from '../upgrade/report.js';
 import { planUpgrade, renderPlan, type Plan } from '../upgrade/survey.js';
 import { TARGETS, type UpgradeTarget } from '../upgrade/targets.js';
@@ -66,12 +69,29 @@ export function runUpgradePlan(options: UpgradeCommandOptions): Plan {
 export async function runUpgradeRun(options: UpgradeRunOptions): Promise<UpgradeReport> {
   const repoPath = resolve(options.repo ?? '.');
   const upgradeTarget = target(options.to);
-  const pom = readPom(repoPath);
+  const tool = detectBuildTool(repoPath);
+  if (tool === null) throw new UpgradeError(`no pom.xml or build.gradle in ${repoPath}; the upgrade supports Maven and Gradle projects.`);
   const runtimes = discoverJavaRuntimes();
-  const choice = chooseJdks(javaMajor(pom?.javaVersion ?? null), upgradeTarget.minJava, runtimes);
+  const declared = javaMajor(tool.facts.javaVersion);
+  // Gradle runs only on a range of JDKs per version: the baseline (and the
+  // recipe, which runs before the wrapper moves) needs one the current
+  // wrapper accepts.
+  const gradleRange = tool.kind === 'gradle' && tool.facts.gradleVersion !== null ? gradleJdkRange(tool.facts.gradleVersion) : null;
+  const choice = chooseJdks(declared, upgradeTarget.minJava, runtimes, gradleRange);
   const baselineJdk = options.baselineJavaHome ? runtimeAt(options.baselineJavaHome) : choice.baseline;
   const targetJdk = options.javaHome ? runtimeAt(options.javaHome) : choice.target;
   if (baselineJdk === null || targetJdk === null) throw new UpgradeError(choice.notes.join('; '));
+  // Gradle, after the recipe: the wrapper may now be newer, and the JDK
+  // follows it — the lowest 17+ (or declared) JDK that wrapper runs on.
+  const targetJavaHome = (): string => {
+    if (tool.kind !== 'gradle' || options.javaHome) return homeOf(targetJdk);
+    const version = wrapperGradleVersion(repoPath);
+    if (version === null) return homeOf(targetJdk);
+    const range = gradleJdkRange(version);
+    const floor = Math.max(upgradeTarget.minJava, declared ?? 0);
+    const fit = [...runtimes].sort((a, b) => a.major - b.major).find((jdk) => jdk.major >= floor && jdk.major <= range.max && jdk.major >= range.min);
+    return homeOf(fit ?? targetJdk);
+  };
   if (targetJdk.major < upgradeTarget.minJava) {
     throw new UpgradeError(`Spring Boot ${upgradeTarget.boot} needs JDK ${upgradeTarget.minJava}+; ${targetJdk.version} was given.`);
   }
@@ -83,8 +103,8 @@ export async function runUpgradeRun(options: UpgradeRunOptions): Promise<Upgrade
   const timeoutMs = (options.buildTimeoutMinutes ?? 30) * 60000;
 
   warn(
-    'upgrade: this builds the project. Maven will download the OpenRewrite plugin and the dependencies of the ' +
-      'new versions. Work happens on a new branch; nothing is pushed.',
+    `upgrade: this builds the project. ${tool.kind === 'gradle' ? 'Gradle' : 'Maven'} will download the OpenRewrite plugin and the ` +
+      'dependencies of the new versions. Work happens on a new branch; nothing is pushed.',
   );
   if (options.ai === 'claude-code') {
     warn(
@@ -93,13 +113,17 @@ export async function runUpgradeRun(options: UpgradeRunOptions): Promise<Upgrade
         'kept only if the build improves.',
     );
   }
-  info(`upgrade: baseline on JDK ${baselineJdk.version}, upgrade on JDK ${targetJdk.version}`);
+  info(
+    `upgrade: ${tool.kind}${tool.facts.gradleVersion ? ` ${tool.facts.gradleVersion}` : ''}; baseline on JDK ${baselineJdk.version}, ` +
+      `upgrade on JDK ${tool.kind === 'gradle' ? `${targetJdk.version}+ (following the wrapper)` : targetJdk.version}`,
+  );
 
   const report = await runUpgrade({
     repoPath,
     target: upgradeTarget,
-    baselineMaven: (logDir) => createMaven({ repoPath, javaHome: homeOf(baselineJdk), logDir, extraArgs: mavenArgs, timeoutMs }),
-    targetMaven: (logDir) => createMaven({ repoPath, javaHome: homeOf(targetJdk), logDir, extraArgs: mavenArgs, timeoutMs }),
+    tool,
+    baselineMaven: (logDir) => createMaven({ repoPath, tool: tool.kind, javaHome: homeOf(baselineJdk), logDir, extraArgs: mavenArgs, timeoutMs }),
+    targetMaven: (logDir) => createMaven({ repoPath, tool: tool.kind, javaHome: targetJavaHome, logDir, extraArgs: mavenArgs, timeoutMs }),
     targetJavaHome: homeOf(targetJdk),
     mavenArgs,
     fixer:

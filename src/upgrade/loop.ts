@@ -9,8 +9,9 @@ import { mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { info, warn } from '../log.js';
-import { parseBuildLog, type BuildLog } from './build-log.js';
-import { categoriseTest, categoriseText } from './categories.js';
+import type { BuildLog } from './build-log.js';
+import { detectBuildTool, type BuildTool } from './build-tool.js';
+import { NETWORK_FAILURE, categoriseTest, categoriseText } from './categories.js';
 import { guardrailViolations, type Fixer } from './fixer.js';
 import {
   branchExists,
@@ -28,9 +29,8 @@ import {
 } from './git.js';
 import { KNOWN_FIXES, type Classified } from './known-fixes.js';
 import { tidyEdit } from './tidy.js';
-import { VERIFY, type Maven, type MavenResult } from './maven.js';
-import { readPom } from './pom.js';
-import { REWRITE_PLUGIN_VERSION, REWRITE_SPRING_VERSION, needsUpgrade, type UpgradeTarget } from './targets.js';
+import type { Maven, MavenResult } from './maven.js';
+import { REWRITE_SPRING_VERSION, needsUpgrade, type UpgradeTarget } from './targets.js';
 import { atParity, clearTestReports, diffTests, readTestReports, type TestDiff, type TestResult } from './test-reports.js';
 import { writeReport, type Attempt, type UpgradeReport } from './report.js';
 
@@ -58,6 +58,8 @@ export interface RunOptions {
   branch?: string | undefined;
   rewritePlugin?: string | undefined;
   rewriteSpring?: string | undefined;
+  /** Maven or Gradle; detected from the repository when omitted. */
+  tool?: BuildTool | undefined;
   now?: () => number;
 }
 
@@ -80,10 +82,15 @@ export async function runUpgrade(options: RunOptions): Promise<UpgradeReport> {
   if (dirty.length > 0) {
     throw new UpgradeError(`the work tree has uncommitted changes (${dirty.slice(0, 5).join(', ')}); commit or stash them first.`);
   }
-  const pom = readPom(repoPath);
-  if (pom === null) throw new UpgradeError(`no pom.xml in ${repoPath}; the upgrade supports Maven projects.`);
+  const tool = options.tool ?? detectBuildTool(repoPath);
+  if (tool === null) throw new UpgradeError(`no pom.xml or build.gradle in ${repoPath}; the upgrade supports Maven and Gradle projects.`);
+  const pom = tool.facts;
   if (pom.bootVersion === null) {
-    throw new UpgradeError('the Spring Boot version is not declared in pom.xml (parent, BOM import or spring-boot.version).');
+    throw new UpgradeError(
+      tool.kind === 'maven'
+        ? 'the Spring Boot version is not declared in pom.xml (parent, BOM import or spring-boot.version).'
+        : `the Spring Boot version is not declared where it can be read (${pom.buildFile} plugins block, gradle.properties, ext, or a version catalog).`,
+    );
   }
   if (!needsUpgrade(pom.bootVersion, target)) {
     throw new UpgradeError(`the project is already on Spring Boot ${pom.bootVersion}; nothing to upgrade to ${target.boot}.`);
@@ -141,10 +148,28 @@ export async function runUpgrade(options: RunOptions): Promise<UpgradeReport> {
   // 1. Baseline: the reference every later build is compared with.
   info('upgrade: baseline build (this is the reference: tests red here are not the upgrade\'s to fix)');
   clearTestReports(repoPath);
-  const baselineRun = await withNetworkRetry(baselineMaven, VERIFY, 'baseline', () => clearTestReports(repoPath));
-  const baselineLog = parseBuildLog(baselineRun.log, repoPath);
-  const baselineTests = readTestReports(repoPath);
+  let verify = tool.verify;
+  let baselineRun = await withNetworkRetry(baselineMaven, verify, 'baseline', () => clearTestReports(repoPath));
+  let baselineLog = tool.parse(baselineRun.log, repoPath);
   report.builds += 1;
+  // A formatting gate that already fails before the upgrade is the project's,
+  // not the upgrade's (realworld-example-app: master fails spotlessJavaCheck).
+  // Skip that check for every build, and say so, rather than refuse to start.
+  const baselineFailures = baselineLog.success ? [] : classify(baselineLog, diffTests(new Map(), new Map()));
+  const skip = tool.formatCheckSkip;
+  if (baselineFailures.length > 0 && skip.length > 0 && baselineFailures.every((failure) => failure.category.id === 'formatting-check')) {
+    warn('upgrade: the baseline fails only its formatting check; rebuilding with that check skipped, for every build');
+    verify = [...verify, ...skip];
+    clearTestReports(repoPath);
+    baselineRun = await withNetworkRetry(baselineMaven, verify, 'baseline-format-skipped', () => clearTestReports(repoPath));
+    baselineLog = tool.parse(baselineRun.log, repoPath);
+    report.builds += 1;
+    report.notes.push(
+      `The formatting check already fails before the upgrade, so every build skipped it (${skip.join(' ')}). ` +
+        'Run the formatter on the branch before merging.',
+    );
+  }
+  const baselineTests = readTestReports(repoPath);
   report.baseline = summarise(baselineTests, baselineLog, baselineRun);
   if (!baselineLog.success) {
     report.notes.push(`The project does not build before the upgrade (${baselineRun.logPath}). Fix that first; the upgrade needs a baseline to compare against.`);
@@ -153,25 +178,20 @@ export async function runUpgrade(options: RunOptions): Promise<UpgradeReport> {
   }
   info(`upgrade: baseline ${report.baseline.passed}/${report.baseline.tests} tests pass`);
 
-  // 2. The recipe, as one commit.
-  const exclusions = gradleExclusions(repoPath);
-  const recipeArgs = (goal: string) => [
-    `org.openrewrite.maven:rewrite-maven-plugin:${options.rewritePlugin ?? REWRITE_PLUGIN_VERSION}:${goal}`,
-    `-Drewrite.recipeArtifactCoordinates=org.openrewrite.recipe:rewrite-spring:${options.rewriteSpring ?? REWRITE_SPRING_VERSION}`,
-    `-Drewrite.activeRecipes=${target.recipe}`,
-    ...(exclusions ? [`-Drewrite.exclusions=${exclusions}`] : []),
-  ];
-  info(`upgrade: running ${target.recipe}`);
-  let recipe = await maven(recipeArgs('run'), 'recipe');
-  if (recipe.exitCode !== 0) {
-    // `run` compiles first; on the target JDK the old code may not, and
-    // runNoFork parses without that compile.
-    warn('upgrade: the recipe run failed; retrying without its forked compile (runNoFork)');
-    recipe = await maven(recipeArgs('runNoFork'), 'recipe-nofork');
+  // 2. The recipe, as one commit. On Gradle it runs on the baseline's JDK:
+  // the recipe is what moves the wrapper to a Gradle the target JDK runs on.
+  info(`upgrade: running ${target.recipe} (${tool.kind})`);
+  const recipeRunner = tool.kind === 'gradle' ? baselineMaven : maven;
+  const runs = tool.recipeRuns(target, { plugin: options.rewritePlugin, spring: options.rewriteSpring }, logDir);
+  let recipe = await withNetworkRetry(recipeRunner, runs[0]!.args, runs[0]!.label, () => undefined);
+  for (const fallback of runs.slice(1)) {
+    if (recipe.exitCode === 0) break;
+    warn(`upgrade: the recipe run failed; retrying as ${fallback.label}`);
+    recipe = await recipeRunner(fallback.args, fallback.label);
   }
   if (recipe.exitCode !== 0) {
     report.notes.push(`The OpenRewrite recipe itself failed (${recipe.logPath}).`);
-    report.remaining = handoffs(classify(parseBuildLog(recipe.log, repoPath), diffTests(baselineTests, new Map())), attempts);
+    report.remaining = handoffs(classify(tool.parse(recipe.log, repoPath), diffTests(baselineTests, new Map())), attempts);
     return finish('recipe-failed');
   }
   const recipeSha = commitChanges(repoPath, `upgrade(recipe): ${target.recipe}\n\nOpenRewrite rewrite-spring ${report.rewriteSpring}, unedited.`, preexisting);
@@ -182,9 +202,9 @@ export async function runUpgrade(options: RunOptions): Promise<UpgradeReport> {
   // 3. The loop.
   const evaluate = async (label: string): Promise<BuildState> => {
     clearTestReports(repoPath);
-    const result = await withNetworkRetry(maven, VERIFY, label, () => clearTestReports(repoPath));
+    const result = await withNetworkRetry(maven, verify, label, () => clearTestReports(repoPath));
     report.builds += 1;
-    const log = parseBuildLog(result.log, repoPath);
+    const log = tool.parse(result.log, repoPath);
     const tests = readTestReports(repoPath);
     const diff = diffTests(baselineTests, tests);
     return { label, result, log, tests, diff, failures: classify(log, diff, repoPath) };
@@ -201,7 +221,7 @@ export async function runUpgrade(options: RunOptions): Promise<UpgradeReport> {
     let progressed = false;
 
     // Known fixes first: exact, and cheap to try.
-    for (const fix of KNOWN_FIXES) {
+    for (const fix of KNOWN_FIXES.filter((candidate) => (candidate.tools ?? ['maven']).includes(tool.kind))) {
       const relevant = state.failures.filter((failure) => fix.categories.includes(failure.category.id));
       if (relevant.length === 0) continue;
       const key = `${fix.id}\0${signature(relevant)}`;
@@ -209,6 +229,7 @@ export async function runUpgrade(options: RunOptions): Promise<UpgradeReport> {
       tried.add(key);
       const result = await fix.attempt({
         repoPath,
+        tool: tool.facts,
         failures: state.failures,
         maven: async (args) => (await maven(args, `fix-${fix.id}`)).exitCode,
       });
@@ -259,6 +280,10 @@ export async function runUpgrade(options: RunOptions): Promise<UpgradeReport> {
       logDir,
       javaHome: options.targetJavaHome,
       mavenArgs: options.mavenArgs,
+      buildCommand:
+        tool.kind === 'gradle'
+          ? `./gradlew ${verify.join(' ')} ${options.mavenArgs.join(' ')}`
+          : `mvn -B ${verify.join(' ')} ${options.mavenArgs.join(' ')}`,
     });
     report.costUsd += fixed.costUsd ?? 0;
     // Line endings and trailing whitespace the fixer changed on lines it did
@@ -350,7 +375,6 @@ function flagCodeChangedForTests(repoPath: string, sha: string, failures: Classi
 }
 
 /** Maven could not download something because the network failed, not because it does not exist. */
-export const NETWORK_FAILURE = /Could not transfer artifact[\s\S]{0,400}?(?:timed out|Connection reset|Connection refused|Remote host terminated|status code: 5\d\d|Read timed out)/;
 
 /**
  * Run a build, and once more if it failed only because a download did
@@ -574,8 +598,3 @@ function handoffs(failures: Classified[], attempts: Attempt[]): UpgradeReport['r
   });
 }
 
-/** A Maven project that also carries a Gradle wrapper makes the recipe try to download Gradle (gap map). */
-function gradleExclusions(repoPath: string): string | null {
-  const files = git(repoPath, ['ls-files', 'gradlew', 'gradlew.bat', 'gradle/wrapper']).trim();
-  return files === '' ? null : 'gradle/wrapper/**,gradlew,gradlew.bat';
-}

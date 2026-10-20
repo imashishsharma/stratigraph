@@ -16,6 +16,19 @@
 import type { BuildFailure } from './build-log.js';
 import type { TestResult } from './test-reports.js';
 
+/** A build that failed because a download did, not because anything is missing. */
+export const NETWORK_FAILURE = new RegExp(
+  [
+    // Maven
+    /Could not transfer artifact[\s\S]{0,400}?(?:timed out|Connection reset|Connection refused|Remote host terminated|status code: 5\d\d|Read timed out)/.source,
+    // Gradle: the wrapper fetching its distribution, and dependency/plugin downloads
+    /Downloading from https?:\/\/\S+ failed: (?:timeout|Connection reset|Connection refused)/.source,
+    // OpenRewrite's UpdateGradleWrapper fetching the distribution it moves the wrapper to
+    /Failed to download https?:\/\/\S+ to artifact cache/.source,
+    /Could not (?:GET|HEAD) '[^']+'[\s\S]{0,300}?(?:timed out|Connection reset|Connection refused|Received status code 5\d\d|Remote host terminated)/.source,
+  ].join('|'),
+);
+
 export type Disposition = 'mechanical' | 'judgment' | 'decision';
 
 export interface Category {
@@ -43,11 +56,15 @@ const has = (pattern: RegExp) => (text: string) => pattern.test(text);
 const RULES: Rule[] = [
   {
     id: 'network',
-    title: 'Maven could not download a dependency (network)',
+    title: 'A download failed (network)',
     disposition: 'decision',
-    match: has(/Could not transfer artifact[\s\S]{0,400}?(?:timed out|Connection reset|Connection refused|Remote host terminated|status code: 5\d\d)/),
+    match: has(NETWORK_FAILURE),
     guidance: 'The repository could not be reached; nothing in the code is wrong. Check the network or proxy and run again.',
-    options: ['Run again once the network or the repository manager (Nexus, Artifactory) is reachable.', 'Point Maven at a reachable mirror in settings.xml.'],
+    options: [
+      'Run again once the network or the repository manager (Nexus, Artifactory) is reachable.',
+      'Point the build at a reachable mirror (Maven settings.xml; Gradle init script or gradle.properties).',
+      'Gradle wrapper: if only the distribution download fails, put the zip in place with another tool (the wrapper uses only the first address a host resolves to; curl tries the others).',
+    ],
   },
   {
     id: 'context-failure-repeated',
@@ -173,6 +190,15 @@ const RULES: Rule[] = [
     guidance:
       'Spring 6.1 no longer reads parameter names from debug info. Compile with -parameters ' +
       '(maven.compiler.parameters=true, maven-compiler-plugin 3.6.2+).',
+  },
+  {
+    id: 'gradle-too-old',
+    title: 'The build needs a newer Gradle',
+    disposition: 'mechanical',
+    match: has(/requires Gradle \d|Unsupported class file major version|Gradle [\d.]+ requires Java|is incompatible with (?:Gradle|the Java)|Unsupported Java\. Your build is currently configured to use Java/i),
+    guidance:
+      'The new Spring Boot Gradle plugin, or the JDK the upgraded build needs, requires a newer Gradle than the ' +
+      'wrapper pins. Point gradle/wrapper/gradle-wrapper.properties at a current Gradle 8.',
   },
   {
     id: 'maven-too-old',

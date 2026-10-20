@@ -12,6 +12,9 @@ import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 
 import type { BuildFailure } from './build-log.js';
+import type { BuildToolKind, ProjectFacts } from './build-tool.js';
+import { addCompilerParametersArg, addGradleDependency, setWrapperVersion } from './gradle.js';
+import { GRADLE_WRAPPER_TARGET } from './targets.js';
 import type { Category } from './categories.js';
 import {
   addDependency,
@@ -33,6 +36,8 @@ export interface Classified {
 
 export interface FixContext {
   repoPath: string;
+  /** The build tool and what it declares; known fixes are per tool. */
+  tool?: ProjectFacts | undefined;
   failures: Classified[];
   /** Runs Maven in the repository with the target JDK; resolves to the exit code. */
   maven: (args: string[]) => Promise<number>;
@@ -48,6 +53,8 @@ export interface KnownFix {
   id: string;
   /** Categories whose failures this fix addresses. */
   categories: string[];
+  /** Build tools it applies to; Maven only when omitted (most edit pom.xml). */
+  tools?: BuildToolKind[];
   attempt: (context: FixContext) => Promise<FixResult | null>;
 }
 
@@ -253,6 +260,7 @@ const RELOCATIONS: Array<{ from: string; to: string; dependency?: [string, strin
 
 const relocations: KnownFix = {
   id: 'relocated-classes',
+  tools: ['maven', 'gradle'],
   categories: ['removed-boot-api', 'javax-leftover', 'uncategorised', 'removed-spring-api'],
   attempt: async (context) => {
     const text = context.failures.map((failure) => failure.text).join('\n');
@@ -294,6 +302,7 @@ const relocations: KnownFix = {
 /** Spring 7 rejects private @Bean methods; the method is named in the error. */
 const privateBean: KnownFix = {
   id: 'private-bean-method',
+  tools: ['maven', 'gradle'],
   categories: ['removed-spring-api'],
   attempt: async (context) => {
     const names = new Set<string>();
@@ -397,7 +406,82 @@ const mavenWrapper: KnownFix = {
   },
 };
 
+// --- Gradle -----------------------------------------------------------------
+
+function editGradleScript(context: FixContext, edit: (script: string, kotlin: boolean) => string | null): string | null {
+  const file = context.tool?.buildFile ?? 'build.gradle';
+  const script = readText(context.repoPath, file);
+  if (script === null) return null;
+  const next = edit(script, context.tool?.kotlinDsl ?? file.endsWith('.kts'));
+  if (next === null || next === script) return null;
+  writeFileSync(join(context.repoPath, file), next);
+  return file;
+}
+
+/** A wrapper too old for the new Boot plugin or for the JDK the upgraded build needs. */
+const gradleWrapper: KnownFix = {
+  id: 'gradle-wrapper-version',
+  categories: ['gradle-too-old'],
+  tools: ['gradle'],
+  attempt: async (context) => {
+    if (failuresOf(context, 'gradle-too-old').length === 0) return null;
+    const file = 'gradle/wrapper/gradle-wrapper.properties';
+    const text = readText(context.repoPath, file);
+    const current = text === null ? null : /gradle-([\d.]+)-(?:all|bin)\.zip/.exec(text)?.[1] ?? null;
+    if (text === null || current === null || !older(current, GRADLE_WRAPPER_TARGET)) return null;
+    const next = setWrapperVersion(text, GRADLE_WRAPPER_TARGET);
+    if (next === null) return null;
+    writeFileSync(join(context.repoPath, file), next);
+    return { description: `run the build on Gradle ${GRADLE_WRAPPER_TARGET} (the wrapper pinned ${current})`, changed: [file] };
+  },
+};
+
+const gradleParameters: KnownFix = {
+  id: 'gradle-compiler-parameters',
+  categories: ['compiler-parameters'],
+  tools: ['gradle'],
+  attempt: async (context) => {
+    if (failuresOf(context, 'compiler-parameters').length === 0) return null;
+    const file = editGradleScript(context, (script, kotlin) => addCompilerParametersArg(script, kotlin));
+    return file ? { description: 'compile with -parameters (Spring 6.1 no longer reads debug info)', changed: [file] } : null;
+  },
+};
+
+const gradleFormatter: KnownFix = {
+  id: 'gradle-apply-formatter',
+  categories: ['formatting-check'],
+  tools: ['gradle'],
+  attempt: async (context) => {
+    if (failuresOf(context, 'formatting-check').length === 0) return null;
+    const plugins = context.tool?.plugins ?? new Set<string>();
+    const task = plugins.has('com.diffplug.spotless') ? 'spotlessApply' : plugins.has('io.spring.javaformat') ? 'format' : null;
+    if (task === null) return null;
+    if ((await context.maven([task, '--console=plain'])) !== 0) return null;
+    return { description: `run ${task} on the recipe output`, changed: [] };
+  },
+};
+
+const gradleFlyway: KnownFix = {
+  id: 'gradle-flyway-database-module',
+  categories: ['flyway-database-module'],
+  tools: ['gradle'],
+  attempt: async (context) => {
+    for (const failure of failuresOf(context, 'flyway-database-module')) {
+      const database = /Unsupported Database: ([^\n]+)/.exec(failure.text)?.[1] ?? '';
+      const module = FLYWAY_MODULES.find(([pattern]) => pattern.test(database))?.[1];
+      if (!module) continue;
+      const file = editGradleScript(context, (script, kotlin) => addGradleDependency(script, `org.flywaydb:${module}`, kotlin));
+      if (file) return { description: `add ${module} (Flyway 10 split its database support)`, changed: [file] };
+    }
+    return null;
+  },
+};
+
 export const KNOWN_FIXES: KnownFix[] = [
+  gradleWrapper,
+  gradleFormatter,
+  gradleParameters,
+  gradleFlyway,
   mavenWrapper,
   formatter,
   managedVersion,

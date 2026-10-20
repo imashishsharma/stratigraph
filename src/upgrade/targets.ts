@@ -31,6 +31,14 @@ export const TARGETS: Record<string, UpgradeTarget> = {
 
 /** The versions the gap map ran (bench/upgrade-gap, 2026-09-29). */
 export const REWRITE_PLUGIN_VERSION = '6.46.1';
+/**
+ * The OpenRewrite Gradle plugin on the same rewrite core (8.89.0) as the Maven
+ * plugin above. 7.40.0 and later are on the Plugin Portal but need a
+ * rewrite-bom (8.91.0) that only the Code Genome repository serves.
+ */
+export const REWRITE_GRADLE_PLUGIN_VERSION = '7.39.0';
+/** The Gradle a known fix moves an outdated wrapper to: runs on JDK 8–24, and Boot 3.5 and 4.0 support it. */
+export const GRADLE_WRAPPER_TARGET = '8.14.3';
 export const REWRITE_SPRING_VERSION = '6.37.1';
 
 /** True when `version` is older than the target line (so there is an upgrade to do). */

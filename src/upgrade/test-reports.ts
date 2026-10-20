@@ -30,9 +30,10 @@ const SKIP_DIRS = new Set(['.git', 'node_modules', 'src', '.idea']);
 const REPORT_FILE = /^TEST-.+\.xml$/;
 
 /**
- * Every Surefire/Failsafe report file under a `target/` directory, wherever
- * the build put it: the default surefire-reports and failsafe-reports, or a
- * configured reportsDirectory (JHipster: target/test-results/test).
+ * Every JUnit XML report file the build wrote: under a Maven `target/`
+ * directory, wherever the build put it (surefire-reports, failsafe-reports,
+ * or a configured reportsDirectory such as JHipster's target/test-results),
+ * and under Gradle's `build/test-results/`.
  */
 function reportFiles(repoPath: string): string[] {
   const found: string[] = [];
@@ -64,7 +65,10 @@ function reportFiles(repoPath: string): string[] {
     for (const entry of entries) {
       if (!entry.isDirectory()) continue;
       const path = join(dir, entry.name);
+      // Maven: anywhere under target/. Gradle: build/test-results/ (not all
+      // of build/, which a JavaScript toolchain may also use).
       if (entry.name === 'target') inTarget(path, 0);
+      else if (entry.name === 'build') inTarget(join(path, 'test-results'), 0);
       else if (!SKIP_DIRS.has(entry.name)) walk(path, depth + 1);
     }
   };

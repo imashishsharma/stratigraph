@@ -26,6 +26,8 @@ export interface FixerRequest {
   logDir: string;
   javaHome: string;
   mavenArgs: string[];
+  /** The command that judges the change, as a person would type it. */
+  buildCommand?: string | undefined;
 }
 
 export interface FixerResult {
@@ -82,6 +84,8 @@ export function claudeCodeFixer(options: ClaudeCodeOptions): Fixer {
           'Grep',
           'Bash(mvn:*)',
           'Bash(./mvnw:*)',
+          'Bash(gradle:*)',
+          'Bash(./gradlew:*)',
           '--disallowedTools',
           'Bash(git:*)',
           'Bash(curl:*)',
@@ -169,9 +173,10 @@ export function fixPrompt(request: FixerRequest): string {
     .slice(0, 8)
     .map((other) => `- [${other.category.id}] ${other.text.split('\n')[0]?.slice(0, 160)}`)
     .join('\n');
-  const build = `mvn -B clean verify -Dmaven.test.failure.ignore=true ${request.mavenArgs.join(' ')}`.trim();
+  const build = (request.buildCommand ?? `mvn -B clean verify -Dmaven.test.failure.ignore=true ${request.mavenArgs.join(' ')}`).trim();
 
-  return `You are finishing a Spring Boot ${request.from} → ${request.to} upgrade of this Maven project.
+  const toolName = request.buildCommand?.includes('gradle') ? 'Gradle' : 'Maven';
+  return `You are finishing a Spring Boot ${request.from} → ${request.to} upgrade of this ${toolName} project.
 OpenRewrite's upgrade recipe has already run and its output is committed. Known mechanical fixes have been applied.
 Fix the failures below, and only those.
 
@@ -186,11 +191,11 @@ ${category?.guidance ?? 'Read the failure and its cause.'}
 - Do not weaken security: keep every permitAll/authenticated/role rule and its order.
 - Never edit files under target/ or other generated output; fix the generator or its input instead.
 - Make the smallest change that restores the behaviour the project had before the upgrade.
-- Do not run git. Do not download anything by hand; Maven may resolve dependencies.
+- Do not run git. Do not download anything by hand; the build tool may resolve dependencies.
 - If the right fix changes behaviour (an API contract, an authorisation rule, data semantics), do not make it:
   say so in your summary and stop.
 
-You may verify with a narrower build than the full one (e.g. \`mvn -q -o compile\` or \`-Dtest=...\`).
+You may verify with a narrower build than the full one (e.g. \`mvn -q -o compile\` / \`./gradlew compileJava --offline\`, or a single test).
 The full build that will judge your change is:
   ${build}
 
