@@ -1,11 +1,55 @@
 # stratigraph
 
-**Read the layers of a codebase.**
+**Upgrade Spring Boot with your tests as the judge, and map large Java, Spring and Angular codebases with every claim cited.**
 
 [![npm](https://img.shields.io/npm/v/stratigraph)](https://www.npmjs.com/package/stratigraph)
 [![CI](https://github.com/imashishsharma/stratigraph/actions/workflows/ci.yml/badge.svg)](https://github.com/imashishsharma/stratigraph/actions/workflows/ci.yml)
 [![license: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
-[![node >=18.18](https://img.shields.io/badge/node-%3E%3D18.18-brightgreen)](package.json)
+[![MCP Registry](https://img.shields.io/badge/MCP%20Registry-io.github.imashishsharma%2Fstratigraph-6f42c1)](https://registry.modelcontextprotocol.io)
+
+**Website:** https://imashishsharma.github.io/stratigraph/ · open source, runs locally
+
+![An ER diagram stratigraph read from a Spring Boot application's JPA mappings and migrations](https://imashishsharma.github.io/stratigraph/assets/img/og-image.png)
+
+## 🔁 Upgrade Spring Boot (2.7 → 3.5, 3.x → 4.0)
+
+```sh
+npx stratigraph upgrade plan --to 3.5               # read-only: what will break, with file:line citations
+npx stratigraph upgrade run  --to 3.5 --ai claude-code
+```
+
+OpenRewrite's recipe does most of an upgrade. The **upgrade agent** handles what it leaves broken.
+
+- **Your tests are the judge.** It records every test's result *before* touching the code. A change is kept only if the build gets further and no passing test turns red. Disabling or deleting a test is rejected outright.
+- **Layered, reviewable commits** on a branch of their own: the recipe, exact known fixes, and AI fixes from Claude Code (opt-in). Application code changed to make a test pass is flagged for review.
+- **It knows when to stop.** An authorisation rule or an HTTP contract is never chosen for you. It hands those back in `upgrade-report.md` with the evidence and the options.
+
+| Benchmark ([details](bench/upgrade-gap/README.md)) | OpenRewrite alone | stratigraph |
+|---|---|---|
+| 10 public Spring Boot apps: every previously passing test still passes, no human edits | **0 / 10** | **5 / 10** (+2 stopped at a real decision) |
+| 9 apps it had never seen ([details](bench/upgrade-fresh/README.md)) | — | **8 / 9** |
+| Time and AI cost per app | — | 1–14 min, $0–2.54 |
+
+## 🗺️ Map a codebase nobody remembers
+
+```sh
+npx stratigraph scan .        # extract, mine git history, analyse, write the report: one command
+```
+
+- **Architecture:** deployables, packages and their dependencies, cycles, and C4 diagrams at all four levels.
+- **Data model:** an ER diagram from JPA *and* Liquibase/Flyway, with the drift between them.
+- **HTTP API and risk:** endpoints, Angular → Spring call links, hotspots by recent churn × complexity, and knowledge silos.
+- **Every claim cites a file and line or a commit.** Every view states how much of the code it was built from, and is withheld when that's too little.
+- **MCP server** (`stratigraph mcp`): 13 read-only tools such as `what_breaks_if`, `who_knows` and `where_is_table_written`, for Claude Code, Cursor or any MCP client.
+
+Measured on 20 public repositories against hand-labelled ground truth: entity and table recall 100%, endpoint recall 99%, DI edges resolved 95% ([scorecard](bench/scorecard.md)).
+
+<p>
+<img src="https://imashishsharma.github.io/stratigraph/assets/img/report-architecture.webp" alt="Architecture view of the HTML report" width="49%">
+<img src="https://imashishsharma.github.io/stratigraph/assets/img/report-hotspots.webp" alt="Hotspots view of the HTML report" width="49%">
+</p>
+
+## Why "stratigraph"
 
 Stratigraphy is how archaeologists read a site: layer by layer, deducing the
 order things happened from what sits on top of what. `stratigraph` does the same
@@ -18,7 +62,7 @@ repositories that do not compile, have never had `node_modules` installed, and
 use layouts nobody has used since Ant — because those are exactly the
 repositories nobody remembers.
 
-## What comes out
+## The codebase map, in detail
 
 - **A fact graph** — packages, classes, methods, endpoints, DI edges, routes,
   O/R mappings — in a local SQLite file, every row citing a file and line, a
@@ -79,6 +123,8 @@ stratigraph doctor    # says which of these your machine can do right now
   - [The JVM extractor — Java and Kotlin](#the-jvm-extractor--java-and-kotlin)
   - [The TypeScript extractor](#the-typescript-extractor)
   - [Keeping the fact store small](#keeping-the-fact-store-small)
+  - [Keeping it current](#keeping-it-current)
+  - [Upgrading Spring Boot](#upgrading-spring-boot) — the upgrade agent in full
   - [In a pipeline: JSON and a quality gate](#in-a-pipeline-json-and-a-quality-gate)
   - [Configuration](#configuration)
 - [Architecture](#architecture)

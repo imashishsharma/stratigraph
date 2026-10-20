@@ -2,7 +2,7 @@
   "name": "stratigraph",
   "version": "2.1.2",
   "mcpName": "io.github.imashishsharma/stratigraph",
-  "description": "Read the layers of a codebase: static facts from source and git history, assembled into a dependency graph, hotspots, and grounded structural findings.",
+  "description": "Upgrade Spring Boot 2.7\u21923.5/4.0 with your tests as the judge, and map large Java/Spring/Angular codebases (architecture, data model, API, hotspots), every claim cited. MCP server included.",
   "license": "Apache-2.0",
   "type": "module",
   "engines": {
@@ -45,16 +45,25 @@
     "vitest": "^3.2.7"
   },
   "keywords": [
+    "spring-boot",
+    "spring-boot-upgrade",
+    "spring-boot-3",
+    "spring-boot-4",
+    "migration",
+    "openrewrite",
+    "jakarta",
+    "java",
+    "kotlin",
+    "angular",
     "static-analysis",
     "architecture",
-    "dependency-graph",
-    "code-archaeology",
-    "java",
-    "spring",
-    "angular",
-    "mcp",
     "c4",
-    "legacy-code"
+    "er-diagram",
+    "legacy-code",
+    "code-archaeology",
+    "mcp",
+    "mcp-server",
+    "claude-code"
   ],
   "repository": {
     "type": "git",
