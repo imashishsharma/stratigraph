@@ -18,7 +18,7 @@ import { FactEmitter, type LineSink } from './protocol.js';
  */
 
 export const EXTRACTOR = 'typescript';
-export const VERSION = '2.1.2';
+export const VERSION = '2.2.0';
 
 /** Mirrors the core's default excludes, so both sides skip the same trees. */
 const DEFAULT_EXCLUDES = ['node_modules', 'target', 'build', 'dist', '.git', '.idea', '.gradle'];

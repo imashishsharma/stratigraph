@@ -28,7 +28,7 @@ OpenRewrite's recipe does most of an upgrade. The **upgrade agent** handles what
 |---|---|---|
 | 10 public Spring Boot apps: every previously passing test still passes, no human edits | **0 / 10** | **5 / 10** (+2 stopped at a real decision) |
 | 9 apps it had never seen ([details](bench/upgrade-fresh/README.md)) | — | **8 / 9** |
-| Gradle builds ([details](bench/upgrade-gradle/README.md)) | — | see details |
+| Gradle: realworld-example-app, JHipster 7.9 ([details](bench/upgrade-gradle/README.md)) | — | **68/68** parity; JHipster stopped at 1 error (needs JHipster 8) |
 | Time and AI cost per app | — | 1–14 min, $0–2.54 |
 
 ## 🗺️ Map a codebase nobody remembers

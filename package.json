@@ -1,8 +1,8 @@
 {
   "name": "stratigraph",
-  "version": "2.1.2",
+  "version": "2.2.0",
   "mcpName": "io.github.imashishsharma/stratigraph",
-  "description": "Upgrade Spring Boot 2.7\u21923.5/4.0 (Maven or Gradle) with your tests as the judge, and map large Java/Spring/Angular codebases (architecture, data model, API, hotspots), every claim cited. MCP server included.",
+  "description": "Upgrade Spring Boot 2.7→3.5/4.0 (Maven or Gradle) with your tests as the judge, and map large Java/Spring/Angular codebases (architecture, data model, API, hotspots), every claim cited. MCP server included.",
   "license": "Apache-2.0",
   "type": "module",
   "engines": {

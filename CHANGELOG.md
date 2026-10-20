@@ -10,7 +10,7 @@ schema carries a `user_version` and is migrated forward, and every JSON
 document carries `format`, which moves only for a change a parser could trip
 over.
 
-## [Unreleased]
+## [2.2.0] — 2026-10-20
 
 ### Added
 
@@ -28,7 +28,21 @@ over.
   - It chooses JDKs that follow the wrapper, and judges tests from
     `build/test-results`.
   - Gradle known fixes: the wrapper version, `-parameters`, `spotlessApply` or
-    `format`, and the Flyway database module.
+    `format`, the Flyway database module, and dropping hand-pinned versions
+    that Spring Boot's BOM manages when two versions of a library collide. The
+    BOM is read from the local cache.
+  - Measured on two public Gradle apps
+    ([bench/upgrade-gradle](bench/upgrade-gradle/README.md)).
+    spring-boot-realworld-example-app 2.6 → 3.5 reached parity, 68/68.
+    jhipster-sample-app-gradle 7.9 stopped at one compile error that needs
+    JHipster 8.
+- `upgrade`: new failure categories. `supertype-api-change` covers a library
+  interface that changed its abstract methods. `jakarta-api-missing` covers a
+  stale BOM or pin that still resolves javax. `gradle-too-old` and
+  `build-timeout` are new too. Linkage errors such as `NoSuchMethodError` now
+  count as mismatched library versions.
+- `upgrade run --build-args` passes extra arguments to Maven or Gradle.
+  `--maven-args` still works.
 
 ### Fixed
 
@@ -40,7 +54,16 @@ over.
   changelog pairs in the top 20 give way to real findings.
 - `upgrade`: a download timeout of the Gradle wrapper or a Gradle dependency is
   a network failure, retried once and handed off as such. It is no longer
-  reported as a broken baseline.
+  reported as a broken baseline. The recipe run gets the same retry.
+- `upgrade`: a formatting check that already fails before the upgrade is
+  skipped for every build, and the report says so. It no longer blocks the run.
+  This applies to Maven too.
+- `upgrade`: a build stopped by `--build-timeout` says so, instead of blaming
+  the last line it printed.
+- `upgrade`: files the baseline build creates, such as an npm lockfile, are
+  never committed.
+- Windows: `mvnw.cmd` and `gradlew.bat` are run through a shell with their
+  arguments quoted. Newer Node versions refuse to spawn a `.cmd` file directly.
 
 ## [2.1.2] — 2026-10-20
 
