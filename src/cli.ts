@@ -365,7 +365,8 @@ export function buildProgram(): Command {
     .option('--max-builds <n>', 'stop after this many builds (default 25)')
     .option('--max-minutes <n>', 'stop after this long (default 180)')
     .option('--attempts <n>', 'AI attempts per failure category before handing it off (default 2)')
-    .option('--maven-args <args>', 'extra Maven arguments for every build, e.g. "-Dskip.npm"')
+    .option('--build-args <args>', 'extra Maven or Gradle arguments for every build, e.g. "-Dskip.npm" or "-x webapp"')
+    .option('--maven-args <args>', 'the same as --build-args (its older name)')
     .option('--baseline-java-home <path>', 'JDK for the build before the upgrade (default: the declared Java level)')
     .option('--target-java-home <path>', 'JDK for the upgraded build (default: lowest installed 17+)')
     .option('--branch <name>', 'branch to create (default stratigraph/upgrade-spring-boot-<to>)')
@@ -385,6 +386,7 @@ export function buildProgram(): Command {
           maxMinutes?: string;
           attempts?: string;
           mavenArgs?: string;
+          buildArgs?: string;
           baselineJavaHome?: string;
           targetJavaHome?: string;
           branch?: string;
@@ -403,7 +405,7 @@ export function buildProgram(): Command {
           maxBuilds: parsePositiveInt('--max-builds', options.maxBuilds),
           maxMinutes: parsePositiveInt('--max-minutes', options.maxMinutes),
           attemptsPerCategory: parsePositiveInt('--attempts', options.attempts),
-          mavenArgs: options.mavenArgs,
+          mavenArgs: options.buildArgs ?? options.mavenArgs,
           baselineJavaHome: options.baselineJavaHome,
           javaHome: options.targetJavaHome,
           branch: options.branch,
