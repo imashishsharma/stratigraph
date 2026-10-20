@@ -13,7 +13,8 @@ import { join, relative } from 'node:path';
 
 import type { BuildFailure } from './build-log.js';
 import type { BuildToolKind, ProjectFacts } from './build-tool.js';
-import { addCompilerParametersArg, addGradleDependency, dropManagedPins, readBootManaged, readGradleFacts, setWrapperVersion } from './gradle.js';
+import { git } from './git.js';
+import { addCompilerParametersArg, addGradleDependency, dropManagedPins, readBootManaged, readGradleFacts, rewriteRemovedDsl, setWrapperVersion } from './gradle.js';
 import { GRADLE_WRAPPER_TARGET } from './targets.js';
 import type { Category } from './categories.js';
 import {
@@ -502,8 +503,35 @@ const gradleManagedPins: KnownFix = {
   },
 };
 
+/** Every Gradle script in the repository, so one fix covers what evaluation would hit one at a time. */
+function gradleScripts(repoPath: string): string[] {
+  return git(repoPath, ['ls-files', '-z', '*.gradle', '*.gradle.kts']).split('\0').filter((path) => path !== '');
+}
+
+const gradleRemovedDsl: KnownFix = {
+  id: 'gradle-removed-dsl',
+  categories: ['gradle-removed-dsl'],
+  tools: ['gradle'],
+  attempt: async (context) => {
+    if (failuresOf(context, 'gradle-removed-dsl').length === 0) return null;
+    const changed: string[] = [];
+    const renames = new Set<string>();
+    for (const file of gradleScripts(context.repoPath)) {
+      const text = readText(context.repoPath, file);
+      const result = text === null ? null : rewriteRemovedDsl(text);
+      if (result === null) continue;
+      writeFileSync(join(context.repoPath, file), result.script);
+      changed.push(file);
+      for (const rename of result.changes) renames.add(rename);
+    }
+    if (changed.length === 0) return null;
+    return { description: `rename build-script DSL Gradle 7 / the Boot plugin removed (${[...renames].join(', ')})`, changed };
+  },
+};
+
 export const KNOWN_FIXES: KnownFix[] = [
   gradleWrapper,
+  gradleRemovedDsl,
   gradleManagedPins,
   gradleFormatter,
   gradleParameters,

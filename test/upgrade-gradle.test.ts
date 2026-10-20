@@ -11,6 +11,7 @@ import {
   dropManagedPins,
   parseGradleLog,
   readBootManaged,
+  rewriteRemovedDsl,
   readGradleFacts,
   rewriteInitScript,
   setWrapperVersion,
@@ -275,5 +276,54 @@ describe('static checks', () => {
     const [failure] = parseGradleLog(log, '/r').failures;
     expect(failure?.message).toMatch(/^:checkstyleMain: /);
     expect(categoriseBuildFailure(failure!).id).toBe('static-check');
+  });
+});
+
+describe('build-script errors', () => {
+  const where = (file: string, line: number, message: string) =>
+    `FAILURE: Build failed with an exception.\n\n* Where:\n${file} line: ${line}\n\n* What went wrong:\n${message}\n\n* Try:\n> Run with --stacktrace.\n\nBUILD FAILED in 2s`;
+
+  it('reads where evaluation stopped, and a removed method as a script error, not a missing artifact', () => {
+    const repo = project({ 'build.gradle': 'apply from: "gradle/war.gradle"\n'.padEnd(10) + '\n'.repeat(400), 'gradle/war.gradle': '' });
+    const log = where(`Build file '${repo}/build.gradle'`, 370, "A problem occurred evaluating root project 'app'.\n> Could not find method compile() for arguments [{group=io.springfox, name=springfox-swagger-ui, version=2.9.2}] on object of type org.gradle.api.internal.artifacts.dsl.dependencies.DefaultDependencyHandler.");
+    const parsed = parseGradleLog(log, repo);
+    expect(parsed.failures[0]).toMatchObject({ kind: 'pom', file: 'build.gradle', line: 370 });
+    expect(parsed.evaluatedTo).toBe(370);
+    expect(categoriseBuildFailure(parsed.failures[0]!).id).toBe('gradle-removed-dsl');
+  });
+
+  it('places an error in an applied script at the line that applies it', () => {
+    const repo = project({ 'build.gradle': "plugins { id 'java' }\n\napply from: 'gradle/war.gradle'\n", 'gradle/war.gradle': '' });
+    const log = where(`Script '${repo}/gradle/war.gradle'`, 4, "A problem occurred evaluating script.\n> Could not set unknown property 'mainClassName' for task ':bootWar' of type org.springframework.boot.gradle.tasks.bundling.BootWar.");
+    const parsed = parseGradleLog(log, repo);
+    expect(parsed.failures[0]).toMatchObject({ file: 'gradle/war.gradle', line: 4 });
+    expect(parsed.evaluatedTo).toBeGreaterThan(3);
+    expect(parsed.evaluatedTo).toBeLessThan(4);
+    expect(categoriseBuildFailure(parsed.failures[0]!).id).toBe('gradle-removed-dsl');
+  });
+
+  it('renames removed DSL, and leaves look-alikes alone', () => {
+    const script = [
+      'dependencies {',
+      '    compile group: "io.springfox", name: "springfox-swagger-ui", version: "2.9.2"',
+      "    testCompile 'junit:junit:4.13'",
+      '    runtime("org.postgresql:postgresql")',
+      "    compileOnly 'org.projectlombok:lombok'",
+      '}',
+      "bootWar { mainClassName = 'com.example.App' }",
+      'jar {',
+      "    classifier = 'plain'",
+      '}',
+      'def compileFlags = []',
+    ].join('\n');
+    const result = rewriteRemovedDsl(script)!;
+    expect(result.script).toContain('    implementation group: "io.springfox"');
+    expect(result.script).toContain("    testImplementation 'junit:junit:4.13'");
+    expect(result.script).toContain('    runtimeOnly("org.postgresql:postgresql")');
+    expect(result.script).toContain("    compileOnly 'org.projectlombok:lombok'");
+    expect(result.script).toContain("mainClass = 'com.example.App'");
+    expect(result.script).toContain("    archiveClassifier = 'plain'");
+    expect(result.script).toContain('def compileFlags = []');
+    expect(rewriteRemovedDsl("dependencies { implementation 'a:b' }")).toBeNull();
   });
 });

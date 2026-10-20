@@ -55,6 +55,15 @@ const has = (pattern: RegExp) => (text: string) => pattern.test(text);
 /** First match wins, so narrower rules come before broader ones. */
 const RULES: Rule[] = [
   {
+    id: 'gradle-removed-dsl',
+    title: 'The build script uses DSL that Gradle 7 or the Boot plugin removed',
+    disposition: 'mechanical',
+    match: has(/Could not find method (?:compile|testCompile|runtime|testRuntime)\(\)|Could not set unknown property '(?:mainClassName|classifier|baseName)'/),
+    guidance:
+      'Rename it: compile → implementation, testCompile → testImplementation, runtime → runtimeOnly, ' +
+      'mainClassName → mainClass, classifier → archiveClassifier, baseName → archiveBaseName.',
+  },
+  {
     id: 'build-timeout',
     title: 'The build did not finish in time',
     disposition: 'decision',

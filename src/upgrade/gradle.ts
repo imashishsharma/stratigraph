@@ -221,8 +221,15 @@ export function parseGradleLog(text: string, repoPath: string): BuildLog {
     if (task && /There were failing tests|tests completed, \d+ failed/i.test(text)) continue; // read from the reports
     if (task && /Compilation (?:failed|error)/i.test(text) && failures.some((failure) => failure.kind === 'compile')) continue;
     const reason = block.find((entry) => entry.startsWith('>'))?.replace(/^>\s*/, '') ?? block[0] ?? 'the build failed';
+    // "* Where:" precedes the block: the script and line evaluation stopped at.
+    let where: { file: string; line: number } | null = null;
+    for (let j = Math.max(0, i - 4); j < i; j += 1) {
+      const at = /^(?:Build file|Script|Settings file) '(.+)' line: (\d+)/.exec((lines[j] as string).trim());
+      if (at) where = { file: rel(at[1] as string, repoPath), line: Number(at[2]) };
+    }
+    // "Could not find method compile()" is a script error, not a missing artifact.
     const kind: BuildFailure['kind'] =
-      /Could not (?:resolve|find|download)|could not be resolved|Could not GET|Could not HEAD/i.test(text)
+      /Could not (?:resolve|download)|Could not find (?!method |property )[\w.-]+:[\w.-]+|could not be resolved|Could not GET|Could not HEAD/i.test(text)
         ? 'dependency'
         : task === null || /problem occurred (?:evaluating|configuring)|Plugin \[id: |requires Gradle|Unsupported class file major version|incompatible with|Could not open .* class cache|BUG! exception in phase/i.test(text)
           ? 'pom'
@@ -230,14 +237,15 @@ export function parseGradleLog(text: string, repoPath: string): BuildLog {
     push({
       kind,
       message: task ? `${task}: ${reason}` : reason,
-      file: kind === 'pom' ? 'build.gradle' : null,
-      line: null,
+      file: where?.file ?? (kind === 'pom' ? 'build.gradle' : null),
+      line: where?.line ?? null,
       symbol: null,
       excerpt: block.slice(0, 12),
     });
   }
 
   const goals = (text.match(/^> Task :[\w:.-]+/gm) ?? []).length;
+  const evaluatedTo = evaluationPosition(failures, repoPath);
   const success = /^BUILD SUCCESSFUL/m.test(text) || (/^BUILD FAILED/m.test(text) && failures.length === 0 && /There were failing tests|tests completed, \d+ failed/i.test(text));
   if (!success && failures.length === 0) {
     // No Gradle summary: the wrapper or the JVM failed before Gradle ran.
@@ -253,7 +261,34 @@ export function parseGradleLog(text: string, repoPath: string): BuildLog {
       excerpt: thrown ? [thrown, ...tail.slice(-6)] : tail,
     });
   }
-  return { success, failures, goals };
+  return { success, failures, goals, ...(evaluatedTo !== null ? { evaluatedTo } : {}) };
+}
+
+/**
+ * How far Gradle got through the root build script before it stopped: the
+ * line of the failure, or, for a failure in a script the root applies
+ * (`apply from: 'gradle/war.gradle'`), the line that applies it. Evaluation
+ * runs top to bottom, so fixing one script error and stopping at a later line
+ * is progress, though both fail once (a JHipster 6 build:
+ * `mainClassName` in an applied script, then `compile` 300 lines on).
+ */
+function evaluationPosition(failures: BuildFailure[], repoPath: string): number | null {
+  const rootName = existsSync(join(repoPath, 'build.gradle.kts')) ? 'build.gradle.kts' : 'build.gradle';
+  let root: string[] | null = null;
+  let best: number | null = null;
+  for (const failure of failures) {
+    if (failure.kind !== 'pom' || failure.file === null || failure.line === null) continue;
+    let position: number | null = null;
+    if (failure.file === rootName) position = failure.line;
+    else {
+      root ??= read(repoPath, rootName)?.split(/\r?\n/) ?? [];
+      const base = failure.file.split('/').pop() as string;
+      const applied = root.findIndex((line) => /apply\s*\(?\s*from\s*[:=]/.test(line) && line.includes(base));
+      if (applied >= 0) position = applied + 1 + failure.line / 100000;
+    }
+    if (position !== null && (best === null || position > best)) best = position;
+  }
+  return best;
 }
 
 function rel(path: string, repoPath: string): string {
@@ -382,4 +417,37 @@ export function dropManagedPins(script: string, managed: BootManaged, failureTex
     return `${lead}${quote}${group}:${artifact}${quote}`;
   });
   return { script: next, dropped };
+}
+
+// ---------------------------------------------------------------------------
+// Build-script DSL that Gradle 7 and the Boot 2.4+ plugin removed, each with
+// its one documented replacement.
+
+const REMOVED_CONFIGURATIONS: Record<string, string> = {
+  compile: 'implementation',
+  testCompile: 'testImplementation',
+  runtime: 'runtimeOnly',
+  testRuntime: 'testRuntimeOnly',
+};
+
+/** Rewrite removed DSL in one script; null when nothing changed. */
+export function rewriteRemovedDsl(script: string): { script: string; changes: string[] } | null {
+  const changes = new Set<string>();
+  let next = script.replace(
+    /^(\s*)(compile|testCompile|runtime|testRuntime)(?=\s*\(|\s+(?:group\s*:|["']|project\s*\(|files\s*\(|fileTree\s*\())/gm,
+    (_whole, indent: string, name: string) => {
+      changes.add(`${name} → ${REMOVED_CONFIGURATIONS[name]}`);
+      return `${indent}${REMOVED_CONFIGURATIONS[name]}`;
+    },
+  );
+  next = next.replace(/\bmainClassName(\s*=)/g, (_whole, rest: string) => {
+    changes.add('mainClassName → mainClass');
+    return `mainClass${rest}`;
+  });
+  next = next.replace(/^(\s*)(classifier|baseName)(\s*=)/gm, (_whole, indent: string, name: string, rest: string) => {
+    const replacement = name === 'classifier' ? 'archiveClassifier' : 'archiveBaseName';
+    changes.add(`${name} → ${replacement}`);
+    return `${indent}${replacement}${rest}`;
+  });
+  return changes.size === 0 ? null : { script: next, changes: [...changes] };
 }

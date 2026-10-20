@@ -532,12 +532,15 @@ function importErrors(state: BuildState): number {
     : 0;
 }
 
-function score(state: BuildState): [number, number, number, number, number, number, number] {
+function score(state: BuildState): [number, number, number, number, number, number, number, number] {
   // Among failing builds, the one that got further through the lifecycle is better.
   const further = state.log.success ? 0 : -state.log.goals;
+  // ...and, stopped while evaluating the build script, further down it.
+  const evaluated = state.log.success ? 0 : -(state.log.evaluatedTo ?? 0);
   return [
     stage(state),
     further,
+    evaluated,
     compilerRefused(state),
     syntaxErrors(state),
     importErrors(state),

@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest';
 
 import { setQuiet } from '../src/log.js';
 import type { Fixer } from '../src/upgrade/fixer.js';
-import { runUpgrade, UpgradeError } from '../src/upgrade/loop.js';
+import { judge, runUpgrade, UpgradeError } from '../src/upgrade/loop.js';
 import type { Maven } from '../src/upgrade/maven.js';
 import { TARGETS } from '../src/upgrade/targets.js';
 
@@ -813,6 +813,19 @@ describe('upgrade run', () => {
     expect(report.status).toBe('parity');
     expect(report.notes.join('\n')).toContain('-x :checkstyleMain');
     expect(seen.at(-1)).not.toContain('spotlessCheck');
+  });
+
+  it('counts a build script that now stops further down as progress, though it fails once either way', () => {
+    const state = (evaluatedTo: number) => ({
+      label: 'b',
+      result: { exitCode: 1, timedOut: false, logPath: '', log: '', seconds: 1 },
+      log: { success: false, goals: 0, evaluatedTo, failures: [{ kind: 'pom' as const, message: 'x', file: 'build.gradle', line: evaluatedTo, symbol: null, excerpt: [] }] },
+      tests: new Map(),
+      diff: { regressed: [], missing: [], fixed: [], stillFailing: [] },
+      failures: [],
+    });
+    expect(judge(state(3.00004) as never, state(370) as never)).toBeNull();
+    expect(judge(state(370) as never, state(12) as never)).toBe('more failures than before');
   });
 });
 

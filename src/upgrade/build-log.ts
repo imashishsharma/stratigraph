@@ -28,6 +28,11 @@ export interface BuildLog {
   success: boolean;
   failures: BuildFailure[];
   /**
+   * Gradle only: how far evaluation of the root build script got before a
+   * script error stopped it (see gradle.ts evaluationPosition).
+   */
+  evaluatedTo?: number;
+  /**
    * Plugin goals Maven started ("--- plugin:version:goal"): how far through
    * the lifecycle a failing build got. A fix that lets `clean` run and fails
    * at `compile` instead has made progress, though both fail once.
