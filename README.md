@@ -11,14 +11,14 @@
 
 ![An ER diagram stratigraph read from a Spring Boot application's JPA mappings and migrations](https://imashishsharma.github.io/stratigraph/assets/img/og-image.png)
 
-## 🔁 Upgrade Spring Boot (2.7 → 3.5, 3.x → 4.0)
+## 🔁 Upgrade Spring Boot (2.7 → 3.5, 3.x → 4.0), Maven or Gradle
 
 ```sh
 npx stratigraph upgrade plan --to 3.5               # read-only: what will break, with file:line citations
 npx stratigraph upgrade run  --to 3.5 --ai claude-code
 ```
 
-OpenRewrite's recipe does most of an upgrade. The **upgrade agent** handles what it leaves broken.
+OpenRewrite's recipe does most of an upgrade. The **upgrade agent** handles what it leaves broken, on Maven and Gradle builds alike.
 
 - **Your tests are the judge.** It records every test's result *before* touching the code. A change is kept only if the build gets further and no passing test turns red. Disabling or deleting a test is rejected outright.
 - **Layered, reviewable commits** on a branch of their own: the recipe, exact known fixes, and AI fixes from Claude Code (opt-in). Application code changed to make a test pass is flagged for review.
@@ -28,6 +28,7 @@ OpenRewrite's recipe does most of an upgrade. The **upgrade agent** handles what
 |---|---|---|
 | 10 public Spring Boot apps: every previously passing test still passes, no human edits | **0 / 10** | **5 / 10** (+2 stopped at a real decision) |
 | 9 apps it had never seen ([details](bench/upgrade-fresh/README.md)) | — | **8 / 9** |
+| Gradle builds ([details](bench/upgrade-gradle/README.md)) | — | see details |
 | Time and AI cost per app | — | 1–14 min, $0–2.54 |
 
 ## 🗺️ Map a codebase nobody remembers
@@ -854,7 +855,7 @@ about to compare against would be worse than a large file.
 
 ### Upgrading Spring Boot
 
-`stratigraph upgrade` upgrades a Maven project's Spring Boot version: 2.7 →
+`stratigraph upgrade` upgrades a Maven or Gradle project's Spring Boot version: 2.7 →
 3.5, or 3.x → 4.0. It runs OpenRewrite's upgrade recipe, then works through
 what the recipe leaves broken. It never decides anything that is really your
 choice ([ADR-0047](docs/adr/0047-the-upgrade-agent.md)).
