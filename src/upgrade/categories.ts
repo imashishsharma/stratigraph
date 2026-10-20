@@ -291,6 +291,17 @@ const RULES: Rule[] = [
       'JDBC URL. Renaming the table is a schema change that needs a decision.',
   },
   {
+    id: 'jakarta-api-missing',
+    title: 'A Jakarta or Spring 6 API the code now uses is not on the classpath',
+    disposition: 'judgment',
+    match: has(/package (?:jakarta\.[\w.]+|[\w.]+\.spring6(?:\.[\w.]+)?) does not exist/),
+    guidance:
+      'The recipe moved the imports, but the build still resolves the javax-era artifact. Usually a BOM imported ' +
+      "beside Boot's pins the old stack (e.g. jhipster-dependencies 7.x), or a hand-pinned version or an exclusion " +
+      "does. Find it in the dependency tree (gradle dependencies / mvn dependency:tree), then move that BOM to its " +
+      'Boot 3 line or drop the pin.',
+  },
+  {
     id: 'javax-leftover',
     title: 'A javax dependency or reference survived',
     disposition: 'judgment',
