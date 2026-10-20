@@ -191,3 +191,14 @@ is progress (WebGoat). A green build that runs fewer of the baseline's
 passing tests is itself a failure to work on. A failure caused by other
 failures (a coverage gate) waits for them and does not set the status.
 Parity with no tests is reported as unverified.
+
+## Amendment (2026-10-20): recipes leave Maven Central
+
+OpenRewrite now publishes new recipe releases to the authenticated Code Genome
+Project. Maven Central stops at rewrite-spring 6.37.1 and rewrite-maven-plugin
+6.46.1. The defaults stay pinned to those versions: they run with no
+credentials, and they are the versions every benchmark result was measured
+on. Newer recipes are used by configuring the repository in
+`settings.xml` and passing `--rewrite-spring` and `--rewrite-plugin`. The
+report already records the versions that ran. Re-running the benchmarks on a
+newer recipe set is a separate measurement and is reported as one.

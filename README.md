@@ -850,6 +850,15 @@ Why it works this way: on 10 public applications, OpenRewrite alone got
 **0/10** to a green build. It left 44 breakages, 9 of them introduced by the
 recipe itself. See [`bench/upgrade-gap/`](bench/upgrade-gap/README.md).
 
+**Recipe versions.** By default the run uses rewrite-spring 6.37.1 and
+rewrite-maven-plugin 6.46.1. Those are the last releases on Maven Central:
+OpenRewrite now publishes new releases to the authenticated
+[Code Genome Project](https://docs.openrewrite.org/reference/latest-versions-of-every-openrewrite-module).
+To use newer recipes, add that repository and its credentials to your
+`~/.m2/settings.xml` (as a repository and a plugin repository), then pass
+`--rewrite-spring <version> --rewrite-plugin <version>`. The report records
+which versions ran.
+
 Unlike the rest of stratigraph, `upgrade` builds your project, so Maven
 downloads the new versions. It also commits, but only on its own branch, and
 it never pushes. Without `--ai`, no source leaves the machine. With it, the
