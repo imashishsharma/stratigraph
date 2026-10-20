@@ -281,7 +281,11 @@ function runProcess(
   env: NodeJS.ProcessEnv,
   timeoutMs: number,
 ): number | null {
-  const result = spawnSync(command, args, { cwd, env, timeout: timeoutMs, stdio: 'ignore' });
+  // Node refuses to spawn a .cmd/.bat (mvnw.cmd, gradlew.bat) without a
+  // shell on Windows (CVE-2024-27980); through one, quote what has spaces.
+  const viaShell = process.platform === 'win32' && /\.(?:cmd|bat)$/i.test(command);
+  const quote = (part: string) => (viaShell && /[\s"]/.test(part) ? `"${part.replace(/"/g, '""')}"` : part);
+  const result = spawnSync(quote(command), args.map(quote), { cwd, env, timeout: timeoutMs, stdio: 'ignore', shell: viaShell });
   if (result.error !== undefined && (result.error as NodeJS.ErrnoException).code === 'ETIMEDOUT') return null;
   if (result.signal !== null) return null;
   return result.status ?? 1;

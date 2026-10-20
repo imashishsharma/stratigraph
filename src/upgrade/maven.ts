@@ -61,7 +61,10 @@ export function createMaven(options: MavenOptions): Maven {
       const out = createWriteStream(logPath);
       const started = Date.now();
       const javaHome = typeof options.javaHome === 'function' ? options.javaHome() : options.javaHome;
-      const child = spawn(command, [...prefix, ...toolFlags, ...args, ...options.extraArgs], {
+      // Windows runs through a shell (mvnw.cmd, gradlew.bat): quote what has
+      // spaces, such as a repository path inside the Gradle init-script path.
+      const quote = (part: string) => (process.platform === 'win32' && /[\s"]/.test(part) ? `"${part.replace(/"/g, '""')}"` : part);
+      const child = spawn(quote(command), [...prefix, ...toolFlags, ...args, ...options.extraArgs].map(quote), {
         cwd: options.repoPath,
         env: envFor(javaHome),
         stdio: ['ignore', 'pipe', 'pipe'],

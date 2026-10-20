@@ -69,6 +69,7 @@ describe('resolveClasspath for Gradle (ADR-0039, amended)', () => {
     const dir = repo({
       'build.gradle': "plugins { id 'java' }",
       gradlew: '#!/bin/sh',
+      'gradlew.bat': '@rem',
       'gradle/wrapper/gradle-wrapper.properties': `distributionUrl=https\\://services.gradle.org/distributions/gradle-${version}-all.zip\n`,
     });
     if (cached) {
@@ -95,7 +96,7 @@ describe('resolveClasspath for Gradle (ADR-0039, amended)', () => {
         return 0;
       },
     });
-    expect(calls[0]?.command).toBe(join(dir, 'gradlew'));
+    expect(calls[0]?.command).toBe(join(dir, process.platform === 'win32' ? 'gradlew.bat' : 'gradlew'));
     expect(calls[0]?.args).toEqual(expect.arrayContaining(['--offline', '--no-daemon', '-q', 'stratigraphClasspath']));
     expect(calls[0]?.args[calls[0]!.args.indexOf('-I') + 1]).toMatch(/\.gradle$/);
     // Gradle 6.0 runs on JDKs up to 13: 11 is the newest that qualifies.
