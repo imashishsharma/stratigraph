@@ -55,6 +55,17 @@ const has = (pattern: RegExp) => (text: string) => pattern.test(text);
 /** First match wins, so narrower rules come before broader ones. */
 const RULES: Rule[] = [
   {
+    id: 'build-timeout',
+    title: 'The build did not finish in time',
+    disposition: 'decision',
+    match: has(/the build did not finish: stopped by the build timeout/),
+    guidance: 'The build was stopped, so what it printed last is where it hung, not necessarily why. Look at the end of the log.',
+    options: [
+      'Raise the limit with --build-timeout <minutes> if the build is only slow.',
+      'If a step hung (often a frontend tool or a test waiting on a port), fix or skip that step, then run again.',
+    ],
+  },
+  {
     id: 'network',
     title: 'A download failed (network)',
     disposition: 'decision',

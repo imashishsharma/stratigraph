@@ -150,7 +150,7 @@ export async function runUpgrade(options: RunOptions): Promise<UpgradeReport> {
   clearTestReports(repoPath);
   let verify = tool.verify;
   let baselineRun = await withNetworkRetry(baselineMaven, verify, 'baseline', () => clearTestReports(repoPath));
-  let baselineLog = tool.parse(baselineRun.log, repoPath);
+  let baselineLog = readRun(tool, baselineRun, repoPath);
   report.builds += 1;
   // A formatting gate that already fails before the upgrade is the project's,
   // not the upgrade's (realworld-example-app: master fails spotlessJavaCheck).
@@ -162,7 +162,7 @@ export async function runUpgrade(options: RunOptions): Promise<UpgradeReport> {
     verify = [...verify, ...skip];
     clearTestReports(repoPath);
     baselineRun = await withNetworkRetry(baselineMaven, verify, 'baseline-format-skipped', () => clearTestReports(repoPath));
-    baselineLog = tool.parse(baselineRun.log, repoPath);
+    baselineLog = readRun(tool, baselineRun, repoPath);
     report.builds += 1;
     report.notes.push(
       `The formatting check already fails before the upgrade, so every build skipped it (${skip.join(' ')}). ` +
@@ -191,7 +191,7 @@ export async function runUpgrade(options: RunOptions): Promise<UpgradeReport> {
   }
   if (recipe.exitCode !== 0) {
     report.notes.push(`The OpenRewrite recipe itself failed (${recipe.logPath}).`);
-    report.remaining = handoffs(classify(tool.parse(recipe.log, repoPath), diffTests(baselineTests, new Map())), attempts);
+    report.remaining = handoffs(classify(readRun(tool, recipe, repoPath), diffTests(baselineTests, new Map())), attempts);
     return finish('recipe-failed');
   }
   const recipeSha = commitChanges(repoPath, `upgrade(recipe): ${target.recipe}\n\nOpenRewrite rewrite-spring ${report.rewriteSpring}, unedited.`, preexisting);
@@ -204,7 +204,7 @@ export async function runUpgrade(options: RunOptions): Promise<UpgradeReport> {
     clearTestReports(repoPath);
     const result = await withNetworkRetry(maven, verify, label, () => clearTestReports(repoPath));
     report.builds += 1;
-    const log = tool.parse(result.log, repoPath);
+    const log = readRun(tool, result, repoPath);
     const tests = readTestReports(repoPath);
     const diff = diffTests(baselineTests, tests);
     return { label, result, log, tests, diff, failures: classify(log, diff, repoPath) };
@@ -375,6 +375,33 @@ function flagCodeChangedForTests(repoPath: string, sha: string, failures: Classi
 }
 
 /** Maven could not download something because the network failed, not because it does not exist. */
+
+/**
+ * A build's output, read — and, when the timeout stopped it, a failure that
+ * says so: what it printed last is where it hung, not why it failed (found on
+ * jhipster-sample-app-gradle: a frontend tool hung after an error and the
+ * report showed only that error).
+ */
+function readRun(tool: BuildTool, run: MavenResult, repoPath: string): BuildLog {
+  const log = tool.parse(run.log, repoPath);
+  if (!run.timedOut) return log;
+  const minutes = Math.round(run.seconds / 60);
+  return {
+    ...log,
+    success: false,
+    failures: [
+      {
+        kind: 'plugin',
+        message: `the build did not finish: stopped by the build timeout after ${minutes} min`,
+        file: null,
+        line: null,
+        symbol: null,
+        excerpt: run.log.split(/\r?\n/).filter((line) => line.trim() !== '').slice(-8),
+      },
+      ...log.failures.filter((failure) => !/^the build failed: /.test(failure.message)),
+    ],
+  };
+}
 
 /**
  * Run a build, and once more if it failed only because a download did

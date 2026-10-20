@@ -752,6 +752,21 @@ describe('upgrade run', () => {
     expect(report.notes.join('\n')).toContain('formatting check already fails before the upgrade');
     expect(seen.filter((args) => !args.includes('rewriteRun')).slice(1).every((args) => args.includes('spotlessCheck'))).toBe(true);
   });
+
+  it('says the build timed out, rather than blame the last thing it printed', async () => {
+    const repo = repoWith({ 'pom.xml': POM('2.7.1') });
+    const maven: Maven = async (_args, label) => ({
+      exitCode: null as never,
+      timedOut: true,
+      logPath: join(repo, '..', `${label}.log`),
+      log: '[INFO] --- frontend-maven-plugin:1.12:npm (webapp)\nAn unhandled exception occurred: spawn Unknown system error -86\n',
+      seconds: 1800,
+    });
+    const report = await runUpgrade(options(repo, maven));
+    expect(report.status).toBe('baseline-broken');
+    expect(report.remaining[0]).toMatchObject({ category: 'build-timeout', disposition: 'decision' });
+    expect(report.remaining[0]?.evidence[0]?.message).toContain('stopped by the build timeout after 30 min');
+  });
 });
 
 function read(repo: string): string {
