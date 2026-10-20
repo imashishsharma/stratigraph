@@ -868,6 +868,19 @@ describe('upgrade run', () => {
     expect(tryKey('uncategorised', [at('a/One.java'), at('a/One.java')])).toBe(tryKey('uncategorised', [at('a/One.java')]));
     expect(tryKey('hibernate-6', [at('a/One.java')])).toBe('hibernate-6');
   });
+
+  it("reads javac's own total when it stops listing at 100 errors", () => {
+    const state = (total: number) => ({
+      label: 'b',
+      result: { exitCode: 1, timedOut: false, logPath: '', log: '', seconds: 1 },
+      log: { success: false, goals: 3, compileErrorTotal: total, failures: Array.from({ length: 100 }, (_, i) => ({ kind: 'compile' as const, message: 'cannot find symbol', file: `src/A${i}.java`, line: 1, symbol: null, excerpt: [] })) },
+      tests: new Map(),
+      diff: { regressed: [], missing: [], fixed: [], stillFailing: [] },
+      failures: [],
+    });
+    expect(judge(state(694) as never, state(676) as never)).toBeNull();
+    expect(judge(state(676) as never, state(694) as never)).toBe('more failures than before');
+  });
 });
 
 function read(repo: string): string {

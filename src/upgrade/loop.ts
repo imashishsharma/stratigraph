@@ -549,7 +549,8 @@ function score(state: BuildState): [number, number, number, number, number, numb
     compilerRefused(state),
     syntaxErrors(state),
     importErrors(state),
-    state.log.failures.length,
+    // javac's own total when it stopped listing at 100.
+    Math.max(state.log.failures.length, state.log.compileErrorTotal ?? 0),
     state.diff.regressed.length + state.diff.missing.length,
   ];
 }

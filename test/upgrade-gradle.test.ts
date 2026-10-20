@@ -364,3 +364,10 @@ describe('Liquibase', () => {
     }
   });
 });
+
+describe('javac totals', () => {
+  it('keeps the total javac reports beyond the 100 it lists', () => {
+    const log = '/r/src/A.java:1: error: cannot find symbol\n  symbol:   class X\nNote: Some messages have been simplified\n100 errors\nonly showing the first 100 errors, of 694 total; use -Xmaxerrs if you would like to see more\n\nBUILD FAILED in 9s';
+    expect(parseGradleLog(log, '/r').compileErrorTotal).toBe(694);
+  });
+});

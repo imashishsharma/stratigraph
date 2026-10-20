@@ -13,7 +13,7 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { isAbsolute, join, relative } from 'node:path';
 
-import type { BuildFailure, BuildLog } from './build-log.js';
+import { javacErrorTotal, type BuildFailure, type BuildLog } from './build-log.js';
 
 export interface GradleFacts {
   /** The root build script, repo-relative. */
@@ -261,7 +261,14 @@ export function parseGradleLog(text: string, repoPath: string): BuildLog {
       excerpt: thrown ? [thrown, ...tail.slice(-6)] : tail,
     });
   }
-  return { success, failures, goals, ...(evaluatedTo !== null ? { evaluatedTo } : {}) };
+  const compileErrorTotal = javacErrorTotal(text);
+  return {
+    success,
+    failures,
+    goals,
+    ...(evaluatedTo !== null ? { evaluatedTo } : {}),
+    ...(compileErrorTotal !== null ? { compileErrorTotal } : {}),
+  };
 }
 
 /**

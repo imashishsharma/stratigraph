@@ -33,6 +33,12 @@ export interface BuildLog {
    */
   evaluatedTo?: number;
   /**
+   * javac stops listing at 100 errors and says how many there were ("only
+   * showing the first 100 errors, of 694 total"). The total, when it said so:
+   * 694 → 676 is progress though both list 100.
+   */
+  compileErrorTotal?: number;
+  /**
    * Plugin goals Maven started ("--- plugin:version:goal"): how far through
    * the lifecycle a failing build got. A fix that lets `clean` run and fails
    * at `compile` instead has made progress, though both fail once.
@@ -170,7 +176,8 @@ export function parseBuildLog(text: string, repoPath: string): BuildLog {
       excerpt: errors.slice(0, 15),
     });
   }
-  return { success, failures, goals };
+  const compileErrorTotal = javacErrorTotal(text);
+  return { success, failures, goals, ...(compileErrorTotal !== null ? { compileErrorTotal } : {}) };
 }
 
 function pomLine(message: string): number | null {
@@ -182,4 +189,14 @@ function repoRelative(path: string, repoPath: string): string {
   const cleaned = path.trim();
   const rel = isAbsolute(cleaned) ? relative(repoPath, cleaned) : cleaned;
   return rel.split('\\').join('/');
+}
+
+/** The largest "of N total" javac reported (one per compiled source set), or null. */
+export function javacErrorTotal(text: string): number | null {
+  let total: number | null = null;
+  for (const match of text.matchAll(/only showing the first \d+ errors, of (\d+) total/g)) {
+    const n = Number(match[1]);
+    if (total === null || n > total) total = n;
+  }
+  return total;
 }
