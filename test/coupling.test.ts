@@ -363,6 +363,31 @@ describe('static edges', () => {
     expect(computeTemporalCoupling(db, runId, DEFAULTS).pairs[0]?.staticEdges).toBe(1);
   });
 
+  it('counts a foreign key between tables two migrations declare as connecting them', () => {
+    const a = 'db/changelog/added_entity_BankAccount.xml';
+    const b = 'db/changelog/added_entity_Operation.xml';
+    together([a, b], 8);
+    background();
+    seedFacts([
+      meta,
+      { v: 1, type: 'file', path: a, language: 'liquibase-xml' },
+      { v: 1, type: 'file', path: b, language: 'liquibase-xml' },
+      { v: 1, type: 'node', kind: 'table', fqn: 'bank_account', name: 'bank_account', file: a },
+      { v: 1, type: 'node', kind: 'table', fqn: 'operation', name: 'operation', file: b },
+      {
+        v: 1,
+        type: 'edge',
+        kind: 'references',
+        src: { kind: 'table', fqn: 'operation' },
+        dst: { kind: 'table', fqn: 'bank_account' },
+        file: b,
+        line: 40,
+      },
+    ]);
+
+    expect(computeTemporalCoupling(db, runId, DEFAULTS).pairs[0]?.staticEdges).toBe(1);
+  });
+
   it('leaves a pair with no dependency at zero — the pairs M2 exists to find', () => {
     together(['OrderService.java', 'order-form.html'], 8);
     background();

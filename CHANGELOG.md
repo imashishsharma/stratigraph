@@ -34,6 +34,10 @@ over.
 
 - A type referenced as one kind and declared as another (an enum first seen as
   a class reference) is one node, not two.
+- Co-change between two migrations whose tables share a foreign key, or between
+  an entity and the migration declaring its table, is no longer reported as
+  hidden coupling. The schema explains it. On jhipster-sample-app, the two
+  changelog pairs in the top 20 give way to real findings.
 - `upgrade`: a download timeout of the Gradle wrapper or a Gradle dependency is
   a network failure, retried once and handed off as such. It is no longer
   reported as a broken baseline.

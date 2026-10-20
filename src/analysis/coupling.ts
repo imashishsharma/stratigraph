@@ -284,8 +284,17 @@ function groupByCommit(rows: Array<{ commitId: number; path: string }>): string[
  * package graph, so the edge kinds come from there rather than being listed
  * again. A pair with zero of these is what ADR-0010 makes a finding of.
  */
+/**
+ * Edges that explain two files changing together. Beyond code dependencies: an
+ * entity's mapping to the table its migration declares (`maps_to`), and a
+ * foreign key between tables two migrations declare (`references`). Without
+ * them a JHipster app reports each entity's changelog as hidden coupling with
+ * the changelogs of the entities it references — the schema doing its job.
+ */
+const EXPLAINING_EDGE_KINDS: readonly string[] = [...DEPENDENCY_EDGE_KINDS, 'maps_to', 'references'];
+
 function fileEdgeCounts(db: Db, runId: number): Map<string, number> {
-  const kinds = DEPENDENCY_EDGE_KINDS.map((kind) => `'${kind}'`).join(', ');
+  const kinds = EXPLAINING_EDGE_KINDS.map((kind) => `'${kind}'`).join(', ');
   const rows = db
     .prepare(
       /* sql */ `
