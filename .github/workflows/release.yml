@@ -103,6 +103,17 @@ jobs:
       - name: Install mcp-publisher (v1.8.1)
         run: |
           curl -fsSL "https://github.com/modelcontextprotocol/registry/releases/download/v1.8.1/mcp-publisher_linux_amd64.tar.gz" | tar xz mcp-publisher
+      # The registry checks npm for this version; a package published seconds
+      # ago can still 404 there (2.1.2's first attempt did). Wait until npm
+      # serves it.
+      - name: Wait until npm serves this version
+        run: |
+          v="${GITHUB_REF_NAME#v}"
+          for i in $(seq 1 30); do
+            npm view "stratigraph@$v" version >/dev/null 2>&1 && exit 0
+            sleep 10
+          done
+          echo "npm still does not serve stratigraph@$v"; exit 1
       - run: ./mcp-publisher login github-oidc
       - run: ./mcp-publisher publish
 
