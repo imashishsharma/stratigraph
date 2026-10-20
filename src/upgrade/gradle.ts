@@ -10,7 +10,7 @@
  * guessed. The build is the authority on the rest.
  */
 
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { isAbsolute, join, relative } from 'node:path';
 
 import type { BuildFailure, BuildLog } from './build-log.js';
@@ -310,4 +310,76 @@ ${exclusions.map((glob) => `        exclusion("${glob}")`).join('\n')}
     }
 }
 `;
+}
+
+// ---------------------------------------------------------------------------
+// What Spring Boot's BOM manages, read from the BOM itself.
+
+export interface BootManaged {
+  /** group:artifact listed in spring-boot-dependencies. */
+  artifacts: Set<string>;
+  /** Groups whose own BOM spring-boot-dependencies imports (all their artifacts are managed). */
+  groups: Set<string>;
+  /** The file it was read from, for the commit message. */
+  source: string;
+}
+
+/**
+ * spring-boot-dependencies for `bootVersion`, from the local Gradle or Maven
+ * cache — never the network. Null when neither has it (the fix that needs it
+ * then does not apply).
+ */
+export function readBootManaged(bootVersion: string, env: NodeJS.ProcessEnv = process.env): BootManaged | null {
+  const home = env['HOME'] ?? env['USERPROFILE'] ?? '';
+  const gradleHome = env['GRADLE_USER_HOME'] ?? join(home, '.gradle');
+  const candidates: string[] = [];
+  const gradleDir = join(gradleHome, 'caches', 'modules-2', 'files-2.1', 'org.springframework.boot', 'spring-boot-dependencies', bootVersion);
+  try {
+    for (const hash of readdirSync(gradleDir)) candidates.push(join(gradleDir, hash, `spring-boot-dependencies-${bootVersion}.pom`));
+  } catch {
+    // not in the Gradle cache
+  }
+  candidates.push(join(home, '.m2', 'repository', 'org', 'springframework', 'boot', 'spring-boot-dependencies', bootVersion, `spring-boot-dependencies-${bootVersion}.pom`));
+  for (const path of candidates) {
+    let xml: string;
+    try {
+      xml = readFileSync(path, 'utf8');
+    } catch {
+      continue;
+    }
+    const managed = xml.slice(xml.indexOf('<dependencyManagement>'));
+    const artifacts = new Set<string>();
+    const groups = new Set<string>();
+    for (const [block] of managed.matchAll(/<dependency>[\s\S]*?<\/dependency>/g)) {
+      const group = /<groupId>([^<]+)<\/groupId>/.exec(block)?.[1];
+      const artifact = /<artifactId>([^<]+)<\/artifactId>/.exec(block)?.[1];
+      if (!group || !artifact) continue;
+      if (/<scope>import<\/scope>/.test(block)) groups.add(group);
+      else artifacts.add(`${group}:${artifact}`);
+    }
+    return { artifacts, groups, source: path };
+  }
+  return null;
+}
+
+const PIN = /^(\s*(?:implementation|api|compileOnly|runtimeOnly|testImplementation|testRuntimeOnly|testCompileOnly)\s*\(?\s*)(['"])([\w.-]+):([\w.-]+):([\w.+-]+)\2/gm;
+
+/**
+ * Drop the version from dependencies the Boot BOM manages whose group the
+ * failures name (a NoSuchMethodError in io.restassured.* names
+ * io.rest-assured): a hand pin beside a BOM-managed sibling is how two
+ * versions of one library end up on a classpath.
+ */
+export function dropManagedPins(script: string, managed: BootManaged, failureText: string): { script: string; dropped: string[] } {
+  const squash = (text: string) => text.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const packages = [...new Set([...failureText.matchAll(/\b([a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*){1,})\.[A-Z]\w*/g)].map((match) => squash(match[1] as string)))];
+  const dropped: string[] = [];
+  const next = script.replace(PIN, (whole, lead: string, quote: string, group: string, artifact: string) => {
+    const isManaged = managed.groups.has(group) || managed.artifacts.has(`${group}:${artifact}`);
+    const named = packages.some((pkg) => pkg.startsWith(squash(group)));
+    if (!isManaged || !named) return whole;
+    dropped.push(`${group}:${artifact}`);
+    return `${lead}${quote}${group}:${artifact}${quote}`;
+  });
+  return { script: next, dropped };
 }

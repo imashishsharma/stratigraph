@@ -13,7 +13,7 @@ import { join, relative } from 'node:path';
 
 import type { BuildFailure } from './build-log.js';
 import type { BuildToolKind, ProjectFacts } from './build-tool.js';
-import { addCompilerParametersArg, addGradleDependency, setWrapperVersion } from './gradle.js';
+import { addCompilerParametersArg, addGradleDependency, dropManagedPins, readBootManaged, readGradleFacts, setWrapperVersion } from './gradle.js';
 import { GRADLE_WRAPPER_TARGET } from './targets.js';
 import type { Category } from './categories.js';
 import {
@@ -477,8 +477,34 @@ const gradleFlyway: KnownFix = {
   },
 };
 
+/** Two versions of one library on the classpath: a hand pin beside what the Boot BOM manages. */
+const gradleManagedPins: KnownFix = {
+  id: 'gradle-drop-managed-pins',
+  categories: ['third-party-library'],
+  tools: ['gradle'],
+  attempt: async (context) => {
+    const failures = failuresOf(context, 'third-party-library');
+    if (failures.length === 0) return null;
+    const file = context.tool?.buildFile ?? 'build.gradle';
+    const script = readText(context.repoPath, file);
+    if (script === null) return null;
+    // The Boot version as the build declares it now (after the recipe).
+    const boot = readGradleFacts(context.repoPath)?.bootVersion;
+    const managed = boot ? readBootManaged(boot) : null;
+    if (managed === null) return null;
+    const { script: next, dropped } = dropManagedPins(script, managed, failures.map((failure) => failure.text).join('\n'));
+    if (dropped.length === 0) return null;
+    writeFileSync(join(context.repoPath, file), next);
+    return {
+      description: `let the Spring Boot ${boot} BOM manage ${dropped.join(', ')} (hand-pinned versions mixed two versions on the classpath)`,
+      changed: [file],
+    };
+  },
+};
+
 export const KNOWN_FIXES: KnownFix[] = [
   gradleWrapper,
+  gradleManagedPins,
   gradleFormatter,
   gradleParameters,
   gradleFlyway,

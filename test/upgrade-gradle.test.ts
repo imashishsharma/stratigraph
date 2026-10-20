@@ -8,7 +8,9 @@ import { NETWORK_FAILURE, categoriseBuildFailure, categoriseTest } from '../src/
 import {
   addCompilerParametersArg,
   addGradleDependency,
+  dropManagedPins,
   parseGradleLog,
+  readBootManaged,
   readGradleFacts,
   rewriteInitScript,
   setWrapperVersion,
@@ -223,5 +225,46 @@ BUILD FAILED in 3s`;
   it('reads a NoSuchMethodError in a test as mismatched library versions', () => {
     const test = { id: 'a.ApiTest#works()', status: 'error' as const, message: "java.lang.NoSuchMethodError: 'io.restassured.config.ParamConfig$UpdateStrategy io.restassured.config.ParamConfig.pathParamsUpdateStrategy()'", cause: null };
     expect(categoriseTest(test as never).id).toBe('third-party-library');
+  });
+});
+
+describe('jakarta APIs missing after the recipe', () => {
+  it('names the stale BOM or pin as the likely cause (jhipster-sample-app-gradle 7.9)', () => {
+    for (const message of ['package jakarta.servlet.http does not exist', 'package org.thymeleaf.spring6 does not exist']) {
+      const failure = { kind: 'compile' as const, message, file: 'src/main/java/A.java', line: 3, symbol: null, excerpt: [] };
+      expect(categoriseBuildFailure(failure).id).toBe('jakarta-api-missing');
+    }
+  });
+});
+
+describe('the Boot BOM, read from the local cache', () => {
+  function cacheWith(bootVersion: string, xml: string): NodeJS.ProcessEnv {
+    const home = mkdtempSync(join(tmpdir(), 'stratigraph-gradle-home-'));
+    const dir = join(home, 'caches', 'modules-2', 'files-2.1', 'org.springframework.boot', 'spring-boot-dependencies', bootVersion, 'abc');
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, `spring-boot-dependencies-${bootVersion}.pom`), xml);
+    return { GRADLE_USER_HOME: home, HOME: join(home, 'no-home') };
+  }
+  const BOM = `<project><dependencyManagement><dependencies>
+    <dependency><groupId>io.rest-assured</groupId><artifactId>rest-assured-bom</artifactId><version>5.5.7</version><type>pom</type><scope>import</scope></dependency>
+    <dependency><groupId>org.flywaydb</groupId><artifactId>flyway-core</artifactId><version>11.7.2</version></dependency>
+  </dependencies></dependencyManagement></project>`;
+
+  it('reads managed artifacts, and groups whose BOM it imports', () => {
+    const managed = readBootManaged('3.5.16', cacheWith('3.5.16', BOM))!;
+    expect([...managed.groups]).toEqual(['io.rest-assured']);
+    expect([...managed.artifacts]).toEqual(['org.flywaydb:flyway-core']);
+    expect(readBootManaged('3.4.0', cacheWith('3.5.16', BOM))).toBeNull();
+  });
+
+  it('drops only the pins the BOM manages and the failure names (realworld-example-app)', () => {
+    const managed = readBootManaged('3.5.16', cacheWith('3.5.16', BOM))!;
+    const script = "dependencies {\n    implementation 'joda-time:joda-time:2.10.13'\n    testImplementation 'io.rest-assured:rest-assured:5.1.1'\n    testImplementation 'io.rest-assured:spring-mock-mvc:5.1.1'\n    implementation 'org.flywaydb:flyway-core:9.0.0'\n}\n";
+    const failure = "java.lang.NoSuchMethodError: 'io.restassured.config.ParamConfig$UpdateStrategy io.restassured.config.ParamConfig.pathParamsUpdateStrategy()'";
+    const { script: next, dropped } = dropManagedPins(script, managed, failure);
+    expect(dropped).toEqual(['io.rest-assured:rest-assured', 'io.rest-assured:spring-mock-mvc']);
+    expect(next).toContain("testImplementation 'io.rest-assured:rest-assured'\n");
+    expect(next).toContain("'joda-time:joda-time:2.10.13'");
+    expect(next).toContain("'org.flywaydb:flyway-core:9.0.0'");
   });
 });
