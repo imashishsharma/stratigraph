@@ -202,3 +202,54 @@ on. Newer recipes are used by configuring the repository in
 `settings.xml` and passing `--rewrite-spring` and `--rewrite-plugin`. The
 report already records the versions that ran. Re-running the benchmarks on a
 newer recipe set is a separate measurement and is reported as one.
+
+## Amendment (2026-10-20): Gradle builds
+
+The loop is unchanged; what it asks the build is now behind a small
+`BuildTool` (`src/upgrade/build-tool.ts`) with two concrete implementations,
+Maven and Gradle — the second implementation that the no-speculative-abstraction
+rule waits for.
+
+- **Facts** (`src/upgrade/gradle.ts`). The Boot version is read from where
+  Spring Boot projects write it: the plugins block, `gradle.properties`
+  (`springBootVersion`, JHipster's `spring_boot_version`), an `ext` property, a
+  buildscript classpath, or `gradle/libs.versions.toml`. A version written
+  anywhere else — computed, or in a convention plugin — is reported as not
+  declared. It is never guessed. The wrapper's Gradle version comes from
+  `gradle-wrapper.properties`.
+- **Recipe.** OpenRewrite's Gradle plugin (`org.openrewrite:plugin`, 7.39.0)
+  is applied by an init script
+  written into the run's log directory, so the project's build files are not
+  edited to add it. That is the same rule as invoking the Maven plugin by
+  coordinates. The recipe runs on the baseline JDK. On a Gradle build it is the
+  recipe that moves the wrapper (`UpdateGradleWrapper ^7.4`), and an old wrapper
+  cannot start on JDK 17. The pinned version is the last whose rewrite core
+  (8.89.0) matches the pinned Maven plugin and is on Maven Central. 7.40.0 and
+  7.41.0 are on the Plugin Portal, but they need `rewrite-bom` 8.91.0, which
+  only Code Genome serves. That was found on the first real run.
+- **JDKs follow the wrapper.** The baseline JDK is the declared one if the
+  wrapper's Gradle runs on it (the compatibility matrix in
+  `toolchain/classpath.ts`). After the recipe, each build reads the wrapper
+  again and runs on the lowest JDK that is at least the target Boot's minimum
+  and that this Gradle accepts.
+- **Build.** `clean check --continue --console=plain`. A build that fails only
+  on failing tests counts as built, as Maven's `-Dmaven.test.failure.ignore`
+  does. Tests are judged from the JUnit XML under `build/test-results/`, the
+  same as Surefire's.
+- **Output.** javac (`File.java:12: error:`), Kotlin (`e: file://…`) and the
+  `* What went wrong:` blocks are read into the same `BuildLog` shape. A failure
+  in a build script or plugin application is stage 3, like a broken pom. A
+  wrapper that dies before Gradle starts is read from its exception line.
+- **Known fixes** are per tool. The Gradle ones are: the wrapper to 8.14.3
+  (category `gradle-too-old`), `-parameters` through
+  `tasks.withType(JavaCompile)`, `spotlessApply` or `format`, and the Flyway
+  10 database module. Fixes that edit only Java source (relocations, private
+  `@Bean` methods) apply to both tools. Like the Maven fixes, they edit only
+  the root build script, and `upgrade plan` lists this as a limit.
+
+Found on the first real run: a download timeout of the wrapper's distribution
+was read as a broken baseline. Network failures now include the wrapper's
+`Downloading from … failed` and Gradle's `Could not GET/HEAD`, and they are
+retried once and handed off as `network`, like Maven's. On the test machine the
+cause was one unreachable GitHub CDN address. The JVM's HTTP client tries only
+the first address a host resolves to, where curl tries the others.

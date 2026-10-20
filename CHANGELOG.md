@@ -10,6 +10,34 @@ schema carries a `user_version` and is migrated forward, and every JSON
 document carries `format`, which moves only for a change a parser could trip
 over.
 
+## [Unreleased]
+
+### Added
+
+- **Gradle builds are typed.** `extract` resolves a Gradle project's compile
+  classpath offline, through an init script. It uses the wrapper only when its
+  distribution is already cached, and a JDK that Gradle version runs on. Type
+  resolution on Gradle projects now matches Maven
+  ([ADR-0039](docs/adr/0039-classpath-lombok-and-spring-wiring.md), amended).
+- **`upgrade` handles Gradle projects** (Groovy and Kotlin DSL)
+  ([ADR-0047](docs/adr/0047-the-upgrade-agent.md), amended):
+  - It reads the Boot version from the plugins block, `gradle.properties`,
+    `ext` or a version catalog.
+  - It runs the recipe through OpenRewrite's Gradle plugin, applied by an init
+    script, so no build file is edited to add it.
+  - It chooses JDKs that follow the wrapper, and judges tests from
+    `build/test-results`.
+  - Gradle known fixes: the wrapper version, `-parameters`, `spotlessApply` or
+    `format`, and the Flyway database module.
+
+### Fixed
+
+- A type referenced as one kind and declared as another (an enum first seen as
+  a class reference) is one node, not two.
+- `upgrade`: a download timeout of the Gradle wrapper or a Gradle dependency is
+  a network failure, retried once and handed off as such. It is no longer
+  reported as a broken baseline.
+
 ## [2.1.2] — 2026-10-20
 
 ### Added
