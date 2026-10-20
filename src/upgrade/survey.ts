@@ -231,7 +231,7 @@ export function renderPlan(plan: Plan): string {
   }
   out.push('`stratigraph upgrade run` will:');
   out.push('  1. build and test on a new branch as-is (the baseline),');
-  out.push('  2. run the recipe (Maven downloads the rewrite plugin and the new dependencies),');
+  out.push(`  2. run the recipe (${pom?.tool === 'gradle' ? 'Gradle' : 'Maven'} downloads the rewrite plugin and the new dependencies),`);
   out.push('  3. rebuild, apply known fixes, and — only with --ai claude-code — let Claude Code attempt the rest,');
   out.push('  4. keep a change only if it leaves fewer failures and no newly red test,');
   out.push('  5. write upgrade-report.md with what is left and the options for each decision.');
