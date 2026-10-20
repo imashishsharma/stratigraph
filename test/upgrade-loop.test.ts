@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest';
 
 import { setQuiet } from '../src/log.js';
 import type { Fixer } from '../src/upgrade/fixer.js';
-import { judge, revealedNotCaused, runUpgrade, UpgradeError } from '../src/upgrade/loop.js';
+import { judge, revealedNotCaused, runUpgrade, tryKey, UpgradeError } from '../src/upgrade/loop.js';
 import type { Maven } from '../src/upgrade/maven.js';
 import { TARGETS } from '../src/upgrade/targets.js';
 
@@ -860,6 +860,13 @@ describe('upgrade run', () => {
 
     const notFixed = build([fail('src/a/SecurityConfig.java', 'cannot find symbol', 'class WebSecurityConfigurerAdapter'), fail('src/b/X.java', 'y')], [security, other]);
     expect(revealedNotCaused(before as never, notFixed as never, 'spring-security-config', targeted, ['src/a/SecurityConfig.java'])).toBeNull();
+  });
+
+  it('counts AI attempts on unrecognised failures per problem, not across the catch-all', () => {
+    const at = (file: string) => ({ category: { id: 'uncategorised' }, build: { file }, text: 'x' }) as never;
+    expect(tryKey('uncategorised', [at('a/One.java')])).not.toBe(tryKey('uncategorised', [at('b/Two.java')]));
+    expect(tryKey('uncategorised', [at('a/One.java'), at('a/One.java')])).toBe(tryKey('uncategorised', [at('a/One.java')]));
+    expect(tryKey('hibernate-6', [at('a/One.java')])).toBe('hibernate-6');
   });
 });
 

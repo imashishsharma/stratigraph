@@ -355,3 +355,12 @@ describe('the Java level', () => {
     expect(categoriseBuildFailure(failure).id).toBe('java-level-too-low');
   });
 });
+
+describe('Liquibase', () => {
+  it('reads a Liquibase configuration that no longer compiles as a Liquibase API change', () => {
+    for (const [message, symbol] of [['cannot find symbol', 'method getLabels()'], ['incompatible types: List<String> cannot be converted to String', null]] as const) {
+      const failure = { kind: 'compile' as const, message, file: 'src/main/java/a/config/LiquibaseConfiguration.java', line: 40, symbol, excerpt: [] };
+      expect(categoriseBuildFailure(failure).id).toBe('liquibase-api');
+    }
+  });
+});

@@ -357,6 +357,16 @@ const RULES: Rule[] = [
       'method that replaced it, and keep the behaviour.',
   },
   {
+    id: 'liquibase-api',
+    title: "Liquibase's Java API changed under the new Spring Boot",
+    disposition: 'judgment',
+    match: has(/\/\w*Liquibase\w*\.java\b|package liquibase\.[\w.]+ does not exist|\b(?:get|set)Label(?:s|Filter)\(/),
+    guidance:
+      'Boot 3 brings Liquibase 4.2x: SpringLiquibase labels became a label filter, contexts and labels are ' +
+      'collections, and some packages moved. Move the configuration to the new API with the same contexts, labels ' +
+      'and changelog; never change which changesets run.',
+  },
+  {
     id: 'third-party-library',
     title: 'A library has no version compatible with the new stack',
     disposition: 'judgment',

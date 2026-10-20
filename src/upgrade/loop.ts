@@ -272,10 +272,11 @@ export async function runUpgrade(options: RunOptions): Promise<UpgradeReport> {
       (failure) => failure.category.disposition !== 'decision' && !(causes.length > 0 && failure.category.consequence),
     );
     const groups = groupByCategory(workable);
-    const group = groups.find(([id]) => (aiTries.get(id) ?? 0) < options.attemptsPerCategory);
+    const group = groups.find(([id, failures]) => (aiTries.get(tryKey(id, failures)) ?? 0) < options.attemptsPerCategory);
     if (group === undefined) break;
     const [categoryId, targetFailures] = group;
-    aiTries.set(categoryId, (aiTries.get(categoryId) ?? 0) + 1);
+    const key = tryKey(categoryId, targetFailures);
+    aiTries.set(key, (aiTries.get(key) ?? 0) + 1);
     const number = attempts.filter((attempt) => attempt.by === 'ai').length + 1;
     info(`upgrade: AI attempt ${number} on ${categoryId} (${targetFailures.length} failure(s))`);
     const fixed = await fixer.attempt({
@@ -610,6 +611,18 @@ export function judge(previous: BuildState, next: BuildState): string | null {
 
 function signature(failures: Classified[]): string {
   return failures.map((failure) => failure.text.split('\n')[0]).sort().join('|');
+}
+
+/**
+ * What an AI attempt budget is counted against: the category, except for the
+ * catch-all, where unrelated problems would share one budget. There it is the
+ * files (or tests) the failures are in, so two attempts spent on one unknown
+ * problem do not leave the next unknown problem untried.
+ */
+export function tryKey(categoryId: string, failures: Classified[]): string {
+  if (categoryId !== 'uncategorised') return categoryId;
+  const where = [...new Set(failures.map((failure) => failure.build?.file ?? failure.test?.id ?? failure.text.split('\n')[0]))].sort();
+  return `${categoryId}:${where.join('|')}`;
 }
 
 function groupByCategory(failures: Classified[]): Array<[string, Classified[]]> {
