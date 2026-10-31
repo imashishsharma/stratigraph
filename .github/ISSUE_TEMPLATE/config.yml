@@ -3,6 +3,9 @@ contact_links:
   - name: Report a security vulnerability
     url: https://github.com/imashishsharma/stratigraph/security/advisories/new
     about: Please do not open a public issue. See SECURITY.md.
+  - name: Tried it? Tell us how it went
+    url: https://github.com/imashishsharma/stratigraph/discussions/1
+    about: What you upgraded, what worked, what it got wrong.
   - name: Ask a question or suggest something
     url: https://github.com/imashishsharma/stratigraph/discussions
     about: Including "does it handle X?" and "I need language Y".

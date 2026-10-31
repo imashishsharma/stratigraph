@@ -8,8 +8,10 @@
  * - No advertising features: ad storage, ad user data and ad personalisation
  *   are denied everywhere, always.
  * - Besides page views (and GA's enhanced measurement: scrolls, outbound
- *   clicks to GitHub/npm), two things are measured: copying an install
- *   command, and Core Web Vitals (LCP, INP, CLS) from real visits.
+ *   clicks to GitHub/npm), three things are measured: copying an install
+ *   command, clicks on the calls to action marked data-track (design partner,
+ *   discussions, benchmarks, GitHub), and Core Web Vitals (LCP, INP, CLS)
+ *   from real visits.
  */
 (function () {
   // The Google tag itself, and the consent defaults, are inline in each page's
@@ -69,6 +71,14 @@
       wrap.hidden = false;
       settings.addEventListener('click', banner);
     }
+
+    // Intent beyond reading: a design-partner request, a discussion, the
+    // benchmark, GitHub. Links carry data-track="<name>".
+    document.querySelectorAll('[data-track]').forEach(function (link) {
+      link.addEventListener('click', function () {
+        gtag('event', 'cta_click', { cta: link.getAttribute('data-track'), link_url: link.href || '' });
+      });
+    });
 
     // The conversion that matters: someone copied an install command.
     document.querySelectorAll('.copy').forEach(function (button) {

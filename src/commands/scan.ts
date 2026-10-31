@@ -18,6 +18,7 @@ import { loadConfig, type ConfigOverrides } from '../config.js';
 import { openDatabase } from '../db/database.js';
 import { latestRun } from '../db/run.js';
 import { gitToplevel } from '../history/git-log.js';
+import { printFeedback } from '../feedback.js';
 import { info, print, warn } from '../log.js';
 import { describeRun, type RunSummary } from '../mcp/queries.js';
 import { runAnalyze } from './analyze.js';
@@ -92,5 +93,6 @@ export async function runScan(options: ScanOptions): Promise<ScanResult> {
     print(`  ${VIEW_TITLES[view].padEnd(20)} ${coverage.withheld ? 'WITHHELD ' : ''}${coverage.statement}`);
   }
   if (!existsSync(out)) warn(`the report directory ${out} was not written`);
+  printFeedback('scan');
   return { runId: report.runId, outDir: report.outDir, summary };
 }

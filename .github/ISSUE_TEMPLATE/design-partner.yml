@@ -1,0 +1,64 @@
+name: Design partner request
+description: Run stratigraph's upgrade agent on your Spring Boot services, with help from the maintainer.
+title: "Design partner: "
+labels: ["design-partner"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for your interest. This is public, so **don't include code, internal names or anything identifying
+        your employer**. A rough description is enough, and we can move to a private channel if it's a fit.
+  - type: dropdown
+    id: path
+    attributes:
+      label: Upgrade path
+      options:
+        - Spring Boot 2.x → 3.x
+        - Spring Boot 3.x → 4.0
+        - Both
+        - Not upgrading; I want the codebase map / MCP server
+    validations:
+      required: true
+  - type: dropdown
+    id: build
+    attributes:
+      label: Build tool
+      multiple: true
+      options:
+        - Maven
+        - Gradle (Groovy DSL)
+        - Gradle (Kotlin DSL)
+    validations:
+      required: true
+  - type: dropdown
+    id: size
+    attributes:
+      label: How many services or modules need upgrading?
+      options:
+        - "1"
+        - 2–10
+        - 11–50
+        - More than 50
+    validations:
+      required: true
+  - type: textarea
+    id: stack
+    attributes:
+      label: Stack details
+      description: Java version, notable libraries (Hibernate, Spring Security, springfox, JHipster, Liquibase/Flyway…), how good the test suite is.
+    validations:
+      required: false
+  - type: textarea
+    id: tried
+    attributes:
+      label: What have you tried so far?
+      description: OpenRewrite alone, `stratigraph upgrade plan`, a manual attempt… and where it got stuck.
+    validations:
+      required: false
+  - type: input
+    id: contact
+    attributes:
+      label: How should I reach you? (optional)
+      description: An email or a handle. Leave empty and I'll reply here.
+    validations:
+      required: false

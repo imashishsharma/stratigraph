@@ -98,7 +98,7 @@
       <a href="#upgrade">Upgrades</a>
       <a href="#proof">Benchmark</a>
       <a href="#faq">FAQ</a>
-      <a class="btn btn-ghost" href="https://github.com/imashishsharma/stratigraph">GitHub</a>
+      <a class="btn btn-ghost" data-track="github_nav" href="https://github.com/imashishsharma/stratigraph">GitHub</a>
     </nav>
   </div>
 </header>
@@ -117,7 +117,7 @@
           <button class="copy" type="button" data-copy="npx stratigraph scan ." aria-label="Copy command">Copy</button>
         </div>
         <a class="btn btn-primary" href="#start">Get started</a>
-        <a class="btn btn-ghost" href="https://github.com/imashishsharma/stratigraph">Star on GitHub</a>
+        <a class="btn btn-ghost" data-track="github_star_hero" href="https://github.com/imashishsharma/stratigraph">Star on GitHub</a>
       </div>
       <p class="fine">Apache 2.0 · runs locally · no code leaves your machine</p>
     </div>
@@ -313,7 +313,7 @@ main source files parsed (97%).</span></pre>
           </tbody>
         </table>
       </div>
-      <p class="fine"><a href="https://github.com/imashishsharma/stratigraph/blob/main/bench/upgrade-gap/README.md">The benchmark, per app, with what is left for each →</a> · <a href="https://github.com/imashishsharma/stratigraph/blob/main/bench/upgrade-fresh/README.md">the unseen apps, and how thin some of their test suites are →</a></p>
+      <p class="fine"><a data-track="upgrade_benchmark" href="https://github.com/imashishsharma/stratigraph/blob/main/bench/upgrade-gap/README.md">The benchmark, per app, with what is left for each →</a> · <a href="https://github.com/imashishsharma/stratigraph/blob/main/bench/upgrade-fresh/README.md">the unseen apps, and how thin some of their test suites are →</a></p>
     </div>
 <pre class="term" aria-label="Abridged upgrade run and report, from the spring-petclinic-reactjs benchmark run"><span class="c">$ stratigraph upgrade run --to 4.0 --ai claude-code</span>
 upgrade: baseline 183/183 tests pass
@@ -356,7 +356,7 @@ Abridged from the spring-petclinic-reactjs run.</span></pre>
         </tbody>
       </table>
     </div>
-    <p class="center"><a href="https://github.com/imashishsharma/stratigraph/blob/main/bench/scorecard.md">Read the full scorecard — every miss is listed by name →</a></p>
+    <p class="center"><a data-track="scorecard" href="https://github.com/imashishsharma/stratigraph/blob/main/bench/scorecard.md">Read the full scorecard — every miss is listed by name →</a></p>
   </div>
 </section>
 
@@ -376,6 +376,18 @@ open stratigraph-report/index.html
 <span class="c"># let your agent query it</span>
 stratigraph mcp --repo path/to/repo</pre>
     <p class="center fine">Prefer containers? <code>docker run --rm -v "$PWD:/repo:ro" ghcr.io/imashishsharma/stratigraph doctor</code></p>
+  </div>
+</section>
+
+<section class="section partner" id="partner">
+  <div class="wrap narrow center">
+    <p class="eyebrow center">Stuck on Spring Boot 2?</p>
+    <h2 class="center">Run it on your services, with the maintainer.</h2>
+    <p>I'm looking for a few teams with Boot 2.x (or 3.x heading to 4.0) services to upgrade with the agent on real code. You get direct help. Anything it can't do yet becomes a fix in the open-source tool. Everything runs on your machine.</p>
+    <p class="cta">
+      <a class="btn btn-primary" data-track="design_partner" href="https://github.com/imashishsharma/stratigraph/issues/new?template=design-partner.yml">Become a design partner</a>
+      <a class="btn btn-ghost" data-track="discussion_tried_it" href="https://github.com/imashishsharma/stratigraph/discussions/1">Tried it? Tell us how it went</a>
+    </p>
   </div>
 </section>
 

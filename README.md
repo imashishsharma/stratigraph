@@ -31,6 +31,8 @@ OpenRewrite's recipe does most of an upgrade. The **upgrade agent** handles what
 | Gradle: realworld-example-app, JHipster 7.9 ([details](bench/upgrade-gradle/README.md)) | — | **68/68** parity; JHipster stopped at 1 error (needs JHipster 8) |
 | Time and AI cost per app | — | 1–14 min, $0–2.54 |
 
+**Tried it?** Tell us what you upgraded, and what it got wrong, in [Discussions](https://github.com/imashishsharma/stratigraph/discussions/1). **Upgrading a fleet of Boot 2.x services?** [Become a design partner](https://github.com/imashishsharma/stratigraph/issues/new?template=design-partner.yml) and run it on real code with the maintainer.
+
 ## 🗺️ Map a codebase nobody remembers
 
 ```sh

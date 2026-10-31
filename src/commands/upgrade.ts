@@ -4,6 +4,7 @@
 
 import { dirname, resolve } from 'node:path';
 
+import { printFeedback } from '../feedback.js';
 import { info, print, warn } from '../log.js';
 import { discoverJavaRuntimes, inspectJavaHome, type JavaRuntime } from '../toolchain/java.js';
 import { claudeCodeFixer } from '../upgrade/fixer.js';
@@ -156,5 +157,6 @@ export async function runUpgradeRun(options: UpgradeRunOptions): Promise<Upgrade
   if (decisions > 0) print(`  ${decisions} decision(s) for you, with options, in the report`);
   if (unresolved > 0) print(`  ${unresolved} failure group(s) the automatic fixes could not resolve`);
   print(`  commits: ${report.commits.map((commit) => `${commit.layer} ${commit.sha.slice(0, 8)}`).join(', ')}`);
+  printFeedback('upgrade');
   return report;
 }
