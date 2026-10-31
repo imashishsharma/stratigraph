@@ -8,13 +8,13 @@
     "source": "github"
   },
   "websiteUrl": "https://imashishsharma.github.io/stratigraph/",
-  "version": "2.2.0",
+  "version": "2.2.1",
   "packages": [
     {
       "registryType": "npm",
       "registryBaseUrl": "https://registry.npmjs.org",
       "identifier": "stratigraph",
-      "version": "2.2.0",
+      "version": "2.2.1",
       "runtimeHint": "npx",
       "transport": {
         "type": "stdio"

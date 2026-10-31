@@ -10,6 +10,51 @@ schema carries a `user_version` and is migrated forward, and every JSON
 document carries `format`, which moves only for a change a parser could trip
 over.
 
+## [2.2.1] — 2026-11-01
+
+Upgrade-agent fixes from running it on a large private Gradle application
+(Boot 2.2 → 3.5, Gradle 6, about 400 tests). Each one was found in a real run
+and has a test written from generic data.
+
+### Fixed
+
+- A formatting or static-analysis check that already fails before the upgrade
+  is skipped and reported, instead of reported as a broken project. This now
+  covers Checkstyle, PMD and SpotBugs, not only formatters. On Gradle, exactly
+  the failed task is skipped (`-x :checkstyleMain`). On Maven, the plugin's
+  documented skip property is used.
+- On Gradle, when only such a check failed, the baseline's tests already ran
+  (`--continue`). They are reused instead of building a second time.
+- The judge no longer rejects fixes that made progress:
+  - A Gradle build script that now stops further down, even with the same one
+    error, counts as progress. Gradle evaluates scripts top to bottom, so the
+    judge compares the line where evaluation stopped. An error in an applied
+    script counts at the line that applies it.
+  - A compile fix whose new errors are all in code javac had not reached
+    before, outside every file the fixer changed and naming none of them, is
+    kept. A fix that breaks a caller is still rejected.
+  - When javac stops listing at 100 errors, its own total ("of 694 total") is
+    used.
+- AI attempts on unrecognised failures are budgeted per problem. Two
+  unrelated unknown failures no longer use up each other's attempts.
+- "Could not find method compile()" is a build-script error, not a missing
+  dependency.
+- The AI fixer's own `./gradlew` runs no longer leave Gradle daemons running.
+  On a 16 GB machine, three idle daemons pushed the system into swap.
+
+### Added
+
+- Known fix `gradle-removed-dsl`: rewrites build-script DSL that Gradle 7 and
+  the Boot plugin removed, across every Gradle script at once. `compile` →
+  `implementation`, `testCompile` → `testImplementation`, `runtime` →
+  `runtimeOnly`, `mainClassName` → `mainClass`, and `classifier`/`baseName` →
+  `archiveClassifier`/`archiveBaseName`.
+- Known fix `gradle-java-level`: raises a Java level the build scripts still
+  declare below the target. This covers `sourceCompatibility`,
+  `JavaVersion.VERSION_1_8` and an Ant `javac(source: 1.8)`, which the
+  recipe's Java-version step does not touch.
+- Categories `static-check`, `java-level-too-low` and `liquibase-api`.
+
 ## [2.2.0] — 2026-10-20
 
 ### Added
